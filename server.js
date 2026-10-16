@@ -246,8 +246,8 @@ app.get('/api/jobs', requireAuth, (req, res) => {
   res.json({ jobs: rows });
 });
 
-app.post('/api/schedule', requireAuth, async (req, res) => {
-  const { pageIds, pageSchedules, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt, isAiContent = false, publishNow = false } = req.body || {};
+app.post('/api/schedule', requireAuth, (req, res) => {
+  const { pageIds, pageSchedules, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt, isAiContent = false } = req.body || {};
   const requestedSchedules = Array.isArray(pageSchedules) && pageSchedules.length
     ? pageSchedules.map(item => ({ pageId: item?.pageId, scheduledAt: item?.scheduledAt }))
     : (Array.isArray(pageIds) ? pageIds.map(pageId => ({ pageId, scheduledAt })) : []);
@@ -255,7 +255,7 @@ app.post('/api/schedule', requireAuth, async (req, res) => {
   const uniqueRequestedIds = new Set(requestedSchedules.map(item => String(item.pageId)));
   if (uniqueRequestedIds.size !== requestedSchedules.length) return res.status(400).json({ error: 'A Page was selected more than once. Refresh the Page list and try again.' });
   const validatedSchedules = requestedSchedules.map(item => ({ pageId: String(item.pageId), date: new Date(item.scheduledAt) }));
-  if (!publishNow && validatedSchedules.some(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000)) {
+  if (validatedSchedules.some(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000)) {
     return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
   }
   if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
@@ -275,7 +275,7 @@ app.post('/api/schedule', requireAuth, async (req, res) => {
   }
   if (totalBytes > 30 * 1024 * 1024) return res.status(400).json({ error: 'The combined size of all photos must be 30 MB or less.' });
   if (!photos.length && (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl))) return res.status(400).json({ error: 'Upload JPG/PNG photos or provide a public HTTPS image URL.' });
-  const invalidTime = !publishNow && validatedSchedules.find(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000);
+  const invalidTime = validatedSchedules.find(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000);
   if (invalidTime) return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
   const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?,?)");
   const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
@@ -286,33 +286,13 @@ app.post('/api/schedule', requireAuth, async (req, res) => {
       if (!page) throw new Error('Page ' + requested.pageId + ' was not found for this Facebook account. Refresh the Page list and try again.');
       const id = crypto.randomUUID();
       const first = photos[0] || null;
-      const pageScheduledAt = publishNow ? new Date(Date.now() - 1000).toISOString() : requested.date.toISOString();
+      const pageScheduledAt = requested.date.toISOString();
       insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, pageScheduledAt, isAiContent ? 1 : 0, now(), now());
       photos.forEach((photo,index) => insertPhoto.run(id,index,photo.buffer,photo.mime));
       created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: pageScheduledAt, status: 'scheduled', photoCount: photos.length || 1 });
     }
   });
-  try {
-    tx();
-    if (publishNow) {
-      // The worker handles up to 10 due jobs per pass; repeat so larger Page selections are attempted now too.
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const pendingNow = created.some(job => {
-          const current = db.prepare('SELECT status FROM jobs WHERE id=? AND user_id=?').get(job.id, req.session.fbUser.id);
-          return current?.status === 'scheduled';
-        });
-        if (!pendingNow) break;
-        await publishDueJobs();
-      }
-    }
-    const jobs = publishNow ? created.map(job => {
-      const current = db.prepare('SELECT status,post_id,error,scheduled_at FROM jobs WHERE id=? AND user_id=?').get(job.id, req.session.fbUser.id);
-      return { ...job, ...(current || {}) };
-    }) : created;
-    return res.status(201).json({ jobs, requestedCount: validatedSchedules.length, createdCount: created.length, publishNow: Boolean(publishNow) });
-  } catch (e) {
-    return res.status(400).json({ error: String(e.message || e) });
-  }
+  try { tx(); res.status(201).json({ jobs: created, requestedCount: validatedSchedules.length, createdCount: created.length }); } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
 
 app.delete('/api/schedule/:id', requireAuth, (req, res) => {
@@ -350,6 +330,8 @@ async function publishDueJobs() {
           const body = new FormData();
           body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
           body.set('published', 'false');
+          body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
+          body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
           body.set('access_token', page.access_token);
           const uploadResponse = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
           const uploadData = await uploadResponse.json().catch(() => ({}));
