@@ -335,8 +335,14 @@ app.post('/api/publish-now', requireAuth, async (req, res) => {
       }
     });
     tx();
-    await publishDueJobs();
     const placeholders = created.map(() => '?').join(',');
+    // The shared scheduler processes up to 10 due jobs per pass. Repeat passes so
+    // Publish Now can handle bulk selections larger than 10 Pages.
+    for (let attempt = 0; attempt < Math.ceil(created.length / 10) + 2; attempt++) {
+      await publishDueJobs();
+      const remaining = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE id IN (" + placeholders + ") AND status='scheduled' AND scheduled_at<=?").get(...created, now()).count;
+      if (!remaining) break;
+    }
     const jobs = db.prepare(`SELECT id,page_id,page_name,scheduled_at,status,post_id,error,is_ai_content FROM jobs WHERE id IN (${placeholders}) ORDER BY created_at`).all(...created);
     res.status(201).json({ jobs });
   } catch (e) {
