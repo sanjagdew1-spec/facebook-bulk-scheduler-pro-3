@@ -42,19 +42,18 @@
               <input id="imageFile" type="file" accept="image/jpeg,image/png" multiple style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
             </div>
             <div id="imagePreview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:12px"></div>
-            <p style="font-size:12px;color:#aab7cf;line-height:1.5">Choose up to 10 photos from your computer. Publish them immediately or schedule them for a later time.</p>
+            <p style="font-size:12px;color:#aab7cf;line-height:1.5">Choose up to 10 photos from your computer. All selected photos will be published together in one Facebook post at the scheduled time.</p>
             <details style="margin:10px 0;color:#aab7cf"><summary style="cursor:pointer">Optional: use an image URL instead</summary>
               <input id="imageUrl" type="url" placeholder="https://example.com/photo.jpg" style="width:100%;margin-top:8px;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
             </details>
             <label for="caption" style="display:block;margin:8px 0">Caption</label>
             <textarea id="caption" rows="3" placeholder="Write your post caption..." style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff"></textarea>
-            <label for="aiContent" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 6px;padding:11px;border:1px solid #40506c;border-radius:10px;background:#0d1425;cursor:pointer"><input id="aiContent" type="checkbox" style="margin-top:3px;flex-shrink:0"><span><b style="display:block;color:#f4f7ff">This post contains AI-generated content</b><small style="display:block;color:#aab7cf;line-height:1.5;margin-top:4px">When selected, the app sends the AI-content disclosure fields with the photo upload. Facebook controls whether and how the AI label appears.</small></span></label>
+            <label for="aiContent" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 6px;padding:11px;border:1px solid #40506c;border-radius:10px;background:#0d1425;cursor:pointer"><input id="aiContent" type="checkbox" style="margin-top:3px;flex-shrink:0"><span><b style="display:block;color:#f4f7ff">This post contains AI-generated content</b><small style="display:block;color:#aab7cf;line-height:1.5;margin-top:4px">Save this disclosure in schedule history as a reminder. This does not directly set Facebook’s AI label; Facebook may label content using its own systems.</small></span></label>
             <label for="scheduleAt" style="display:block;margin:8px 0">Default date and time (optional; used if a selected Page has no individual time)</label>
             <input id="scheduleAt" type="datetime-local" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
             <button class="btn secondary" id="applyDefaultTime" type="button" style="margin-top:8px;padding:9px 12px">Apply default time to selected Pages</button>
             <p style="font-size:12px;color:#aab7cf;line-height:1.5">You can set a different date/time in each Page row above. Only selected Pages will be scheduled.</p>
             <button class="btn primary" id="scheduleBtn" type="button" style="margin-top:12px">Schedule for selected Pages</button>
-            <button class="btn secondary" id="publishNowBtn" type="button" style="margin-top:10px;width:100%;border-color:#3978f6">Publish Now to selected Pages</button>
             <h3>Recent schedule history</h3><div id="jobList"></div>
           </section>
           <p class="note">After Facebook login, use “Check Facebook connection & Pages” here so the browser sends the session cookie. This test does not publish anything.</p>
@@ -205,7 +204,6 @@
 
   btn.addEventListener('click', loadPages);
   const scheduleBtn = document.getElementById('scheduleBtn');
-  const publishNowBtn = document.getElementById('publishNowBtn');
   document.getElementById('applyDefaultTime').addEventListener('click', () => {
     const defaultTime = document.getElementById('scheduleAt').value;
     if (!defaultTime) { show('Choose a default date/time first.'); return; }
@@ -227,20 +225,16 @@
     document.getElementById('scheduleAt').value = '';
     pageList.querySelectorAll('[data-page-time]').forEach(input => { input.value = ''; });
   }
-  async function submitPost(publishNow = false) {
+  scheduleBtn.addEventListener('click', async () => {
     if (schedulingInProgress) return;
     schedulingInProgress = true;
     scheduleBtn.disabled = true;
-    publishNowBtn.disabled = true;
     scheduleBtn.style.opacity = '.65';
-    publishNowBtn.style.opacity = '.65';
     scheduleBtn.style.cursor = 'wait';
-    publishNowBtn.style.cursor = 'wait';
-    scheduleBtn.textContent = publishNow ? 'Publishing now… please wait' : 'Scheduling… please wait';
+    scheduleBtn.textContent = 'Scheduling… please wait';
     try {
       const pageIds = selectedPageIds();
       const pageSchedules = pageIds.map(pageId => {
-        if (publishNow) return { pageId, scheduledAt: new Date().toISOString() };
         const row = pageList.querySelector('[data-page-row="' + CSS.escape(pageId) + '"]');
         const timeInput = row && row.querySelector('[data-page-time]');
         const localTimeForPage = timeInput?.value || document.getElementById('scheduleAt').value;
@@ -267,34 +261,20 @@
         reader.onerror = () => reject(new Error('Could not read ' + file.name + '. Please choose the photo again.'));
         reader.readAsDataURL(file);
       })));
-      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageSchedules,imageUrl,images,message,isAiContent,publishNow})});
-      const immediateComplete = publishNow && data.jobs.every(job => job.status === 'published');
-      const immediateFailed = publishNow && data.jobs.some(job => job.status !== 'published');
-      if (!immediateFailed) clearPostForm();
-      if (publishNow && immediateComplete) {
-        show('✅ Successfully published to all ' + data.jobs.length + ' selected Page(s).');
-      } else if (publishNow && immediateFailed) {
-        show('⚠️ Immediate publishing did not finish on every Page. Your photo and caption have been kept. Check Recent schedule history for each Page’s status/error, then retry only the failed Page(s).');
-      } else {
-        clearPostForm();
-        show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
-      }
+      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageSchedules,imageUrl,images,message,isAiContent})});
+      clearPostForm();
+      show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
       await loadJobs();
     } catch(e) {
       show('⚠️ ' + e.message + ' Your entered data has been kept so you can retry without entering it again.');
     } finally {
       schedulingInProgress = false;
       scheduleBtn.disabled = false;
-      publishNowBtn.disabled = false;
       scheduleBtn.style.opacity = '';
-      publishNowBtn.style.opacity = '';
       scheduleBtn.style.cursor = '';
-      publishNowBtn.style.cursor = '';
       scheduleBtn.textContent = 'Schedule for selected Pages';
     }
-  }
-  scheduleBtn.addEventListener('click', () => submitPost(false));
-  publishNowBtn.addEventListener('click', () => submitPost(true));
+  });
   if (new URLSearchParams(location.search).has('facebook_connected')) { panel.style.display='block'; loadPages(); }
   if (location.protocol === 'file:') show('Open this site through GitHub Pages after deployment; file:// mode cannot use the secure login session.');
 })();
