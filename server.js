@@ -166,7 +166,8 @@ function requireAuth(req, res, next) {
 app.get('/api/pages', requireAuth, async (req, res) => {
   try {
     const u = req.session.fbUser;
-    const url = `${graph('me/accounts')}?${new URLSearchParams({ fields: 'id,name,access_token,tasks', limit: '100', access_token: u.accessToken })}`;
+    const pageParams = { fields: 'id,name,access_token,tasks', limit: '100', access_token: u.accessToken };
+    const url = `${graph('me/accounts')}?${new URLSearchParams(pageParams)}`;
     const response = await fetch(url);
     const data = await response.json();
 
@@ -193,10 +194,32 @@ app.get('/api/pages', requireAuth, async (req, res) => {
       });
     }
 
-    const rawPages = Array.isArray(data.data) ? data.data : [];
-    const pages = rawPages.map(p => ({ id: String(p.id), name: p.name, tasks: p.tasks || [] }));
+    const rawPages = Array.isArray(data.data) ? [...data.data] : [];
+    // Follow Meta cursor pagination so large Page portfolios are not silently truncated.
+    let after = data.paging?.cursors?.after || null;
+    let hasNextPage = Boolean(data.paging?.next);
+    let pageFetchCount = 1;
+    while (hasNextPage && after && pageFetchCount < 10 && rawPages.length < 1000) {
+      const nextParams = { ...pageParams, after };
+      const nextResponse = await fetch(`${graph('me/accounts')}?${new URLSearchParams(nextParams)}`);
+      const nextData = await nextResponse.json();
+      if (!nextResponse.ok || nextData.error) {
+        const err = nextData.error || {};
+        console.warn('[pages-api] Page pagination stopped after a Meta error', JSON.stringify({ httpStatus: nextResponse.status, errorCode: err.code || null, message: err.message || 'Unknown Meta API error' }));
+        break;
+      }
+      const nextRows = Array.isArray(nextData.data) ? nextData.data : [];
+      if (!nextRows.length) break;
+      rawPages.push(...nextRows);
+      const nextAfter = nextData.paging?.cursors?.after || null;
+      hasNextPage = Boolean(nextData.paging?.next && nextAfter && nextAfter !== after);
+      after = nextAfter;
+      pageFetchCount++;
+    }
+    const uniqueRawPages = [...new Map(rawPages.filter(p => p?.id).map(p => [String(p.id), p])).values()];
+    const pages = uniqueRawPages.map(p => ({ id: String(p.id), name: p.name, tasks: p.tasks || [] }));
     const save = db.prepare('INSERT INTO pages(user_id,page_id,name,access_token,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id,page_id) DO UPDATE SET name=excluded.name, access_token=excluded.access_token, updated_at=excluded.updated_at');
-    const tx = db.transaction(() => { for (const p of rawPages) {
+    const tx = db.transaction(() => { for (const p of uniqueRawPages) {
       if (p.id && p.access_token) save.run(u.id, String(p.id), p.name || 'Facebook Page', p.access_token, now());
     } });
     tx();
@@ -206,7 +229,9 @@ app.get('/api/pages', requireAuth, async (req, res) => {
       httpStatus: response.status,
       returnedCount: pages.length,
       hasPaging: Boolean(data.paging),
-      note: pages.length ? 'Page records received from Meta.' : 'Meta returned a successful response with zero Page records. This is not a server crash; check which access the current Facebook login actually grants.'
+      hasNextPage: hasNextPage,
+      pagesFetchedIn: pageFetchCount,
+      note: pages.length ? 'Page records received from Meta; cursor pagination was followed where available.' : 'Meta returned a successful response with zero Page records. This is not a server crash; check which access the current Facebook login actually grants.'
     };
     if (!pages.length) console.warn('[pages-api] Meta returned zero Pages', JSON.stringify(diagnostic));
     res.json({ pages, diagnostic });
@@ -222,8 +247,17 @@ app.get('/api/jobs', requireAuth, (req, res) => {
 });
 
 app.post('/api/schedule', requireAuth, (req, res) => {
-  const { pageIds, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt } = req.body || {};
-  if (!Array.isArray(pageIds) || !pageIds.length || pageIds.some(id => typeof id !== 'string' && typeof id !== 'number')) return res.status(400).json({ error: 'Select at least one Facebook Page.' });
+  const { pageIds, pageSchedules, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt } = req.body || {};
+  const requestedSchedules = Array.isArray(pageSchedules) && pageSchedules.length
+    ? pageSchedules.map(item => ({ pageId: item?.pageId, scheduledAt: item?.scheduledAt }))
+    : (Array.isArray(pageIds) ? pageIds.map(pageId => ({ pageId, scheduledAt })) : []);
+  if (!requestedSchedules.length || requestedSchedules.some(item => (typeof item.pageId !== 'string' && typeof item.pageId !== 'number') || typeof item.scheduledAt !== 'string')) return res.status(400).json({ error: 'Select Pages and set a schedule time for each selected Page.' });
+  const uniqueRequestedIds = new Set(requestedSchedules.map(item => String(item.pageId)));
+  if (uniqueRequestedIds.size !== requestedSchedules.length) return res.status(400).json({ error: 'A Page was selected more than once. Refresh the Page list and try again.' });
+  const validatedSchedules = requestedSchedules.map(item => ({ pageId: String(item.pageId), date: new Date(item.scheduledAt) }));
+  if (validatedSchedules.some(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000)) {
+    return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
+  }
   if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
   const photos = [];
   const inputs = incomingImages.length ? incomingImages : (imageData ? [{ imageData, imageMimeType }] : []);
@@ -241,23 +275,24 @@ app.post('/api/schedule', requireAuth, (req, res) => {
   }
   if (totalBytes > 30 * 1024 * 1024) return res.status(400).json({ error: 'The combined size of all photos must be 30 MB or less.' });
   if (!photos.length && (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl))) return res.status(400).json({ error: 'Upload JPG/PNG photos or provide a public HTTPS image URL.' });
-  const date = new Date(scheduledAt);
-  if (!scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 15_000) return res.status(400).json({ error: 'Choose a future schedule time at least 15 seconds from now.' });
+  const invalidTime = validatedSchedules.find(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000);
+  if (invalidTime) return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
   const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?)");
   const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
   const created = [];
   const tx = db.transaction(() => {
-    for (const rawId of pageIds) {
-      const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.fbUser.id, String(rawId));
-      if (!page) throw new Error('Page ' + rawId + ' was not found. Refresh the Page list and try again.');
+    for (const requested of validatedSchedules) {
+      const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.fbUser.id, requested.pageId);
+      if (!page) throw new Error('Page ' + requested.pageId + ' was not found for this Facebook account. Refresh the Page list and try again.');
       const id = crypto.randomUUID();
       const first = photos[0] || null;
-      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, date.toISOString(), now(), now());
+      const pageScheduledAt = requested.date.toISOString();
+      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, pageScheduledAt, now(), now());
       photos.forEach((photo,index) => insertPhoto.run(id,index,photo.buffer,photo.mime));
-      created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: date.toISOString(), status: 'scheduled', photoCount: photos.length || 1 });
+      created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: pageScheduledAt, status: 'scheduled', photoCount: photos.length || 1 });
     }
   });
-  try { tx(); res.status(201).json({ jobs: created }); } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
+  try { tx(); res.status(201).json({ jobs: created, requestedCount: validatedSchedules.length, createdCount: created.length }); } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
 
 app.delete('/api/schedule/:id', requireAuth, (req, res) => {

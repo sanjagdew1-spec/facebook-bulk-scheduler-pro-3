@@ -48,8 +48,10 @@
             </details>
             <label for="caption" style="display:block;margin:8px 0">Caption</label>
             <textarea id="caption" rows="3" placeholder="Write your post caption..." style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff"></textarea>
-            <label for="scheduleAt" style="display:block;margin:8px 0">Schedule date and time (your local time)</label>
+            <label for="scheduleAt" style="display:block;margin:8px 0">Default date and time (optional; used if a selected Page has no individual time)</label>
             <input id="scheduleAt" type="datetime-local" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+            <button class="btn secondary" id="applyDefaultTime" type="button" style="margin-top:8px;padding:9px 12px">Apply default time to selected Pages</button>
+            <p style="font-size:12px;color:#aab7cf;line-height:1.5">You can set a different date/time in each Page row above. Only selected Pages will be scheduled.</p>
             <button class="btn primary" id="scheduleBtn" type="button" style="margin-top:12px">Schedule for selected Pages</button>
             <h3>Recent schedule history</h3><div id="jobList"></div>
           </section>
@@ -100,7 +102,22 @@
     try {
       const data = await api('/api/pages');
       panel.style.display = 'block';
-      pageList.innerHTML = data.pages.length ? data.pages.map(p => '<label style="display:block;padding:8px 0"><input type="checkbox" value="' + escapeHtml(p.id) + '"> ' + escapeHtml(p.name) + '</label>').join('') : '<p>No Pages returned. Check the login permissions and the Facebook account Page roles.</p>';
+      pageList.innerHTML = data.pages.length ? `
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px">
+          <button class="btn secondary" id="selectAllPages" type="button" style="padding:8px 11px">Select all Pages</button>
+          <button class="btn secondary" id="clearAllPages" type="button" style="padding:8px 11px">Clear selection</button>
+          <span id="selectedPageCount" style="align-self:center;color:#aab7cf;font-size:12px">0 of ${data.pages.length} Pages selected</span>
+        </div>
+        <p style="font-size:12px;color:#aab7cf;line-height:1.5">Tick each Page and set its own publish time. The main time field below can be applied to selected Pages as a starting time.</p>
+        ` + data.pages.map(p => '<div data-page-row="' + escapeHtml(p.id) + '" style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(190px,240px);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #26334c"><label style="display:flex;gap:8px;align-items:center;overflow-wrap:anywhere"><input type="checkbox" value="' + escapeHtml(p.id) + '"> ' + escapeHtml(p.name) + '</label><input data-page-time type="datetime-local" aria-label="Schedule time for ' + escapeHtml(p.name) + '" style="width:100%;min-width:0;padding:8px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff"></div>').join('') : '<p>Meta returned no Pages. Check Page access and permissions.</p>';
+      const updatePageCount = () => {
+        const selected = selectedPageIds().length;
+        const count = document.getElementById('selectedPageCount');
+        if (count) count.textContent = selected + ' of ' + data.pages.length + ' Pages selected';
+      };
+      pageList.querySelectorAll('input[type=checkbox]').forEach(box => box.addEventListener('change', updatePageCount));
+      document.getElementById('selectAllPages')?.addEventListener('click', () => { pageList.querySelectorAll('input[type=checkbox]').forEach(box => box.checked = true); updatePageCount(); });
+      document.getElementById('clearAllPages')?.addEventListener('click', () => { pageList.querySelectorAll('input[type=checkbox]').forEach(box => box.checked = false); updatePageCount(); });
       show(data.diagnostic || {pagesReceived:data.pages.length});
       await loadJobs();
     } catch(e) { show(e.message); if (e.message.includes('Connect with Facebook')) { window.location.href = API + '/auth/facebook'; } }
@@ -186,6 +203,17 @@
 
   btn.addEventListener('click', loadPages);
   const scheduleBtn = document.getElementById('scheduleBtn');
+  document.getElementById('applyDefaultTime').addEventListener('click', () => {
+    const defaultTime = document.getElementById('scheduleAt').value;
+    if (!defaultTime) { show('Choose a default date/time first.'); return; }
+    let count = 0;
+    pageList.querySelectorAll('input[type=checkbox]:checked').forEach(box => {
+      const row = box.closest('[data-page-row]');
+      const timeInput = row && row.querySelector('[data-page-time]');
+      if (timeInput) { timeInput.value = defaultTime; count++; }
+    });
+    show('Default time applied to ' + count + ' selected Page(s). You can still edit each Page time separately.');
+  });
   function clearPostForm() {
     selectedFiles = [];
     imageFile.value = '';
@@ -203,10 +231,18 @@
     scheduleBtn.textContent = 'Scheduling… please wait';
     try {
       const pageIds = selectedPageIds();
+      const pageSchedules = pageIds.map(pageId => {
+        const row = pageList.querySelector('[data-page-row="' + CSS.escape(pageId) + '"]');
+        const timeInput = row && row.querySelector('[data-page-time]');
+        const localTimeForPage = timeInput?.value || document.getElementById('scheduleAt').value;
+        if (!localTimeForPage) throw new Error('Choose a schedule time for every selected Page, or set a default time and apply it.');
+        const scheduledDate = new Date(localTimeForPage);
+        if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() < Date.now() + 15_000) throw new Error('Every selected Page needs a valid future time at least 15 seconds from now. Check each Page row.');
+        return { pageId, scheduledAt: scheduledDate.toISOString() };
+      });
       const files = [...selectedFiles];
       const imageUrl = document.getElementById('imageUrl').value.trim();
       const message = document.getElementById('caption').value;
-      const localTime = document.getElementById('scheduleAt').value;
       if (!pageIds.length) throw new Error('Select at least one Page.');
       if (!files.length && !imageUrl) throw new Error('Upload one or more JPG/PNG photos or provide an HTTPS image URL.');
       if (files.length > 10) throw new Error('Choose no more than 10 photos per post.');
@@ -215,17 +251,15 @@
         if (!['image/jpeg','image/png'].includes(file.type)) throw new Error('Every photo must be JPG or PNG.');
         if (file.size > 6 * 1024 * 1024) throw new Error('Each photo must be smaller than 6 MB.');
       }
-      if (!localTime) throw new Error('Choose a schedule date and time.');
-      const scheduledAt = new Date(localTime).toISOString();
       const images = await Promise.all(files.map(file => new Promise((resolve,reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve({imageData:String(reader.result || ''),imageMimeType:file.type,name:file.name});
         reader.onerror = () => reject(new Error('Could not read ' + file.name + '. Please choose the photo again.'));
         reader.readAsDataURL(file);
       })));
-      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageIds,imageUrl,images,message,scheduledAt})});
+      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageSchedules,imageUrl,images,message})});
       clearPostForm();
-      show('✅ Successfully scheduled ' + (files.length || 1) + ' photo(s) for ' + data.jobs.length + ' Page(s). The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
+      show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
       await loadJobs();
     } catch(e) {
       show('⚠️ ' + e.message + ' Your entered data has been kept so you can retry without entering it again.');
