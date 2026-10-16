@@ -366,13 +366,12 @@ async function publishDueJobs() {
         const body = new FormData();
         body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
         body.set('caption', job.message || '');
-        body.set('published', 'true');
         body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
         body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
         body.set('access_token', page.access_token);
         response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
       } else {
-        const body = new URLSearchParams({ url: job.image_url, caption: job.message, published: 'true', is_gen_ai: job.is_ai_content ? 'true' : 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE', access_token: page.access_token });
+        const body = new URLSearchParams({ url: job.image_url, caption: job.message, is_gen_ai: job.is_ai_content ? 'true' : 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE', access_token: page.access_token });
         response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
       }
       const data = await response.json().catch(() => ({}));
