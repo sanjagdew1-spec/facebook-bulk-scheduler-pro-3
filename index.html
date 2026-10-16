@@ -53,7 +53,7 @@
             <input id="scheduleAt" type="datetime-local" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
             <button class="btn secondary" id="applyDefaultTime" type="button" style="margin-top:8px;padding:9px 12px">Apply default time to selected Pages</button>
             <p style="font-size:12px;color:#aab7cf;line-height:1.5">You can set a different date/time in each Page row above. Only selected Pages will be scheduled.</p>
-            <button class="btn primary" id="scheduleBtn" type="button" style="margin-top:12px">Schedule for selected Pages</button>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px"><button class="btn primary" id="publishNowBtn" type="button">Publish Now</button><button class="btn secondary" id="scheduleBtn" type="button">Schedule for selected Pages</button></div>
             <h3>Recent schedule history</h3><div id="jobList"></div>
           </section>
           <p class="note">After Facebook login, use “Check Facebook connection & Pages” here so the browser sends the session cookie. This test does not publish anything.</p>
@@ -225,29 +225,38 @@
     document.getElementById('scheduleAt').value = '';
     pageList.querySelectorAll('[data-page-time]').forEach(input => { input.value = ''; });
   }
-  scheduleBtn.addEventListener('click', async () => {
+  const publishNowBtn = document.getElementById('publishNowBtn');
+  async function submitPost(event) {
     if (schedulingInProgress) return;
+    const isPublishNow = event.currentTarget.id === 'publishNowBtn';
     schedulingInProgress = true;
-    scheduleBtn.disabled = true;
-    scheduleBtn.style.opacity = '.65';
-    scheduleBtn.style.cursor = 'wait';
-    scheduleBtn.textContent = 'Scheduling… please wait';
+    const activeButton = event.currentTarget;
+    const originalText = activeButton.textContent;
+    const otherButton = isPublishNow ? scheduleBtn : publishNowBtn;
+    activeButton.disabled = true;
+    otherButton.disabled = true;
+    activeButton.style.opacity = '.65';
+    activeButton.style.cursor = 'wait';
+    activeButton.textContent = isPublishNow ? 'Publishing… please wait' : 'Scheduling… please wait';
     try {
       const pageIds = selectedPageIds();
-      const pageSchedules = pageIds.map(pageId => {
-        const row = pageList.querySelector('[data-page-row="' + CSS.escape(pageId) + '"]');
-        const timeInput = row && row.querySelector('[data-page-time]');
-        const localTimeForPage = timeInput?.value || document.getElementById('scheduleAt').value;
-        if (!localTimeForPage) throw new Error('Choose a schedule time for every selected Page, or set a default time and apply it.');
-        const scheduledDate = new Date(localTimeForPage);
-        if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() < Date.now() + 15_000) throw new Error('Every selected Page needs a valid future time at least 15 seconds from now. Check each Page row.');
-        return { pageId, scheduledAt: scheduledDate.toISOString() };
-      });
+      if (!pageIds.length) throw new Error('Select at least one Page.');
+      let pageSchedules = [];
+      if (!isPublishNow) {
+        pageSchedules = pageIds.map(pageId => {
+          const row = pageList.querySelector('[data-page-row="' + CSS.escape(pageId) + '"]');
+          const timeInput = row && row.querySelector('[data-page-time]');
+          const localTimeForPage = timeInput?.value || document.getElementById('scheduleAt').value;
+          if (!localTimeForPage) throw new Error('Choose a schedule time for every selected Page, or set a default time and apply it.');
+          const scheduledDate = new Date(localTimeForPage);
+          if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() < Date.now() + 15_000) throw new Error('Every selected Page needs a valid future time at least 15 seconds from now. Check each Page row.');
+          return { pageId, scheduledAt: scheduledDate.toISOString() };
+        });
+      }
       const files = [...selectedFiles];
       const imageUrl = document.getElementById('imageUrl').value.trim();
       const message = document.getElementById('caption').value;
       const isAiContent = document.getElementById('aiContent').checked;
-      if (!pageIds.length) throw new Error('Select at least one Page.');
       if (!files.length && !imageUrl) throw new Error('Upload one or more JPG/PNG photos or provide an HTTPS image URL.');
       if (files.length > 10) throw new Error('Choose no more than 10 photos per post.');
       if (files.reduce((sum,file) => sum + file.size,0) > 30 * 1024 * 1024) throw new Error('The combined size of all photos must be 30 MB or less.');
@@ -261,20 +270,32 @@
         reader.onerror = () => reject(new Error('Could not read ' + file.name + '. Please choose the photo again.'));
         reader.readAsDataURL(file);
       })));
-      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageSchedules,imageUrl,images,message,isAiContent})});
+      const endpoint = isPublishNow ? '/api/publish-now' : '/api/schedule';
+      const payload = isPublishNow ? {pageIds,imageUrl,images,message,isAiContent} : {pageSchedules,imageUrl,images,message,isAiContent};
+      const data = await api(endpoint, {method:'POST', body:JSON.stringify(payload)});
       clearPostForm();
-      show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
+      if (isPublishNow) {
+        const published = (data.jobs || []).filter(j => j.status === 'published').length;
+        const failed = (data.jobs || []).filter(j => j.status === 'failed');
+        const details = failed.map(j => j.page_name + ': ' + (j.error || 'Publishing failed')).join(' | ');
+        show('Publish Now result: ' + published + ' of ' + (data.jobs || []).length + ' Page(s) published.' + (failed.length ? ' Failed: ' + details : ''));
+      } else {
+        show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
+      }
       await loadJobs();
     } catch(e) {
       show('⚠️ ' + e.message + ' Your entered data has been kept so you can retry without entering it again.');
     } finally {
       schedulingInProgress = false;
-      scheduleBtn.disabled = false;
-      scheduleBtn.style.opacity = '';
-      scheduleBtn.style.cursor = '';
-      scheduleBtn.textContent = 'Schedule for selected Pages';
+      activeButton.disabled = false;
+      otherButton.disabled = false;
+      activeButton.style.opacity = '';
+      activeButton.style.cursor = '';
+      activeButton.textContent = originalText;
     }
-  });
+  }
+  scheduleBtn.addEventListener('click', submitPost);
+  publishNowBtn.addEventListener('click', submitPost);
   if (new URLSearchParams(location.search).has('facebook_connected')) { panel.style.display='block'; loadPages(); }
   if (location.protocol === 'file:') show('Open this site through GitHub Pages after deployment; file:// mode cannot use the secure login session.');
 })();

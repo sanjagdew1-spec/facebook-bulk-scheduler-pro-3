@@ -295,6 +295,61 @@ app.post('/api/schedule', requireAuth, (req, res) => {
   try { tx(); res.status(201).json({ jobs: created, requestedCount: validatedSchedules.length, createdCount: created.length }); } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
 
+app.post('/api/publish-now', requireAuth, async (req, res) => {
+  const { pageIds, imageUrl = '', images: incomingImages = [], message = '', isAiContent = false } = req.body || {};
+  if (!Array.isArray(pageIds) || !pageIds.length) return res.status(400).json({ error: 'Select at least one Page.' });
+  const ids = pageIds.map(String);
+  if (new Set(ids).size !== ids.length) return res.status(400).json({ error: 'A Page was selected more than once. Refresh the Page list and try again.' });
+  if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
+
+  const photos = [];
+  let totalBytes = 0;
+  for (const photo of incomingImages) {
+    if (!photo || typeof photo.imageData !== 'string') return res.status(400).json({ error: 'Choose valid JPG or PNG photo files.' });
+    const match = photo.imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return res.status(400).json({ error: 'Choose a valid JPG or PNG image file.' });
+    const mime = match[1];
+    const buffer = Buffer.from(match[2], 'base64');
+    if (!buffer.length || buffer.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'Each photo must be smaller than 6 MB.' });
+    if (photo.imageMimeType && photo.imageMimeType !== mime) return res.status(400).json({ error: 'Image type mismatch. Please select the image again.' });
+    totalBytes += buffer.length;
+    photos.push({ buffer, mime });
+  }
+  if (totalBytes > 30 * 1024 * 1024) return res.status(400).json({ error: 'The combined size of all photos must be 30 MB or less.' });
+  if (!photos.length && (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl))) return res.status(400).json({ error: 'Upload JPG/PNG photos or provide a public HTTPS image URL.' });
+
+  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?,?)");
+  const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
+  const created = [];
+  const publishTime = now();
+  try {
+    const tx = db.transaction(() => {
+      for (const pageId of ids) {
+        const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.fbUser.id, pageId);
+        if (!page) throw new Error('A selected Page was not found for this Facebook account. Refresh the Page list and try again.');
+        const id = crypto.randomUUID();
+        const first = photos[0] || null;
+        insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, publishTime, isAiContent ? 1 : 0, now(), now());
+        photos.forEach((photo,index) => insertPhoto.run(id,index,photo.buffer,photo.mime));
+        created.push(id);
+      }
+    });
+    tx();
+    const placeholders = created.map(() => '?').join(',');
+    // The shared scheduler processes up to 10 due jobs per pass. Repeat passes so
+    // Publish Now can handle bulk selections larger than 10 Pages.
+    for (let attempt = 0; attempt < Math.ceil(created.length / 10) + 2; attempt++) {
+      await publishDueJobs();
+      const remaining = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE id IN (" + placeholders + ") AND status='scheduled' AND scheduled_at<=?").get(...created, now()).count;
+      if (!remaining) break;
+    }
+    const jobs = db.prepare(`SELECT id,page_id,page_name,scheduled_at,status,post_id,error,is_ai_content FROM jobs WHERE id IN (${placeholders}) ORDER BY created_at`).all(...created);
+    res.status(201).json({ jobs });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
 app.delete('/api/schedule/:id', requireAuth, (req, res) => {
   const result = db.prepare("DELETE FROM jobs WHERE id=? AND user_id=? AND status='scheduled'").run(req.params.id, req.session.fbUser.id);
   if (!result.changes) return res.status(404).json({ error: 'Scheduled job not found or already started.' });
