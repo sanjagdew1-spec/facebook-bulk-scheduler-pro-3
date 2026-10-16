@@ -55,7 +55,7 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(session({
   name: 'fb_scheduler_sid',
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
@@ -215,19 +215,30 @@ app.get('/api/jobs', requireAuth, (req, res) => {
 });
 
 app.post('/api/schedule', requireAuth, (req, res) => {
-  const { pageIds, imageUrl, message = '', scheduledAt } = req.body || {};
+  const { pageIds, imageUrl = '', imageData = '', imageMimeType = '', message = '', scheduledAt } = req.body || {};
   if (!Array.isArray(pageIds) || !pageIds.length || pageIds.some(id => typeof id !== 'string' && typeof id !== 'number')) return res.status(400).json({ error: 'Select at least one Facebook Page.' });
-  if (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl)) return res.status(400).json({ error: 'imageUrl must be a publicly reachable HTTPS image URL.' });
+  let imageBuffer = null;
+  let mimeType = '';
+  if (typeof imageData === 'string' && imageData) {
+    const match = imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return res.status(400).json({ error: 'Choose a valid JPG or PNG image file.' });
+    mimeType = match[1];
+    imageBuffer = Buffer.from(match[2], 'base64');
+    if (!imageBuffer.length || imageBuffer.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'Image must be smaller than 6 MB.' });
+  } else if (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl)) {
+    return res.status(400).json({ error: 'Upload a JPG/PNG photo or provide a public HTTPS image URL.' });
+  }
+  if (imageBuffer && imageMimeType && imageMimeType !== mimeType) return res.status(400).json({ error: 'Image type mismatch. Please select the image again.' });
   const date = new Date(scheduledAt);
   if (!scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 15_000) return res.status(400).json({ error: 'Choose a future schedule time at least 15 seconds from now.' });
-  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,scheduled_at,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'scheduled',?,?)");
+  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?)");
   const created = [];
   const tx = db.transaction(() => {
     for (const rawId of pageIds) {
       const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.fbUser.id, String(rawId));
       if (!page) throw new Error(`Page ${rawId} was not found. Refresh the Page list and try again.`);
       const id = crypto.randomUUID();
-      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), imageUrl, date.toISOString(), now(), now());
+      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), imageBuffer ? '' : imageUrl, imageBuffer, mimeType || null, date.toISOString(), now(), now());
       created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: date.toISOString(), status: 'scheduled' });
     }
   });
@@ -240,6 +251,17 @@ app.delete('/api/schedule/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+function describeMetaError(data, httpStatus) {
+  const err = data?.error || {};
+  const parts = [err.message || 'Meta rejected the photo post.'];
+  if (err.type) parts.push('type ' + err.type);
+  if (err.code != null) parts.push('code ' + err.code);
+  if (err.error_subcode != null) parts.push('subcode ' + err.error_subcode);
+  if (httpStatus) parts.push('HTTP ' + httpStatus);
+  if (err.fbtrace_id) parts.push('trace ' + err.fbtrace_id);
+  return parts.join(' | ').slice(0, 1400);
+}
+
 async function publishDueJobs() {
   const due = db.prepare("SELECT * FROM jobs WHERE status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT 10").all(now());
   for (const job of due) {
@@ -248,14 +270,24 @@ async function publishDueJobs() {
     try {
       const page = db.prepare('SELECT access_token FROM pages WHERE user_id=? AND page_id=?').get(job.user_id, job.page_id);
       if (!page?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
-      const body = new URLSearchParams({ url: job.image_url, caption: job.message, access_token: page.access_token });
-      const response = await fetch(graph(`${job.page_id}/photos`), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
-      const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data.error?.message || 'Meta rejected the photo post.');
+      let response;
+      if (job.image_data && job.image_data.length) {
+        const body = new FormData();
+        body.set('source', new Blob([job.image_data], { type: job.image_mime_type || 'image/jpeg' }), job.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
+        body.set('caption', job.message || '');
+        body.set('access_token', page.access_token);
+        response = await fetch(graph(`${job.page_id}/photos`), { method: 'POST', body });
+      } else {
+        const body = new URLSearchParams({ url: job.image_url, caption: job.message, access_token: page.access_token });
+        response = await fetch(graph(`${job.page_id}/photos`), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.error) throw new Error(describeMetaError(data, response.status));
       db.prepare("UPDATE jobs SET status='published',post_id=?,error=NULL,updated_at=? WHERE id=?").run(String(data.post_id || data.id || ''), now(), job.id);
     } catch (e) {
-      db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=?").run(String(e.message || e).slice(0, 1500), now(), job.id);
-      console.error('Scheduled publish failed', job.id, e.message || e);
+      const message = String(e.message || e).slice(0, 1500);
+      db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=?").run(message, now(), job.id);
+      console.error('Scheduled publish failed', job.id, message);
     }
   }
 }
