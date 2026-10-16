@@ -221,6 +221,7 @@
     document.getElementById('imageUrl').value = '';
     document.getElementById('caption').value = '';
     document.getElementById('scheduleAt').value = '';
+    pageList.querySelectorAll('[data-page-time]').forEach(input => { input.value = ''; });
   }
   scheduleBtn.addEventListener('click', async () => {
     if (schedulingInProgress) return;
