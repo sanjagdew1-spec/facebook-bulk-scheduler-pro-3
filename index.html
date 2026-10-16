@@ -48,6 +48,7 @@
             </details>
             <label for="caption" style="display:block;margin:8px 0">Caption</label>
             <textarea id="caption" rows="3" placeholder="Write your post caption..." style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff"></textarea>
+            <label for="aiContent" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 6px;padding:11px;border:1px solid #40506c;border-radius:10px;background:#0d1425;cursor:pointer"><input id="aiContent" type="checkbox" style="margin-top:3px;flex-shrink:0"><span><b style="display:block;color:#f4f7ff">This post contains AI-generated content</b><small style="display:block;color:#aab7cf;line-height:1.5;margin-top:4px">Save this disclosure in schedule history as a reminder. This does not directly set Facebook’s AI label; Facebook may label content using its own systems.</small></span></label>
             <label for="scheduleAt" style="display:block;margin:8px 0">Default date and time (optional; used if a selected Page has no individual time)</label>
             <input id="scheduleAt" type="datetime-local" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
             <button class="btn secondary" id="applyDefaultTime" type="button" style="margin-top:8px;padding:9px 12px">Apply default time to selected Pages</button>
@@ -93,7 +94,7 @@
   async function loadJobs() {
     try {
       const data = await api('/api/jobs');
-      jobList.innerHTML = data.jobs.length ? data.jobs.map(j => '<div style="padding:8px 0;border-bottom:1px solid #26334c"><b>' + escapeHtml(j.page_name) + '</b> — ' + escapeHtml(j.status) + '<br><small>' + escapeHtml(new Date(j.scheduled_at).toLocaleString()) + (j.error ? ' · ' + escapeHtml(j.error) : '') + '</small></div>').join('') : '<p>No scheduled jobs yet.</p>';
+      jobList.innerHTML = data.jobs.length ? data.jobs.map(j => '<div style="padding:8px 0;border-bottom:1px solid #26334c"><b>' + escapeHtml(j.page_name) + '</b> — ' + escapeHtml(j.status) + (j.is_ai_content ? '<br><small style="color:#f5c96a">AI content disclosure noted (Facebook label not guaranteed)</small>' : '') + '<br><small>' + escapeHtml(new Date(j.scheduled_at).toLocaleString()) + (j.error ? ' · ' + escapeHtml(j.error) : '') + '</small></div>').join('') : '<p>No scheduled jobs yet.</p>';
     } catch(e) { jobList.textContent = e.message; }
   }
   function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -220,6 +221,7 @@
     imagePreview.innerHTML = '';
     document.getElementById('imageUrl').value = '';
     document.getElementById('caption').value = '';
+    document.getElementById('aiContent').checked = false;
     document.getElementById('scheduleAt').value = '';
     pageList.querySelectorAll('[data-page-time]').forEach(input => { input.value = ''; });
   }
@@ -244,6 +246,7 @@
       const files = [...selectedFiles];
       const imageUrl = document.getElementById('imageUrl').value.trim();
       const message = document.getElementById('caption').value;
+      const isAiContent = document.getElementById('aiContent').checked;
       if (!pageIds.length) throw new Error('Select at least one Page.');
       if (!files.length && !imageUrl) throw new Error('Upload one or more JPG/PNG photos or provide an HTTPS image URL.');
       if (files.length > 10) throw new Error('Choose no more than 10 photos per post.');
@@ -258,7 +261,7 @@
         reader.onerror = () => reject(new Error('Could not read ' + file.name + '. Please choose the photo again.'));
         reader.readAsDataURL(file);
       })));
-      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageSchedules,imageUrl,images,message})});
+      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageSchedules,imageUrl,images,message,isAiContent})});
       clearPostForm();
       show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
       await loadJobs();

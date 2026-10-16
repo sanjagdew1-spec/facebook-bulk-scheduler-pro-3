@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS job_images (
 );
 CREATE INDEX IF NOT EXISTS job_images_job_idx ON job_images(job_id, position);
 `);
-for (const migration of ['ALTER TABLE jobs ADD COLUMN image_data BLOB', 'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT']) { try { db.exec(migration); } catch (e) { if (!String(e.message || e).includes('duplicate column name')) throw e; } }
+for (const migration of ['ALTER TABLE jobs ADD COLUMN image_data BLOB', 'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT', 'ALTER TABLE jobs ADD COLUMN is_ai_content INTEGER NOT NULL DEFAULT 0']) { try { db.exec(migration); } catch (e) { if (!String(e.message || e).includes('duplicate column name')) throw e; } }
 
 app.set('trust proxy', 1);
 // GitHub Pages and Render are different origins. Allow the project site to call this API
@@ -242,12 +242,12 @@ app.get('/api/pages', requireAuth, async (req, res) => {
 });
 
 app.get('/api/jobs', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,created_at,updated_at FROM jobs WHERE user_id=? ORDER BY scheduled_at DESC LIMIT 500').all(req.session.fbUser.id);
+  const rows = db.prepare('SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE user_id=? ORDER BY scheduled_at DESC LIMIT 500').all(req.session.fbUser.id);
   res.json({ jobs: rows });
 });
 
 app.post('/api/schedule', requireAuth, (req, res) => {
-  const { pageIds, pageSchedules, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt } = req.body || {};
+  const { pageIds, pageSchedules, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt, isAiContent = false } = req.body || {};
   const requestedSchedules = Array.isArray(pageSchedules) && pageSchedules.length
     ? pageSchedules.map(item => ({ pageId: item?.pageId, scheduledAt: item?.scheduledAt }))
     : (Array.isArray(pageIds) ? pageIds.map(pageId => ({ pageId, scheduledAt })) : []);
@@ -277,7 +277,7 @@ app.post('/api/schedule', requireAuth, (req, res) => {
   if (!photos.length && (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl))) return res.status(400).json({ error: 'Upload JPG/PNG photos or provide a public HTTPS image URL.' });
   const invalidTime = validatedSchedules.find(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000);
   if (invalidTime) return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
-  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?)");
+  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?,?)");
   const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
   const created = [];
   const tx = db.transaction(() => {
@@ -287,7 +287,7 @@ app.post('/api/schedule', requireAuth, (req, res) => {
       const id = crypto.randomUUID();
       const first = photos[0] || null;
       const pageScheduledAt = requested.date.toISOString();
-      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, pageScheduledAt, now(), now());
+      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, pageScheduledAt, isAiContent ? 1 : 0, now(), now());
       photos.forEach((photo,index) => insertPhoto.run(id,index,photo.buffer,photo.mime));
       created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: pageScheduledAt, status: 'scheduled', photoCount: photos.length || 1 });
     }
