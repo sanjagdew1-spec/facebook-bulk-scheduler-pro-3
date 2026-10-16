@@ -32,12 +32,14 @@ CREATE TABLE IF NOT EXISTS pages (
 );
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL, page_id TEXT NOT NULL,
-  page_name TEXT NOT NULL, message TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL,
+  page_name TEXT NOT NULL, message TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '',
+  image_data BLOB, image_mime_type TEXT,
   scheduled_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled',
   post_id TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS jobs_due_idx ON jobs(status, scheduled_at);
 `);
+for (const migration of ['ALTER TABLE jobs ADD COLUMN image_data BLOB', 'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT']) { try { db.exec(migration); } catch (e) { if (!String(e.message || e).includes('duplicate column name')) throw e; } }
 
 app.set('trust proxy', 1);
 // GitHub Pages and Render are different origins. Allow the project site to call this API
