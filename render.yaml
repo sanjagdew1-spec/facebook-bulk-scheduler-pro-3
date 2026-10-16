@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: facebook-bulk-scheduler-pro-3
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_LOGIN_CONFIG_ID
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: FRONTEND_ORIGIN
+        value: https://sanjagdew1-spec.github.io
+      - key: FRONTEND_SUCCESS_URL
+        value: https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: /var/data/scheduler.sqlite
+    disk:
+      name: scheduler-data
+      mountPath: /var/data
+      sizeGB: 1
