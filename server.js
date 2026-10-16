@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS jobs (
   post_id TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS jobs_due_idx ON jobs(status, scheduled_at);
+CREATE TABLE IF NOT EXISTS job_images (
+  job_id TEXT NOT NULL, position INTEGER NOT NULL, image_data BLOB NOT NULL, image_mime_type TEXT NOT NULL,
+  PRIMARY KEY (job_id, position), FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS job_images_job_idx ON job_images(job_id, position);
 `);
 for (const migration of ['ALTER TABLE jobs ADD COLUMN image_data BLOB', 'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT']) { try { db.exec(migration); } catch (e) { if (!String(e.message || e).includes('duplicate column name')) throw e; } }
 
@@ -57,7 +62,7 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(session({
   name: 'fb_scheduler_sid',
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
@@ -217,31 +222,39 @@ app.get('/api/jobs', requireAuth, (req, res) => {
 });
 
 app.post('/api/schedule', requireAuth, (req, res) => {
-  const { pageIds, imageUrl = '', imageData = '', imageMimeType = '', message = '', scheduledAt } = req.body || {};
+  const { pageIds, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt } = req.body || {};
   if (!Array.isArray(pageIds) || !pageIds.length || pageIds.some(id => typeof id !== 'string' && typeof id !== 'number')) return res.status(400).json({ error: 'Select at least one Facebook Page.' });
-  let imageBuffer = null;
-  let mimeType = '';
-  if (typeof imageData === 'string' && imageData) {
-    const match = imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/);
+  if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
+  const photos = [];
+  const inputs = incomingImages.length ? incomingImages : (imageData ? [{ imageData, imageMimeType }] : []);
+  let totalBytes = 0;
+  for (const photo of inputs) {
+    if (!photo || typeof photo.imageData !== 'string') return res.status(400).json({ error: 'Choose valid JPG or PNG photo files.' });
+    const match = photo.imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/);
     if (!match) return res.status(400).json({ error: 'Choose a valid JPG or PNG image file.' });
-    mimeType = match[1];
-    imageBuffer = Buffer.from(match[2], 'base64');
-    if (!imageBuffer.length || imageBuffer.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'Image must be smaller than 6 MB.' });
-  } else if (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl)) {
-    return res.status(400).json({ error: 'Upload a JPG/PNG photo or provide a public HTTPS image URL.' });
+    const mime = match[1];
+    const buffer = Buffer.from(match[2], 'base64');
+    if (!buffer.length || buffer.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'Each photo must be smaller than 6 MB.' });
+    if (photo.imageMimeType && photo.imageMimeType !== mime) return res.status(400).json({ error: 'Image type mismatch. Please select the image again.' });
+    totalBytes += buffer.length;
+    photos.push({ buffer, mime });
   }
-  if (imageBuffer && imageMimeType && imageMimeType !== mimeType) return res.status(400).json({ error: 'Image type mismatch. Please select the image again.' });
+  if (totalBytes > 30 * 1024 * 1024) return res.status(400).json({ error: 'The combined size of all photos must be 30 MB or less.' });
+  if (!photos.length && (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl))) return res.status(400).json({ error: 'Upload JPG/PNG photos or provide a public HTTPS image URL.' });
   const date = new Date(scheduledAt);
   if (!scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 15_000) return res.status(400).json({ error: 'Choose a future schedule time at least 15 seconds from now.' });
   const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?)");
+  const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
   const created = [];
   const tx = db.transaction(() => {
     for (const rawId of pageIds) {
       const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.fbUser.id, String(rawId));
-      if (!page) throw new Error(`Page ${rawId} was not found. Refresh the Page list and try again.`);
+      if (!page) throw new Error('Page ' + rawId + ' was not found. Refresh the Page list and try again.');
       const id = crypto.randomUUID();
-      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), imageBuffer ? '' : imageUrl, imageBuffer, mimeType || null, date.toISOString(), now(), now());
-      created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: date.toISOString(), status: 'scheduled' });
+      const first = photos[0] || null;
+      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, date.toISOString(), now(), now());
+      photos.forEach((photo,index) => insertPhoto.run(id,index,photo.buffer,photo.mime));
+      created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: date.toISOString(), status: 'scheduled', photoCount: photos.length || 1 });
     }
   });
   try { tx(); res.status(201).json({ jobs: created }); } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
@@ -273,15 +286,34 @@ async function publishDueJobs() {
       const page = db.prepare('SELECT access_token FROM pages WHERE user_id=? AND page_id=?').get(job.user_id, job.page_id);
       if (!page?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
       let response;
-      if (job.image_data && job.image_data.length) {
+      const storedPhotos = db.prepare('SELECT image_data,image_mime_type FROM job_images WHERE job_id=? ORDER BY position').all(job.id);
+      const photos = storedPhotos.length ? storedPhotos : (job.image_data && job.image_data.length ? [{ image_data: job.image_data, image_mime_type: job.image_mime_type || 'image/jpeg' }] : []);
+      if (photos.length > 1) {
+        const mediaIds = [];
+        for (let i = 0; i < photos.length; i++) {
+          const photo = photos[i];
+          const body = new FormData();
+          body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
+          body.set('published', 'false');
+          body.set('access_token', page.access_token);
+          const uploadResponse = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
+          const uploadData = await uploadResponse.json().catch(() => ({}));
+          if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(describeMetaError(uploadData, uploadResponse.status));
+          mediaIds.push(String(uploadData.id));
+        }
+        const feedBody = new URLSearchParams({ message: job.message || '', access_token: page.access_token });
+        mediaIds.forEach((mediaId,index) => feedBody.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
+        response = await fetch(graph(job.page_id + '/feed'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: feedBody });
+      } else if (photos.length === 1) {
+        const photo = photos[0];
         const body = new FormData();
-        body.set('source', new Blob([job.image_data], { type: job.image_mime_type || 'image/jpeg' }), job.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
+        body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
         body.set('caption', job.message || '');
         body.set('access_token', page.access_token);
-        response = await fetch(graph(`${job.page_id}/photos`), { method: 'POST', body });
+        response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
       } else {
         const body = new URLSearchParams({ url: job.image_url, caption: job.message, access_token: page.access_token });
-        response = await fetch(graph(`${job.page_id}/photos`), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+        response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
       }
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.error) throw new Error(describeMetaError(data, response.status));

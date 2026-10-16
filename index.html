@@ -36,10 +36,10 @@
           <section id="pagePanel" style="display:none;margin-top:16px;background:#080d1b;border:1px solid #26334c;border-radius:12px;padding:14px">
             <h3 style="margin-top:0">Your Facebook Pages</h3><div id="pageList"></div>
             <h3>Schedule a photo post</h3>
-            <label for="imageFile" style="display:block;margin:8px 0">Upload photo (JPG/PNG, max 6 MB)</label>
-            <input id="imageFile" type="file" accept="image/jpeg,image/png" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
-            <img id="imagePreview" alt="Selected photo preview" style="display:none;max-width:100%;max-height:280px;object-fit:contain;margin-top:12px;border-radius:10px;border:1px solid #40506c">
-            <p style="font-size:12px;color:#aab7cf;line-height:1.5">Choose a photo from your computer. The actual file will be sent to Facebook when the scheduled time arrives.</p>
+            <label for="imageFile" style="display:block;margin:8px 0">Upload up to 10 photos (JPG/PNG, max 6 MB each; combined max 30 MB)</label>
+            <input id="imageFile" type="file" accept="image/jpeg,image/png" multiple style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+            <div id="imagePreview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:12px"></div>
+            <p style="font-size:12px;color:#aab7cf;line-height:1.5">Choose up to 10 photos from your computer. All selected photos will be published together in one Facebook post at the scheduled time.</p>
             <details style="margin:10px 0;color:#aab7cf"><summary style="cursor:pointer">Optional: use an image URL instead</summary>
               <input id="imageUrl" type="url" placeholder="https://example.com/photo.jpg" style="width:100%;margin-top:8px;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
             </details>
@@ -105,41 +105,74 @@
   const imageFile = document.getElementById('imageFile');
   const imagePreview = document.getElementById('imagePreview');
   imageFile.addEventListener('change', () => {
-    const file = imageFile.files && imageFile.files[0];
-    if (!file) { imagePreview.style.display='none'; imagePreview.removeAttribute('src'); return; }
-    if (!['image/jpeg','image/png'].includes(file.type) || file.size > 6 * 1024 * 1024) {
+    const files = [...(imageFile.files || [])];
+    imagePreview.innerHTML = '';
+    if (!files.length) return;
+    if (files.length > 10) {
       imageFile.value = '';
-      imagePreview.style.display='none';
-      show('Choose a JPG or PNG image smaller than 6 MB.');
+      show('Choose no more than 10 photos per post.');
       return;
     }
-    imagePreview.src = URL.createObjectURL(file);
-    imagePreview.style.display='block';
+    let totalSize = 0;
+    for (const file of files) {
+      totalSize += file.size;
+      if (!['image/jpeg','image/png'].includes(file.type) || file.size > 6 * 1024 * 1024) {
+        imageFile.value = '';
+        imagePreview.innerHTML = '';
+        show('Every photo must be JPG or PNG and smaller than 6 MB.');
+        return;
+      }
+    }
+    if (totalSize > 30 * 1024 * 1024) {
+      imageFile.value = '';
+      imagePreview.innerHTML = '';
+      show('The combined size of all photos must be 30 MB or less.');
+      return;
+    }
+    for (const file of files) {
+      const card = document.createElement('div');
+      card.style.cssText = 'min-width:0;border:1px solid #40506c;border-radius:10px;padding:6px;background:#111a2d';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.alt = file.name;
+      img.style.cssText = 'width:100%;height:95px;object-fit:cover;border-radius:6px;display:block';
+      const label = document.createElement('div');
+      label.textContent = file.name;
+      label.title = file.name;
+      label.style.cssText = 'font-size:11px;color:#aab7cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:5px';
+      card.append(img,label);
+      imagePreview.append(card);
+    }
+    show(files.length + ' photo(s) selected. They will be published together in one post.');
   });
   btn.addEventListener('click', loadPages);
   document.getElementById('scheduleBtn').addEventListener('click', async () => {
     try {
       const pageIds = selectedPageIds();
       const fileInput = document.getElementById('imageFile');
-      const file = fileInput.files && fileInput.files[0];
+      const files = [...(fileInput.files || [])];
       const imageUrl = document.getElementById('imageUrl').value.trim();
       const message = document.getElementById('caption').value;
       const localTime = document.getElementById('scheduleAt').value;
       if (!pageIds.length) throw new Error('Select at least one Page.');
-      if (!file && !imageUrl) throw new Error('Upload a JPG/PNG photo or provide an HTTPS image URL.');
-      if (file && !['image/jpeg','image/png'].includes(file.type)) throw new Error('Please choose a JPG or PNG image.');
-      if (file && file.size > 6 * 1024 * 1024) throw new Error('Image must be smaller than 6 MB.');
+      if (!files.length && !imageUrl) throw new Error('Upload one or more JPG/PNG photos or provide an HTTPS image URL.');
+      if (files.length > 10) throw new Error('Choose no more than 10 photos per post.');
+      const totalSize = files.reduce((sum,file) => sum + file.size, 0);
+      if (totalSize > 30 * 1024 * 1024) throw new Error('The combined size of all photos must be 30 MB or less.');
+      for (const file of files) {
+        if (!['image/jpeg','image/png'].includes(file.type)) throw new Error('Every photo must be JPG or PNG.');
+        if (file.size > 6 * 1024 * 1024) throw new Error('Each photo must be smaller than 6 MB.');
+      }
       if (!localTime) throw new Error('Choose a schedule date and time.');
       const scheduledAt = new Date(localTime).toISOString();
-      let imageData = '';
-      if (file) imageData = await new Promise((resolve,reject) => {
+      const images = await Promise.all(files.map(file => new Promise((resolve,reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('Could not read this image file. Please choose it again.'));
+        reader.onload = () => resolve({imageData:String(reader.result || ''),imageMimeType:file.type,name:file.name});
+        reader.onerror = () => reject(new Error('Could not read ' + file.name + '. Please choose the photo again.'));
         reader.readAsDataURL(file);
-      });
-      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageIds,imageUrl,imageData,imageMimeType:file ? file.type : '',message,scheduledAt})});
-      show({scheduled:data.jobs});
+      })));
+      const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageIds,imageUrl,images,message,scheduledAt})});
+      show({scheduled:data.jobs,photoCount:files.length || 0});
       await loadJobs();
     } catch(e) { show(e.message); }
   });
