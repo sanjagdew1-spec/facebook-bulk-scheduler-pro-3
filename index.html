@@ -37,7 +37,10 @@
             <h3 style="margin-top:0">Your Facebook Pages</h3><div id="pageList"></div>
             <h3>Schedule a photo post</h3>
             <label for="imageFile" style="display:block;margin:8px 0">Upload up to 10 photos (JPG/PNG, max 6 MB each; combined max 30 MB)</label>
-            <input id="imageFile" type="file" accept="image/jpeg,image/png" multiple style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+            <div id="dropZone" style="border:2px dashed #40506c;border-radius:12px;padding:14px;background:#0d1425;transition:border-color .15s,background .15s">
+              <div style="font-size:13px;color:#c4d1e7;margin-bottom:8px">Drag and drop photos here, or use Choose Files below. You can add more photos in multiple batches.</div>
+              <input id="imageFile" type="file" accept="image/jpeg,image/png" multiple style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+            </div>
             <div id="imagePreview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:12px"></div>
             <p style="font-size:12px;color:#aab7cf;line-height:1.5">Choose up to 10 photos from your computer. All selected photos will be published together in one Facebook post at the scheduled time.</p>
             <details style="margin:10px 0;color:#aab7cf"><summary style="cursor:pointer">Optional: use an image URL instead</summary>
@@ -104,61 +107,110 @@
   }
   const imageFile = document.getElementById('imageFile');
   const imagePreview = document.getElementById('imagePreview');
-  imageFile.addEventListener('change', () => {
-    const files = [...(imageFile.files || [])];
+  const dropZone = document.getElementById('dropZone');
+  let selectedFiles = [];
+  let schedulingInProgress = false;
+  function renderSelectedPhotos() {
     imagePreview.innerHTML = '';
-    if (!files.length) return;
-    if (files.length > 10) {
-      imageFile.value = '';
-      show('Choose no more than 10 photos per post.');
-      return;
-    }
-    let totalSize = 0;
-    for (const file of files) {
-      totalSize += file.size;
-      if (!['image/jpeg','image/png'].includes(file.type) || file.size > 6 * 1024 * 1024) {
-        imageFile.value = '';
-        imagePreview.innerHTML = '';
-        show('Every photo must be JPG or PNG and smaller than 6 MB.');
-        return;
-      }
-    }
-    if (totalSize > 30 * 1024 * 1024) {
-      imageFile.value = '';
-      imagePreview.innerHTML = '';
-      show('The combined size of all photos must be 30 MB or less.');
-      return;
-    }
-    for (const file of files) {
+    selectedFiles.forEach((file,index) => {
       const card = document.createElement('div');
-      card.style.cssText = 'min-width:0;border:1px solid #40506c;border-radius:10px;padding:6px;background:#111a2d';
+      card.style.cssText = 'min-width:0;border:1px solid #40506c;border-radius:10px;padding:6px;background:#111a2d;position:relative';
       const img = document.createElement('img');
       img.src = URL.createObjectURL(file);
       img.alt = file.name;
       img.style.cssText = 'width:100%;height:95px;object-fit:cover;border-radius:6px;display:block';
       const label = document.createElement('div');
-      label.textContent = file.name;
+      label.textContent = (index+1) + '. ' + file.name;
       label.title = file.name;
       label.style.cssText = 'font-size:11px;color:#aab7cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:5px';
-      card.append(img,label);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = 'Remove';
+      remove.style.cssText = 'width:100%;margin-top:6px;padding:5px;border-radius:6px;border:1px solid #40506c;background:#172238;color:#fff;cursor:pointer;font-size:11px';
+      remove.addEventListener('click', () => {
+        selectedFiles.splice(index,1);
+        renderSelectedPhotos();
+        show(selectedFiles.length + ' photo(s) selected.');
+      });
+      card.append(img,label,remove);
       imagePreview.append(card);
+    });
+    if (selectedFiles.length) {
+      const count = document.createElement('div');
+      count.style.cssText = 'grid-column:1/-1;color:#aab7cf;font-size:12px';
+      count.textContent = selectedFiles.length + ' of 10 photos selected. You can add more photos or remove any photo above.';
+      imagePreview.append(count);
     }
-    show(files.length + ' photo(s) selected. They will be published together in one post.');
+  }
+  function addPhotoFiles(filesLike) {
+    const incoming = [...(filesLike || [])];
+    if (!incoming.length) return;
+    const combined = [...selectedFiles];
+    const seen = new Set(combined.map(file => file.name + '|' + file.size + '|' + file.lastModified));
+    for (const file of incoming) {
+      if (!['image/jpeg','image/png'].includes(file.type) || file.size > 6 * 1024 * 1024) {
+        show('Every photo must be JPG or PNG and smaller than 6 MB. No new photos were added.');
+        return;
+      }
+      const key = file.name + '|' + file.size + '|' + file.lastModified;
+      if (!seen.has(key)) { combined.push(file); seen.add(key); }
+    }
+    if (combined.length > 10) {
+      show('A post can contain up to 10 photos. You currently have ' + selectedFiles.length + '; no new photos were added.');
+      return;
+    }
+    if (combined.reduce((sum,file) => sum + file.size,0) > 30 * 1024 * 1024) {
+      show('The combined size of all photos must be 30 MB or less. No new photos were added.');
+      return;
+    }
+    selectedFiles = combined;
+    renderSelectedPhotos();
+    show(selectedFiles.length + ' photo(s) selected. Add more, drag more in, or schedule when ready.');
+  }
+  imageFile.addEventListener('change', () => {
+    const newlyPicked = [...(imageFile.files || [])];
+    imageFile.value = '';
+    addPhotoFiles(newlyPicked);
   });
+  ['dragenter','dragover'].forEach(eventName => dropZone.addEventListener(eventName, event => {
+    event.preventDefault();
+    dropZone.style.borderColor = '#3978f6';
+    dropZone.style.background = '#142342';
+  }));
+  ['dragleave','drop'].forEach(eventName => dropZone.addEventListener(eventName, event => {
+    event.preventDefault();
+    dropZone.style.borderColor = '#40506c';
+    dropZone.style.background = '#0d1425';
+  }));
+  dropZone.addEventListener('drop', event => addPhotoFiles(event.dataTransfer && event.dataTransfer.files));
+
   btn.addEventListener('click', loadPages);
-  document.getElementById('scheduleBtn').addEventListener('click', async () => {
+  const scheduleBtn = document.getElementById('scheduleBtn');
+  function clearPostForm() {
+    selectedFiles = [];
+    imageFile.value = '';
+    imagePreview.innerHTML = '';
+    document.getElementById('imageUrl').value = '';
+    document.getElementById('caption').value = '';
+    document.getElementById('scheduleAt').value = '';
+  }
+  scheduleBtn.addEventListener('click', async () => {
+    if (schedulingInProgress) return;
+    schedulingInProgress = true;
+    scheduleBtn.disabled = true;
+    scheduleBtn.style.opacity = '.65';
+    scheduleBtn.style.cursor = 'wait';
+    scheduleBtn.textContent = 'Scheduling… please wait';
     try {
       const pageIds = selectedPageIds();
-      const fileInput = document.getElementById('imageFile');
-      const files = [...(fileInput.files || [])];
+      const files = [...selectedFiles];
       const imageUrl = document.getElementById('imageUrl').value.trim();
       const message = document.getElementById('caption').value;
       const localTime = document.getElementById('scheduleAt').value;
       if (!pageIds.length) throw new Error('Select at least one Page.');
       if (!files.length && !imageUrl) throw new Error('Upload one or more JPG/PNG photos or provide an HTTPS image URL.');
       if (files.length > 10) throw new Error('Choose no more than 10 photos per post.');
-      const totalSize = files.reduce((sum,file) => sum + file.size, 0);
-      if (totalSize > 30 * 1024 * 1024) throw new Error('The combined size of all photos must be 30 MB or less.');
+      if (files.reduce((sum,file) => sum + file.size,0) > 30 * 1024 * 1024) throw new Error('The combined size of all photos must be 30 MB or less.');
       for (const file of files) {
         if (!['image/jpeg','image/png'].includes(file.type)) throw new Error('Every photo must be JPG or PNG.');
         if (file.size > 6 * 1024 * 1024) throw new Error('Each photo must be smaller than 6 MB.');
@@ -172,9 +224,18 @@
         reader.readAsDataURL(file);
       })));
       const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageIds,imageUrl,images,message,scheduledAt})});
-      show({scheduled:data.jobs,photoCount:files.length || 0});
+      clearPostForm();
+      show('✅ Successfully scheduled ' + (files.length || 1) + ' photo(s) for ' + data.jobs.length + ' Page(s). The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
       await loadJobs();
-    } catch(e) { show(e.message); }
+    } catch(e) {
+      show('⚠️ ' + e.message + ' Your entered data has been kept so you can retry without entering it again.');
+    } finally {
+      schedulingInProgress = false;
+      scheduleBtn.disabled = false;
+      scheduleBtn.style.opacity = '';
+      scheduleBtn.style.cursor = '';
+      scheduleBtn.textContent = 'Schedule for selected Pages';
+    }
   });
   if (new URLSearchParams(location.search).has('facebook_connected')) { panel.style.display='block'; loadPages(); }
   if (location.protocol === 'file:') show('Open this site through GitHub Pages after deployment; file:// mode cannot use the secure login session.');
