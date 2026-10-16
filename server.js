@@ -9,9 +9,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/$/, '');
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'https://sanjagdew1-spec.github.io';
-const META_APP_ID = process.env.META_APP_ID;
-const META_APP_SECRET = process.env.META_APP_SECRET;
-const META_LOGIN_CONFIG_ID = process.env.META_LOGIN_CONFIG_ID || '';
+const META_APP_ID_RAW = process.env.META_APP_ID || '';
+const META_APP_SECRET_RAW = process.env.META_APP_SECRET || '';
+const META_APP_ID = META_APP_ID_RAW.trim();
+const META_APP_SECRET = META_APP_SECRET_RAW.trim();
+const META_LOGIN_CONFIG_ID = (process.env.META_LOGIN_CONFIG_ID || '').trim();
 const FRONTEND_SUCCESS_URL = process.env.FRONTEND_SUCCESS_URL || 'https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/';
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v23.0';
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
@@ -70,6 +72,10 @@ app.get('/health', (_req, res) => res.json({ ok: true, service: 'Facebook Bulk S
 app.get('/config/status', (_req, res) => res.json({
   configured: Boolean(META_APP_ID && META_APP_SECRET && APP_BASE_URL && process.env.SESSION_SECRET),
   appIdPresent: Boolean(META_APP_ID), appSecretPresent: Boolean(META_APP_SECRET),
+  appIdLength: META_APP_ID.length, appSecretLength: META_APP_SECRET.length,
+  appIdHasOuterWhitespace: META_APP_ID_RAW !== META_APP_ID,
+  appSecretHasOuterWhitespace: META_APP_SECRET_RAW !== META_APP_SECRET,
+  loginConfigIdPresent: Boolean(META_LOGIN_CONFIG_ID),
   callbackUrl: `${APP_BASE_URL}/auth/facebook/callback`, graphVersion: GRAPH_VERSION,
   note: 'Page publishing requires Meta app access and approval for requested permissions.'
 }));
@@ -109,7 +115,27 @@ app.get('/auth/facebook/callback', async (req, res) => {
     tokenUrl.search = new URLSearchParams({ client_id: META_APP_ID, client_secret: META_APP_SECRET, redirect_uri: `${APP_BASE_URL}/auth/facebook/callback`, code: String(code) }).toString();
     const tokenResponse = await fetch(tokenUrl);
     const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData.access_token) throw new Error(tokenData.error?.message || 'Could not exchange the login code for an access token.');
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      const metaError = tokenData.error || {};
+      console.error('[oauth-token-exchange] Meta rejected token exchange', JSON.stringify({
+        httpStatus: tokenResponse.status,
+        errorType: metaError.type || null,
+        errorCode: metaError.code || null,
+        errorSubcode: metaError.error_subcode || null,
+        message: metaError.message || 'Unknown Meta token-exchange error',
+        fbtraceId: metaError.fbtrace_id || null,
+        appIdPresent: Boolean(META_APP_ID),
+        appSecretPresent: Boolean(META_APP_SECRET),
+        appIdLength: META_APP_ID.length,
+        appSecretLength: META_APP_SECRET.length,
+        appIdHasOuterWhitespace: META_APP_ID_RAW !== META_APP_ID,
+        appSecretHasOuterWhitespace: META_APP_SECRET_RAW !== META_APP_SECRET
+      }));
+      const details = [metaError.message || 'Could not exchange the login code for an access token.'];
+      if (metaError.code != null) details.push(`Meta code ${metaError.code}`);
+      if (metaError.error_subcode != null) details.push(`subcode ${metaError.error_subcode}`);
+      throw new Error(details.join(' | '));
+    }
     const meResponse = await fetch(`${graph('me')}?${new URLSearchParams({ fields: 'id,name', access_token: tokenData.access_token })}`);
     const me = await meResponse.json();
     if (!meResponse.ok || !me.id) throw new Error(me.error?.message || 'Could not read the Facebook account.');
