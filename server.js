@@ -350,8 +350,6 @@ async function publishDueJobs() {
           const body = new FormData();
           body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
           body.set('published', 'false');
-          body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
-          body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
           body.set('access_token', page.access_token);
           const uploadResponse = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
           const uploadData = await uploadResponse.json().catch(() => ({}));
