@@ -88,7 +88,15 @@ app.get('/auth/facebook', (req, res) => {
     oauthParams.scope = scopes.join(',');
   }
   const params = new URLSearchParams(oauthParams);
-  res.redirect(`https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params.toString()}`);
+  const loginUrl = `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params.toString()}`;
+  // Persist OAuth state before leaving this domain so callback verification can find it.
+  req.session.save((err) => {
+    if (err) {
+      console.error('[oauth-start] Could not save login session:', String(err.message || err));
+      return res.status(500).send('Could not start Facebook login because the session could not be saved. Please try again.');
+    }
+    res.redirect(loginUrl);
+  });
 });
 
 app.get('/auth/facebook/callback', async (req, res) => {
