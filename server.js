@@ -15,7 +15,7 @@ const META_APP_ID = META_APP_ID_RAW.trim();
 const META_APP_SECRET = META_APP_SECRET_RAW.trim();
 const META_LOGIN_CONFIG_ID = (process.env.META_LOGIN_CONFIG_ID || '').trim();
 const FRONTEND_SUCCESS_URL = process.env.FRONTEND_SUCCESS_URL || 'https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/';
-const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v23.0';
+const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
 
 if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SECRET) {
@@ -330,6 +330,8 @@ async function publishDueJobs() {
           const body = new FormData();
           body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
           body.set('published', 'false');
+          body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
+          body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
           body.set('access_token', page.access_token);
           const uploadResponse = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
           const uploadData = await uploadResponse.json().catch(() => ({}));
@@ -344,10 +346,12 @@ async function publishDueJobs() {
         const body = new FormData();
         body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
         body.set('caption', job.message || '');
+        body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
+        body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
         body.set('access_token', page.access_token);
         response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
       } else {
-        const body = new URLSearchParams({ url: job.image_url, caption: job.message, access_token: page.access_token });
+        const body = new URLSearchParams({ url: job.image_url, caption: job.message, is_gen_ai: job.is_ai_content ? 'true' : 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE', access_token: page.access_token });
         response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
       }
       const data = await response.json().catch(() => ({}));
