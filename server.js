@@ -15,7 +15,7 @@ const META_APP_ID = META_APP_ID_RAW.trim();
 const META_APP_SECRET = META_APP_SECRET_RAW.trim();
 const META_LOGIN_CONFIG_ID = (process.env.META_LOGIN_CONFIG_ID || '').trim();
 const FRONTEND_SUCCESS_URL = process.env.FRONTEND_SUCCESS_URL || 'https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/';
-const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v26.0';
+const GRAPH_VERSION = 'v26.0';
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
 
 if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SECRET) {
