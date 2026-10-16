@@ -20,9 +20,3 @@ services:
         value: https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/
       - key: SESSION_SECRET
         generateValue: true
-      - key: DB_PATH
-        value: /var/data/scheduler.sqlite
-    disk:
-      name: scheduler-data
-      mountPath: /var/data
-      sizeGB: 1
