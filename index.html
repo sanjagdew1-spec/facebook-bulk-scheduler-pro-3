@@ -268,8 +268,17 @@
         reader.readAsDataURL(file);
       })));
       const data = await api('/api/schedule', {method:'POST', body:JSON.stringify({pageSchedules,imageUrl,images,message,isAiContent,publishNow})});
-      clearPostForm();
-      show(publishNow ? '✅ Publish request sent for ' + data.jobs.length + ' selected Page(s). Check Recent schedule history for each Page’s final published/failed status.' : '✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
+      const immediateComplete = publishNow && data.jobs.every(job => job.status === 'published');
+      const immediateFailed = publishNow && data.jobs.some(job => job.status !== 'published');
+      if (!immediateFailed) clearPostForm();
+      if (publishNow && immediateComplete) {
+        show('✅ Successfully published to all ' + data.jobs.length + ' selected Page(s).');
+      } else if (publishNow && immediateFailed) {
+        show('⚠️ Immediate publishing did not finish on every Page. Your photo and caption have been kept. Check Recent schedule history for each Page’s status/error, then retry only the failed Page(s).');
+      } else {
+        clearPostForm();
+        show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
+      }
       await loadJobs();
     } catch(e) {
       show('⚠️ ' + e.message + ' Your entered data has been kept so you can retry without entering it again.');

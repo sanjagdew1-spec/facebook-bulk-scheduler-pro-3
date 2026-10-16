@@ -294,7 +294,17 @@ app.post('/api/schedule', requireAuth, async (req, res) => {
   });
   try {
     tx();
-    if (publishNow) await publishDueJobs();
+    if (publishNow) {
+      // The worker handles up to 10 due jobs per pass; repeat so larger Page selections are attempted now too.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const pendingNow = created.some(job => {
+          const current = db.prepare('SELECT status FROM jobs WHERE id=? AND user_id=?').get(job.id, req.session.fbUser.id);
+          return current?.status === 'scheduled';
+        });
+        if (!pendingNow) break;
+        await publishDueJobs();
+      }
+    }
     const jobs = publishNow ? created.map(job => {
       const current = db.prepare('SELECT status,post_id,error,scheduled_at FROM jobs WHERE id=? AND user_id=?').get(job.id, req.session.fbUser.id);
       return { ...job, ...(current || {}) };
