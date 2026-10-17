@@ -26,5 +26,6 @@ jobs:
           node --check customer-auth.js
           node --check customer-auth-routes.js
           node --check tenant-security.js
+          node --check token-crypto.js
       - name: Run unit tests
         run: npm test
