@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -215,4 +216,129 @@ test('backend safely adds Phase 2 columns and tables to an existing Phase 1-styl
   assert.ok(accountTable);
   assert.ok(customerPagesTable);
   migratedDb.close();
+});
+
+
+test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end to end', { timeout: 45000 }, async t => {
+  const graphPort = await freePort();
+  const graphServer = createServer(async (req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1:' + graphPort);
+    const send = (status, body) => {
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(body));
+    };
+    const tokenToUser = token => token === 'user-token-alice' ? 'alice' : token === 'user-token-bob' ? 'bob' : null;
+    if (url.pathname === '/v26.0/oauth/access_token') {
+      const code = url.searchParams.get('code');
+      if (code === 'alice-code') return send(200, { access_token: 'user-token-alice' });
+      if (code === 'bob-code') return send(200, { access_token: 'user-token-bob' });
+      return send(400, { error: { message: 'Unknown test code', code: 100 } });
+    }
+    if (url.pathname === '/v26.0/me') {
+      const user = tokenToUser(url.searchParams.get('access_token'));
+      if (!user) return send(400, { error: { message: 'Invalid fake user token', code: 190 } });
+      return send(200, { id: 'fb-' + user, name: user === 'alice' ? 'Test Alice' : 'Test Bob' });
+    }
+    if (url.pathname === '/v26.0/me/accounts') {
+      const user = tokenToUser(url.searchParams.get('access_token'));
+      if (!user) return send(400, { error: { message: 'Invalid fake user token', code: 190 } });
+      return send(200, { data: [{ id: 'page-' + user, name: 'Page ' + user, access_token: 'page-token-' + user, tasks: ['CREATE_CONTENT'] }] });
+    }
+    if (req.method === 'POST' && /^\/v26\.0\/page-(alice|bob)\/photos$/.test(url.pathname)) {
+      for await (const _chunk of req) {}
+      return send(200, { id: 'published-photo-' + url.pathname.split('/')[2] });
+    }
+    if (req.method === 'POST' && /^\/v26\.0\/page-(alice|bob)\/feed$/.test(url.pathname)) {
+      for await (const _chunk of req) {}
+      return send(200, { id: 'published-feed-' + url.pathname.split('/')[2] });
+    }
+    return send(404, { error: { message: 'Unexpected fake Graph request: ' + req.method + ' ' + url.pathname } });
+  });
+  await new Promise((resolve, reject) => graphServer.listen(graphPort, '127.0.0.1', err => err ? reject(err) : resolve()));
+  t.after(async () => new Promise(resolve => graphServer.close(() => resolve())));
+
+  const port = await freePort();
+  const directory = await import('node:fs/promises').then(fs => fs.mkdtemp(path.join(os.tmpdir(), 'phase2-e2e-')));
+  const dbPath = path.join(directory, 'e2e.sqlite');
+  const baseUrl = 'http://127.0.0.1:' + port;
+  const origin = 'http://phase2-frontend.test';
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      PORT: String(port),
+      DB_PATH: dbPath,
+      APP_BASE_URL: 'https://phase2-backend.test',
+      FRONTEND_ORIGIN: origin,
+      FRONTEND_SUCCESS_URL: origin + '/',
+      META_APP_ID: 'test-app-id',
+      META_APP_SECRET: 'test-app-secret',
+      SESSION_SECRET: crypto.randomBytes(48).toString('hex'),
+      TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString('hex'),
+      META_GRAPH_BASE_URL: 'http://127.0.0.1:' + graphPort + '/v26.0',
+      NODE_ENV: 'test'
+    }
+  });
+  t.after(async () => {
+    child.kill('SIGTERM');
+    await new Promise(resolve => {
+      if (child.exitCode !== null) return resolve();
+      child.once('exit', resolve);
+      setTimeout(resolve, 1500);
+    });
+    await rm(directory, { recursive: true, force: true });
+  });
+  await waitForHealth(baseUrl, child);
+  const headers = { 'content-type': 'application/json', origin, 'x-forwarded-proto': 'https' };
+
+  async function createAndConnect(email, code) {
+    const registration = await fetch(baseUrl + '/api/customer/register', {
+      method: 'POST', headers,
+      body: JSON.stringify({ email, password: 'a-long-enough-integration-password' })
+    });
+    assert.equal(registration.status, 201);
+    const cookie = registration.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(cookie);
+    const connectHeaders = { origin, 'x-forwarded-proto': 'https', cookie };
+    const start = await fetch(baseUrl + '/auth/facebook', { headers: connectHeaders, redirect: 'manual' });
+    assert.equal(start.status, 302);
+    const oauthUrl = new URL(start.headers.get('location'));
+    const state = oauthUrl.searchParams.get('state');
+    assert.ok(state);
+    const callback = await fetch(baseUrl + '/auth/facebook/callback?' + new URLSearchParams({ code, state }), {
+      headers: connectHeaders, redirect: 'manual'
+    });
+    assert.equal(callback.status, 302);
+    assert.ok(callback.headers.get('location').includes('facebook_connected=1'));
+    return cookie;
+  }
+
+  const aliceCookie = await createAndConnect('alice@example.com', 'alice-code');
+  const bobCookie = await createAndConnect('bob@example.com', 'bob-code');
+  const authHeaders = cookie => ({ origin, 'x-forwarded-proto': 'https', cookie });
+  const alicePagesResponse = await fetch(baseUrl + '/api/pages', { headers: authHeaders(aliceCookie) });
+  const bobPagesResponse = await fetch(baseUrl + '/api/pages', { headers: authHeaders(bobCookie) });
+  assert.deepEqual((await alicePagesResponse.json()).pages.map(page => page.id), ['page-alice']);
+  assert.deepEqual((await bobPagesResponse.json()).pages.map(page => page.id), ['page-bob']);
+
+  const crossTenantSchedule = await fetch(baseUrl + '/api/schedule', {
+    method: 'POST', headers: { ...headers, cookie: aliceCookie },
+    body: JSON.stringify({ pageSchedules: [{ pageId: 'page-bob', scheduledAt: new Date(Date.now() + 60000).toISOString() }], images: [{ imageData: 'data:image/jpeg;base64,/9j/2Q==', imageMimeType: 'image/jpeg' }] })
+  });
+  assert.equal(crossTenantSchedule.status, 400, 'Alice cannot schedule a post to Bob’s Page');
+
+  const publishResponse = await fetch(baseUrl + '/api/publish-now', {
+    method: 'POST', headers: { ...headers, cookie: aliceCookie },
+    body: JSON.stringify({ pageIds: ['page-alice'], message: 'Automated isolation test', images: [{ imageData: 'data:image/jpeg;base64,/9j/2Q==', imageMimeType: 'image/jpeg' }] })
+  });
+  assert.equal(publishResponse.status, 201);
+  const published = await publishResponse.json();
+  assert.equal(published.jobs.length, 1);
+  assert.equal(published.jobs[0].status, 'published');
+
+  const aliceJobs = await fetch(baseUrl + '/api/jobs', { headers: authHeaders(aliceCookie) });
+  const bobJobs = await fetch(baseUrl + '/api/jobs', { headers: authHeaders(bobCookie) });
+  assert.equal((await aliceJobs.json()).jobs.length, 1);
+  assert.equal((await bobJobs.json()).jobs.length, 0, 'Bob cannot see Alice’s publishing history');
 });
