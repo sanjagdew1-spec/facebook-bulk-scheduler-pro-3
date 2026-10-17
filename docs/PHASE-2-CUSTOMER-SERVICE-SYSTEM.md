@@ -145,13 +145,13 @@ Implemented on the Phase 2 branch only:
 - Facebook OAuth now requires a signed-in customer account and binds the OAuth state/callback to that same customer ID.
 - Added a separate `customer_pages` table, and changed Page listing, scheduled-job creation, Publish Now, job history, delete, and the background publisher to scope work by internal customer ID and Facebook identity.
 - Added a customer account sign-in/register panel to the Phase 2 branch's `index.html`. The API URL intentionally remains a placeholder until the isolated Phase 2 backend service is created and configured; this prevents accidentally pointing the Phase 2 UI at the stable backend.
-- Added route-level registration tests and helper tests. Local Node test run: **18 tests passed, 0 failed**, including real SQLite tenant-isolation tests and an HTTP integration test for registration, session status, login, logout, and the requirement to connect Facebook separately.
+- Added route-level registration tests and helper tests. Local Node test run: **19 tests passed, 0 failed**, including real SQLite tenant-isolation tests, a fresh-database HTTP integration test for registration/session/login/logout, and a migration test against a Phase 1-style SQLite schema.
 
 ## Remaining release blockers
 
 - The Phase 2 frontend/backend have not been deployed; the stable services remain unchanged.
 - The Phase 2 frontend API URL and allowed origin must be configured only after a separate service exists.
-- SQLite tests now verify two customers can have the same Facebook Page ID without sharing tokens, job history, or delete rights. Still add migration/schema tests and full Meta OAuth/Page publishing/background scheduler integration tests.
+- SQLite tests now verify two customers can have the same Facebook Page ID without sharing tokens, job history, or delete rights. Still add full Meta OAuth/Page publishing/background scheduler integration tests and an end-to-end two-customer test using actual Facebook test accounts.
 - Review encrypted-at-rest token storage/key management, backup/restore, email verification/account recovery, rate-limit storage across multiple instances, and privacy/data-deletion workflows.
 - Verify frontend JavaScript and full backend startup against Node 20+ with installed dependencies.
 - Run a dedicated two-customer acceptance test before any real customer data or public signup is enabled.
@@ -167,6 +167,6 @@ Implemented on the Phase 2 branch only:
 - Facebook connection is blocked until `TOKEN_ENCRYPTION_KEY` is configured. The key must be 32 bytes (64 hex characters or base64-encoded 32 bytes), stored only in the Phase 2 service's secret environment settings. Never commit or send the key in chat.
 - Added encryption tests for round-trip behavior, random IVs, invalid keys, and rejecting plaintext token values.
 
-Local Node test run now: **18 tests passed, 0 failed**. GitHub Actions passed backend syntax checks, unit tests, real SQLite tenant-isolation tests, and an HTTP customer-auth integration test.
+Local Node test run now: **19 tests passed, 0 failed**. GitHub Actions passed backend syntax checks, unit tests, real SQLite tenant-isolation tests, HTTP customer-auth integration, and a legacy-schema migration test.
 
 Remaining token-storage work: decide a safe key-rotation/recovery procedure and verify encrypted tokens in a full publisher-worker integration test before deployment.
