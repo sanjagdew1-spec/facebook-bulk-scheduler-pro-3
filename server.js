@@ -21,7 +21,7 @@ const FRONTEND_SUCCESS_URL = process.env.FRONTEND_SUCCESS_URL || 'https://sanjag
 const GRAPH_VERSION = 'v26.0';
 // Allow a local fake Graph API only in automated tests; production always uses Meta's official endpoint.
 const GRAPH_BASE_URL = process.env.NODE_ENV === 'test' && process.env.META_GRAPH_BASE_URL
-  ? process.env.META_GRAPH_BASE_URL.replace(/\\/$/, '')
+  ? process.env.META_GRAPH_BASE_URL.replace(/\/$/, '')
   : `https://graph.facebook.com/${GRAPH_VERSION}`;
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
 
