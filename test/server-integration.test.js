@@ -107,6 +107,13 @@ test('HTTP customer registration, session status, login, and logout work on an i
   });
   assert.equal(pagesResponse.status, 401, 'customer login alone must not bypass Facebook connection');
 
+  const mutationWithoutOrigin = await fetch(baseUrl + '/api/publish-now', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+    body: JSON.stringify({ pageIds: [] })
+  });
+  assert.equal(mutationWithoutOrigin.status, 403, 'publishing mutations must reject requests without a trusted Origin');
+
   const logoutResponse = await fetch(baseUrl + '/api/customer/logout', {
     method: 'POST',
     headers: { ...headers, cookie: firstCookie },
