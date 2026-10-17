@@ -136,6 +136,15 @@ registerCustomerAuthRoutes(app, { db, trustedOrigins: new Set([FRONTEND_ORIGIN, 
 const graph = (path) => `https://graph.facebook.com/${GRAPH_VERSION}/${path}`;
 const now = () => new Date().toISOString();
 const scopes = ['public_profile', 'pages_show_list', 'pages_manage_posts', 'pages_read_engagement'];
+
+const TRUSTED_ORIGINS = new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io']);
+function requireTrustedOrigin(req, res, next) {
+  const origin = req.headers.origin;
+  if (!origin || !TRUSTED_ORIGINS.has(origin)) {
+    return res.status(403).json({ error: 'Request origin could not be verified. Open the official app and try again.' });
+  }
+  next();
+}
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'Facebook Bulk Scheduler Pro 3', timestamp: now() }));
 app.get('/config/status', (_req, res) => res.json({
   configured: Boolean(META_APP_ID && META_APP_SECRET && APP_BASE_URL && process.env.SESSION_SECRET && isTokenEncryptionConfigured()),
@@ -229,7 +238,7 @@ app.get('/auth/status', (req, res) => {
   const connectedUser = req.session.customerAccount?.id && req.session.fbUser?.customerId === req.session.customerAccount.id ? req.session.fbUser : null;
   res.json({ connected: Boolean(connectedUser), user: connectedUser ? { id: connectedUser.id, name: connectedUser.name } : null });
 });
-app.post('/auth/logout', (req, res) => req.session.destroy(err => err ? res.status(500).json({ error: 'Could not log out.' }) : res.json({ ok: true })));
+app.post('/auth/logout', requireTrustedOrigin, (req, res) => req.session.destroy(err => err ? res.status(500).json({ error: 'Could not log out.' }) : res.json({ ok: true })));
 
 function requireAuth(req, res, next) {
   const customerId = req.session.customerAccount?.id;
@@ -331,7 +340,7 @@ app.get('/api/jobs', requireAuth, (req, res) => {
   res.json({ jobs: rows });
 });
 
-app.post('/api/schedule', requireAuth, (req, res) => {
+app.post('/api/schedule', requireTrustedOrigin, requireAuth, (req, res) => {
   const { pageIds, pageSchedules, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt, isAiContent = false } = req.body || {};
   const requestedSchedules = Array.isArray(pageSchedules) && pageSchedules.length
     ? pageSchedules.map(item => ({ pageId: item?.pageId, scheduledAt: item?.scheduledAt }))
@@ -380,7 +389,7 @@ app.post('/api/schedule', requireAuth, (req, res) => {
   try { tx(); res.status(201).json({ jobs: created, requestedCount: validatedSchedules.length, createdCount: created.length }); } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
 
-app.post('/api/publish-now', requireAuth, async (req, res) => {
+app.post('/api/publish-now', requireTrustedOrigin, requireAuth, async (req, res) => {
   const { pageIds, imageUrl = '', images: incomingImages = [], message = '', isAiContent = false } = req.body || {};
   if (!Array.isArray(pageIds) || !pageIds.length) return res.status(400).json({ error: 'Select at least one Page.' });
   const ids = pageIds.map(String);
@@ -435,7 +444,7 @@ app.post('/api/publish-now', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/schedule/:id', requireAuth, (req, res) => {
+app.delete('/api/schedule/:id', requireTrustedOrigin, requireAuth, (req, res) => {
   const result = db.prepare("DELETE FROM jobs WHERE id=? AND customer_id=? AND user_id=? AND status='scheduled'").run(req.params.id, req.session.customerAccount.id, req.session.fbUser.id);
   if (!result.changes) return res.status(404).json({ error: 'Scheduled job not found or already started.' });
   res.json({ ok: true });
