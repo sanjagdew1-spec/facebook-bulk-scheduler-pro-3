@@ -17,6 +17,11 @@ export function registerCustomerAuthRoutes(app, { db, trustedOrigins }) {
   function limitAttempts(req, res, next) {
     const key = String(req.ip || req.socket?.remoteAddress || 'unknown');
     const time = Date.now();
+    if (attempts.size > 5000) {
+      for (const [ip, entry] of attempts) {
+        if (time - entry.startedAt > windowMs) attempts.delete(ip);
+      }
+    }
     const previous = attempts.get(key);
     if (!previous || time - previous.startedAt > windowMs) {
       attempts.set(key, { startedAt: time, count: 1 });
