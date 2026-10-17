@@ -33,6 +33,6 @@ services:
   - type: static
     name: facebook-bulk-scheduler-pro-3-p2-web
     branch: phase-2/customer-service-system
-    buildCommand: echo "Static Phase 2 test frontend"
-    staticPublishPath: .
+    buildCommand: mkdir -p dist && cp index.html privacy-policy.html data-deletion.html 404.html dist/ && touch dist/.nojekyll
+    staticPublishPath: dist
     autoDeploy: true
