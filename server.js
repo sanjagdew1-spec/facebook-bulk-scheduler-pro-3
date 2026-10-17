@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import cron from 'node-cron';
 import crypto from 'node:crypto';
 import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
+import { encryptToken, decryptToken, isTokenEncryptionConfigured } from './token-crypto.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -132,13 +133,14 @@ app.get('/config/status', (_req, res) => res.json({
   appIdLength: META_APP_ID.length, appSecretLength: META_APP_SECRET.length,
   appIdHasOuterWhitespace: META_APP_ID_RAW !== META_APP_ID,
   appSecretHasOuterWhitespace: META_APP_SECRET_RAW !== META_APP_SECRET,
-  loginConfigIdPresent: Boolean(META_LOGIN_CONFIG_ID),
+  loginConfigIdPresent: Boolean(META_LOGIN_CONFIG_ID), tokenEncryptionConfigured: isTokenEncryptionConfigured(),
   callbackUrl: `${APP_BASE_URL}/auth/facebook/callback`, graphVersion: GRAPH_VERSION,
   note: 'Page publishing requires Meta app access and approval for requested permissions.'
 }));
 
 app.get('/auth/facebook', (req, res) => {
   if (!req.session.customerAccount?.id) return res.status(401).send('Sign in to your customer account before connecting Facebook.');
+  if (!isTokenEncryptionConfigured()) return res.status(503).send('Facebook token encryption is not configured on this Phase 2 service yet.');
   if (!META_APP_ID || !APP_BASE_URL) return res.status(500).json({ error: 'Facebook login is not configured on the server.' });
   const state = crypto.randomBytes(24).toString('hex');
   req.session.oauthState = state;
@@ -203,8 +205,8 @@ app.get('/auth/facebook/callback', async (req, res) => {
     const facebookUserId = String(me.id);
     const connectedAt = now();
     db.prepare('INSERT INTO customer_facebook_connections(id,customer_id,facebook_user_id,display_name,access_token,connected_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(customer_id,facebook_user_id) DO UPDATE SET display_name=excluded.display_name,access_token=excluded.access_token,updated_at=excluded.updated_at')
-      .run(crypto.randomUUID(), customerId, facebookUserId, me.name || 'Facebook user', tokenData.access_token, connectedAt, connectedAt);
-    req.session.fbUser = { id: facebookUserId, name: me.name || 'Facebook user', accessToken: tokenData.access_token, customerId };
+      .run(crypto.randomUUID(), customerId, facebookUserId, me.name || 'Facebook user', encryptToken(tokenData.access_token), connectedAt, connectedAt);
+    req.session.fbUser = { id: facebookUserId, name: me.name || 'Facebook user', customerId };
     await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
     res.redirect(`${FRONTEND_SUCCESS_URL}?facebook_connected=1`);
 
@@ -228,7 +230,12 @@ function requireAuth(req, res, next) {
 app.get('/api/pages', requireAuth, async (req, res) => {
   try {
     const u = req.session.fbUser;
-    const pageParams = { fields: 'id,name,access_token,tasks', limit: '100', access_token: u.accessToken };
+    const connection = db.prepare('SELECT access_token FROM customer_facebook_connections WHERE customer_id=? AND facebook_user_id=?').get(req.session.customerAccount.id, u.id);
+    if (!connection) return res.status(401).json({ pages: [], diagnostic: { source: 'backend', message: 'Facebook is not linked to this customer account. Reconnect Facebook.' } });
+    let facebookAccessToken;
+    try { facebookAccessToken = decryptToken(connection.access_token); }
+    catch { return res.status(503).json({ pages: [], diagnostic: { source: 'backend', message: 'The stored Facebook connection needs to be reconnected before Pages can be loaded.' } }); }
+    const pageParams = { fields: 'id,name,access_token,tasks', limit: '100', access_token: facebookAccessToken };
     const url = `${graph('me/accounts')}?${new URLSearchParams(pageParams)}`;
     const response = await fetch(url);
     const data = await response.json();
@@ -282,7 +289,7 @@ app.get('/api/pages', requireAuth, async (req, res) => {
     const pages = uniqueRawPages.map(p => ({ id: String(p.id), name: p.name, tasks: p.tasks || [] }));
     const save = db.prepare('INSERT INTO customer_pages(customer_id,facebook_user_id,page_id,name,access_token,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(customer_id,page_id) DO UPDATE SET facebook_user_id=excluded.facebook_user_id,name=excluded.name,access_token=excluded.access_token,updated_at=excluded.updated_at');
     const tx = db.transaction(() => { for (const p of uniqueRawPages) {
-      if (p.id && p.access_token) save.run(req.session.customerAccount.id, u.id, String(p.id), p.name || 'Facebook Page', p.access_token, now());
+      if (p.id && p.access_token) save.run(req.session.customerAccount.id, u.id, String(p.id), p.name || 'Facebook Page', encryptToken(p.access_token), now());
     } });
     tx();
 
@@ -435,8 +442,9 @@ async function publishDueJobs() {
     const claimed = db.prepare("UPDATE jobs SET status='publishing',updated_at=? WHERE id=? AND status='scheduled'").run(now(), job.id);
     if (!claimed.changes) continue;
     try {
-      const page = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(job.customer_id, job.user_id, job.page_id);
-      if (!page?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
+      const encryptedPage = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(job.customer_id, job.user_id, job.page_id);
+      if (!encryptedPage?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
+      const page = { access_token: decryptToken(encryptedPage.access_token) };
       let response;
       const storedPhotos = db.prepare('SELECT image_data,image_mime_type FROM job_images WHERE job_id=? ORDER BY position').all(job.id);
       const photos = storedPhotos.length ? storedPhotos : (job.image_data && job.image_data.length ? [{ image_data: job.image_data, image_mime_type: job.image_mime_type || 'image/jpeg' }] : []);
