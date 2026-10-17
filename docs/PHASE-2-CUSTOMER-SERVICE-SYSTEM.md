@@ -121,3 +121,14 @@ Important limitations at this checkpoint:
 - No deployment has been made and no stable branch/service was changed.
 
 Next: implement customer registration/sign-in with secure password hashing, session regeneration and CSRF protection; then bind Facebook OAuth to the signed-in customer account and refactor every customer-specific endpoint to internal customer IDs before deployment.
+
+
+### Customer-auth groundwork (continued)
+
+Additional isolated helpers are now committed on the Phase 2 branch:
+
+- `customer-auth.js` provides salted scrypt password hashing, timing-safe verification, email normalization, and a helper that reads the internal customer ID only from the server-side session.
+- `test/customer-auth.test.js` covers password hashing/verification, invalid input, email normalization, and session-only identity.
+- Local Node test run for the two new test files: **9 tests passed, 0 failed**.
+
+These are helper-level tests only. Registration/sign-in HTTP routes have not yet been integrated, and the existing scheduler endpoints have not yet been converted to customer-account ownership. Do not deploy or accept customer signups yet.
