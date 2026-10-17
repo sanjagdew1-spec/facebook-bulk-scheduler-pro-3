@@ -18,6 +18,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Validate free Phase 2 Render blueprint YAML syntax
+        run: ruby -e 'require "yaml"; YAML.load_file("render.phase2-free.yaml")'
       - name: Install dependencies
         run: npm install
       - name: Check JavaScript syntax
