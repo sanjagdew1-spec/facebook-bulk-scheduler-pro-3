@@ -50,10 +50,13 @@ app.set('trust proxy', 1);
 // GitHub Pages and Render are different origins. Allow the project site to call this API
 // while preserving session cookies; never allow arbitrary origins.
 app.use((req, res, next) => {
-  const allowedOrigin = 'https://sanjagdew1-spec.github.io';
+  const allowedOrigins = new Set([
+    FRONTEND_ORIGIN,
+    'https://sanjagdew1-spec.github.io'
+  ]);
   const origin = req.headers.origin;
-  if (origin === allowedOrigin) {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
