@@ -222,8 +222,14 @@ app.get('/auth/status', (req, res) => {
 app.post('/auth/logout', (req, res) => req.session.destroy(err => err ? res.status(500).json({ error: 'Could not log out.' }) : res.json({ ok: true })));
 
 function requireAuth(req, res, next) {
-  if (!req.session.customerAccount?.id) return res.status(401).json({ error: 'Sign in to your customer account first.' });
-  if (!req.session.fbUser || req.session.fbUser.customerId !== req.session.customerAccount.id) return res.status(401).json({ error: 'Connect Facebook to this customer account first.' });
+  const customerId = req.session.customerAccount?.id;
+  if (!customerId) return res.status(401).json({ error: 'Sign in to your customer account first.' });
+  const customer = db.prepare('SELECT id,status FROM customer_accounts WHERE id=?').get(customerId);
+  if (!customer || customer.status !== 'active') {
+    req.session.destroy(() => {});
+    return res.status(401).json({ error: 'This customer account is not active. Sign in again or contact support.' });
+  }
+  if (!req.session.fbUser || req.session.fbUser.customerId !== customerId) return res.status(401).json({ error: 'Connect Facebook to this customer account first.' });
   next();
 }
 
