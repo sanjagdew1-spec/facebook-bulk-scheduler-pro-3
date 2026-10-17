@@ -132,3 +132,28 @@ Additional isolated helpers are now committed on the Phase 2 branch:
 - Local Node test run for the two new test files: **9 tests passed, 0 failed**.
 
 These are helper-level tests only. Registration/sign-in HTTP routes have not yet been integrated, and the existing scheduler endpoints have not yet been converted to customer-account ownership. Do not deploy or accept customer signups yet.
+
+
+### Customer login and tenant scoping implementation (2026-10-17)
+
+Implemented on the Phase 2 branch only:
+
+- Added customer registration, sign-in, session status, and sign-out routes in `customer-auth-routes.js`; wired them into the Phase 2 backend.
+- Passwords use salted scrypt verifiers; verification uses a timing-safe comparison. Password length is constrained to 10–128 characters.
+- Customer auth POST requests require an allowed browser Origin and have an initial per-IP attempt limit.
+- Session IDs are regenerated on customer sign-in/registration; customer identity is stored server-side in the session.
+- Facebook OAuth now requires a signed-in customer account and binds the OAuth state/callback to that same customer ID.
+- Added a separate `customer_pages` table, and changed Page listing, scheduled-job creation, Publish Now, job history, delete, and the background publisher to scope work by internal customer ID and Facebook identity.
+- Added a customer account sign-in/register panel to the Phase 2 branch's `index.html`. The API URL intentionally remains a placeholder until the isolated Phase 2 backend service is created and configured; this prevents accidentally pointing the Phase 2 UI at the stable backend.
+- Added route-level registration tests and helper tests. Local Node test run: **12 tests passed, 0 failed**. These are unit/mock tests, not full HTTP/SQLite/Meta end-to-end tests.
+
+## Remaining release blockers
+
+- The Phase 2 frontend/backend have not been deployed; the stable services remain unchanged.
+- The Phase 2 frontend API URL and allowed origin must be configured only after a separate service exists.
+- Add integration tests against a temporary SQLite database for schema creation/migrations, customer A vs customer B isolation, Page/job CRUD, OAuth linking, logout, and worker publishing.
+- Review encrypted-at-rest token storage/key management, backup/restore, email verification/account recovery, rate-limit storage across multiple instances, and privacy/data-deletion workflows.
+- Verify frontend JavaScript and full backend startup against Node 20+ with installed dependencies.
+- Run a dedicated two-customer acceptance test before any real customer data or public signup is enabled.
+
+**Current status:** core customer-auth routes and tenant-scoped backend paths have been implemented in the isolated branch, but this is still a development checkpoint—not a production-ready multi-customer release.
