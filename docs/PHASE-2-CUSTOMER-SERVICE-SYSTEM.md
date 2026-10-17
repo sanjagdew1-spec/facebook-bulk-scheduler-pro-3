@@ -170,3 +170,21 @@ Implemented on the Phase 2 branch only:
 Local Node test run now: **19 tests passed, 0 failed**. GitHub Actions passed backend syntax checks, unit tests, real SQLite tenant-isolation tests, HTTP customer-auth integration, and a legacy-schema migration test.
 
 Remaining token-storage work: decide a safe key-rotation/recovery procedure and verify encrypted tokens in a full publisher-worker integration test before deployment.
+
+
+## Phase 2 split: pilot now, expansion later
+
+### Part 1 — 20-customer pilot (current scope)
+- Hard cap customer account registration at 20 accounts server-side.
+- Build and test customer login/session, Facebook account linking, customer-owned Pages, jobs, history, and strict tenant isolation.
+- Keep customer registration capped at 20; do not add subscriptions, payments, billing, plan tiers, or an unlimited-customer switch in this part.
+- Keep all work on `phase-2/customer-service-system`; Phase 1 Stable remains untouched.
+- Free hosting is for development and controlled testing only. Do not store real customer tokens or promise reliable scheduled publishing on an ephemeral free service.
+
+### Part 2 — expand beyond 20 (deferred)
+- Increase/remove the account cap only after explicit review.
+- Add the plan/limit engine, paid subscriptions, billing/payment status, per-plan scheduling horizon (e.g. 2/5/10 days only if chosen later), plan enforcement, and admin/customer subscription dashboards.
+- Move to durable storage with backups and reliable always-on scheduled publishing before accepting real customer workloads.
+
+## Free Render pilot constraints (important)
+Render's free web service can sleep after 15 minutes without inbound traffic, and its local filesystem—including SQLite data and uploaded files—is ephemeral. Free Render Postgres expires after 30 days and has no managed backups. Therefore a free Render deployment can support a demo/test pilot, but is not a reliable data store or guaranteed always-on scheduler for paying customers. No paid resource should be created without the user's explicit approval.
