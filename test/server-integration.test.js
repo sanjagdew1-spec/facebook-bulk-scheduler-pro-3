@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { rm } from 'node:fs/promises';
 import crypto from 'node:crypto';
+import Database from 'better-sqlite3';
 
 async function freePort() {
   const server = net.createServer();
@@ -104,4 +105,76 @@ test('HTTP customer registration, session status, login, and logout work on an i
   assert.equal(loginResponse.status, 200);
   assert.equal((await loginResponse.json()).customer.id, registered.customer.id);
   assert.ok(loginResponse.headers.get('set-cookie'), 'login should issue a fresh secure session cookie');
+});
+
+
+test('backend safely adds Phase 2 columns and tables to an existing Phase 1-style SQLite schema', { timeout: 30000 }, async t => {
+  const port = await freePort();
+  const directory = await import('node:fs/promises').then(fs => fs.mkdtemp(path.join(os.tmpdir(), 'phase2-migration-')));
+  const dbPath = path.join(directory, 'legacy.sqlite');
+  const legacyDb = new Database(dbPath);
+  legacyDb.exec(`
+    CREATE TABLE pages (
+      user_id TEXT NOT NULL, page_id TEXT NOT NULL, name TEXT NOT NULL,
+      access_token TEXT NOT NULL, updated_at TEXT NOT NULL,
+      PRIMARY KEY(user_id, page_id)
+    );
+    CREATE TABLE jobs (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, page_id TEXT NOT NULL,
+      page_name TEXT NOT NULL, message TEXT NOT NULL DEFAULT '',
+      image_url TEXT NOT NULL DEFAULT '', scheduled_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'scheduled', post_id TEXT, error TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE job_images (
+      job_id TEXT NOT NULL, position INTEGER NOT NULL,
+      image_data BLOB NOT NULL, image_mime_type TEXT NOT NULL,
+      PRIMARY KEY(job_id, position)
+    );
+  `);
+  legacyDb.close();
+
+  const baseUrl = 'http://127.0.0.1:' + port;
+  const origin = 'http://phase2-frontend.test';
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(),
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      PORT: String(port),
+      DB_PATH: dbPath,
+      APP_BASE_URL: 'https://phase2-backend.test',
+      FRONTEND_ORIGIN: origin,
+      FRONTEND_SUCCESS_URL: origin + '/',
+      META_APP_ID: 'test-app-id',
+      META_APP_SECRET: 'test-app-secret',
+      SESSION_SECRET: crypto.randomBytes(48).toString('hex'),
+      TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString('hex'),
+      NODE_ENV: 'test'
+    }
+  });
+  t.after(async () => {
+    child.kill('SIGTERM');
+    await new Promise(resolve => {
+      if (child.exitCode !== null) return resolve();
+      child.once('exit', resolve);
+      setTimeout(resolve, 1500);
+    });
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  await waitForHealth(baseUrl, child);
+  const migratedDb = new Database(dbPath);
+  const pageColumns = migratedDb.prepare('PRAGMA table_info(pages)').all().map(column => column.name);
+  const jobColumns = migratedDb.prepare('PRAGMA table_info(jobs)').all().map(column => column.name);
+  const accountTable = migratedDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='customer_accounts'").get();
+  const customerPagesTable = migratedDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='customer_pages'").get();
+  assert.ok(pageColumns.includes('customer_id'));
+  assert.ok(jobColumns.includes('customer_id'));
+  assert.ok(jobColumns.includes('image_data'));
+  assert.ok(jobColumns.includes('image_mime_type'));
+  assert.ok(jobColumns.includes('is_ai_content'));
+  assert.ok(accountTable);
+  assert.ok(customerPagesTable);
+  migratedDb.close();
 });
