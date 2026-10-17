@@ -63,7 +63,20 @@ test('HTTP customer registration, session status, login, and logout work on an i
   });
 
   await waitForHealth(baseUrl, child);
+  const configResponse = await fetch(baseUrl + '/config/status');
+  assert.equal(configResponse.status, 200);
+  const configBody = await configResponse.text();
+  assert.ok(configBody.includes('"appSecretPresent":true'));
+  assert.ok(configBody.includes('"tokenEncryptionConfigured":true'));
+  assert.ok(!configBody.includes('test-app-secret'), 'configuration diagnostics must never expose the Meta app secret');
+  assert.ok(!configBody.includes(process.env.TOKEN_ENCRYPTION_KEY || 'no-test-key'), 'configuration diagnostics must never expose the token encryption key');
   const headers = { 'content-type': 'application/json', origin, 'x-forwarded-proto': 'https' };
+  const untrustedRegistration = await fetch(baseUrl + '/api/customer/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'https://attacker.example', 'x-forwarded-proto': 'https' },
+    body: JSON.stringify({ email: 'attacker@example.com', password: 'a-long-enough-integration-password' })
+  });
+  assert.equal(untrustedRegistration.status, 403, 'registration must reject untrusted browser origins');
   const registerResponse = await fetch(baseUrl + '/api/customer/register', {
     method: 'POST',
     headers,
