@@ -25,12 +25,26 @@
           <div class="eyebrow">Page publishing workspace</div>
           <h1>Manage your Facebook publishing workflow.</h1>
           <p>Connect your Facebook account to begin testing the account authorization flow. Page selection, publishing, and scheduled posting will become available only after the required Meta permissions and backend features are configured and verified.</p>
+          <section id="customerAuthPanel" style="margin:18px 0;padding:16px;background:#080d1b;border:1px solid #26334c;border-radius:12px">
+            <h2 style="margin:0 0 8px;font-size:20px">Customer account</h2>
+            <p style="font-size:13px;color:#aab7cf;line-height:1.5">Create your own scheduler account or sign in. Then connect Facebook to link your Pages to this customer account.</p>
+            <label for="customerEmail" style="display:block;margin:8px 0">Email address</label>
+            <input id="customerEmail" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+            <label for="customerPassword" style="display:block;margin:10px 0 8px">Password (10–128 characters)</label>
+            <input id="customerPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" required placeholder="Create or enter your password" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+            <div class="actions" style="margin-top:12px">
+              <button class="btn primary" id="registerCustomer" type="button">Create account</button>
+              <button class="btn secondary" id="loginCustomer" type="button">Sign in</button>
+              <button class="btn secondary" id="logoutCustomer" type="button" hidden>Sign out</button>
+            </div>
+            <p id="customerAccountStatus" role="status" style="font-size:12px;color:#aab7cf;line-height:1.5;margin-bottom:0">Checking Phase 2 service configuration…</p>
+          </section>
           <div class="actions">
-            <a class="btn primary" href="https://facebook-bulk-scheduler-pro-3-stable.onrender.com/auth/facebook">Continue with Facebook <span aria-hidden="true">→</span></a>
-            <a class="btn secondary" href="https://facebook-bulk-scheduler-pro-3-stable.onrender.com/health" target="_blank" rel="noopener">Check server status ↗</a>
+            <a class="btn primary" id="connectFacebook" href="#" hidden>Connect Facebook <span aria-hidden="true">→</span></a>
+            <a class="btn secondary" id="checkServer" href="#" target="_blank" rel="noopener">Check server status ↗</a>
           </div>
           <div class="actions" style="margin-top:14px">
-            <button class="btn secondary" id="checkPages" type="button">Check Facebook connection & Pages</button>
+            <button class="btn secondary" id="checkPages" type="button" hidden>Check Facebook connection & Pages</button>
           </div>
           <pre id="apiResult" role="status" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;background:#080d1b;border:1px solid #26334c;border-radius:12px;padding:14px;color:#d9e5ff;font-size:12px;line-height:1.6"></pre>
           <section id="pagePanel" style="display:none;margin-top:16px;background:#080d1b;border:1px solid #26334c;border-radius:12px;padding:14px">
@@ -77,7 +91,7 @@
   </div>
 <script>
 (() => {
-  const API = 'https://facebook-bulk-scheduler-pro-3-stable.onrender.com';
+  const API = 'https://YOUR-RENDER-SERVICE.onrender.com';
   const result = document.getElementById('apiResult');
   const panel = document.getElementById('pagePanel');
   const pageList = document.getElementById('pageList');
@@ -91,6 +105,79 @@
     if (!response.ok) throw new Error(data.error || data.diagnostic?.message || ('Request failed (' + response.status + ')'));
     return data;
   }
+  const customerStatus = document.getElementById('customerAccountStatus');
+  const customerEmail = document.getElementById('customerEmail');
+  const customerPassword = document.getElementById('customerPassword');
+  const registerCustomer = document.getElementById('registerCustomer');
+  const loginCustomer = document.getElementById('loginCustomer');
+  const logoutCustomer = document.getElementById('logoutCustomer');
+  const connectFacebook = document.getElementById('connectFacebook');
+  const checkServer = document.getElementById('checkServer');
+  function setCustomerUI(signedIn, email, connected=false) {
+    customerEmail.disabled = signedIn;
+    customerPassword.disabled = signedIn;
+    registerCustomer.hidden = signedIn;
+    loginCustomer.hidden = signedIn;
+    logoutCustomer.hidden = !signedIn;
+    connectFacebook.hidden = !signedIn || connected;
+    btn.hidden = !connected;
+    if (signedIn) customerStatus.textContent = 'Signed in as ' + email + '. Your Facebook connection will be linked to this customer account.';
+    else customerStatus.textContent = 'Create an account or sign in before connecting Facebook.';
+    if (connected) customerStatus.textContent = 'Signed in as ' + email + ' · Facebook is connected to this customer account.';
+  }
+  async function refreshCustomerState() {
+    if (API.includes('YOUR-RENDER-SERVICE')) {
+      customerStatus.textContent = 'Phase 2 backend is not deployed yet. This development interface will be connected after the separate service is configured.';
+      registerCustomer.disabled = true; loginCustomer.disabled = true; connectFacebook.hidden = true; btn.hidden = true;
+      checkServer.href = '#';
+      return;
+    }
+    checkServer.href = API + '/health';
+    try {
+      const customer = await api('/api/customer/status');
+      const facebook = await api('/auth/status');
+      const connected = Boolean(customer.signedIn && facebook.connected);
+      setCustomerUI(Boolean(customer.signedIn), customer.customer?.email || '', connected);
+      if (connected) loadPages();
+    } catch (error) {
+      customerStatus.textContent = error.message;
+    }
+  }
+  async function submitCustomerAuth(mode) {
+    if (API.includes('YOUR-RENDER-SERVICE')) {
+      customerStatus.textContent = 'Phase 2 backend is not deployed yet. No account data has been sent.';
+      return;
+    }
+    const email = customerEmail.value.trim();
+    const password = customerPassword.value;
+    if (!email || !password) { customerStatus.textContent = 'Enter your email and password first.'; return; }
+    registerCustomer.disabled = true; loginCustomer.disabled = true;
+    try {
+      const data = await api('/api/customer/' + mode, { method:'POST', body:JSON.stringify({ email, password }) });
+      customerPassword.value = '';
+      setCustomerUI(true, data.customer.email, false);
+      customerStatus.textContent = (mode === 'register' ? 'Customer account created. ' : 'Signed in. ') + 'Now choose Connect Facebook.';
+    } catch (error) {
+      customerStatus.textContent = error.message;
+    } finally {
+      registerCustomer.disabled = false; loginCustomer.disabled = false;
+    }
+  }
+  registerCustomer.addEventListener('click', () => submitCustomerAuth('register'));
+  loginCustomer.addEventListener('click', () => submitCustomerAuth('login'));
+  logoutCustomer.addEventListener('click', async () => {
+    try {
+      await api('/api/customer/logout', { method:'POST', body:'{}' });
+      panel.style.display = 'none'; pageList.innerHTML = ''; jobList.innerHTML = '';
+      setCustomerUI(false, '');
+      customerStatus.textContent = 'Signed out.';
+    } catch (error) { customerStatus.textContent = error.message; }
+  });
+  connectFacebook.addEventListener('click', event => {
+    if (API.includes('YOUR-RENDER-SERVICE')) { event.preventDefault(); customerStatus.textContent = 'Phase 2 backend is not deployed yet.'; return; }
+    connectFacebook.href = API + '/auth/facebook';
+  });
+
   async function loadJobs() {
     try {
       const data = await api('/api/jobs');
@@ -203,6 +290,7 @@
   dropZone.addEventListener('drop', event => addPhotoFiles(event.dataTransfer && event.dataTransfer.files));
 
   btn.addEventListener('click', loadPages);
+  refreshCustomerState();
   const scheduleBtn = document.getElementById('scheduleBtn');
   document.getElementById('applyDefaultTime').addEventListener('click', () => {
     const defaultTime = document.getElementById('scheduleAt').value;
@@ -296,7 +384,7 @@
   }
   scheduleBtn.addEventListener('click', submitPost);
   publishNowBtn.addEventListener('click', submitPost);
-  if (new URLSearchParams(location.search).has('facebook_connected')) { panel.style.display='block'; loadPages(); }
+  if (new URLSearchParams(location.search).has('facebook_connected')) { refreshCustomerState(); }
   if (location.protocol === 'file:') show('Open this site through GitHub Pages after deployment; file:// mode cannot use the secure login session.');
 })();
 </script>
