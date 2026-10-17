@@ -348,7 +348,7 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
   const scheduledJobId = scheduleData.jobs[0].id;
   const pollDeadline = Date.now() + 26000;
   let scheduledStatus = 'scheduled';
-  while (Date.now() < pollDeadline && scheduledStatus === 'scheduled') {
+  while (Date.now() < pollDeadline && !['published', 'failed', 'missing'].includes(scheduledStatus)) {
     await new Promise(resolve => setTimeout(resolve, 500));
     const db = new Database(dbPath);
     scheduledStatus = db.prepare('SELECT status FROM jobs WHERE id=?').get(scheduledJobId)?.status || 'missing';
