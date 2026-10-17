@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS customer_facebook_connections (
   FOREIGN KEY(customer_id) REFERENCES customer_accounts(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS customer_fb_user_idx ON customer_facebook_connections(facebook_user_id);
+CREATE TABLE IF NOT EXISTS customer_pages (
+  customer_id TEXT NOT NULL,
+  facebook_user_id TEXT NOT NULL,
+  page_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  access_token TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (customer_id, page_id),
+  FOREIGN KEY(customer_id) REFERENCES customer_accounts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS customer_pages_fb_user_idx ON customer_pages(customer_id, facebook_user_id);
 CREATE TABLE IF NOT EXISTS pages (
   user_id TEXT NOT NULL, page_id TEXT NOT NULL, name TEXT NOT NULL,
   access_token TEXT NOT NULL, updated_at TEXT NOT NULL,
@@ -127,9 +138,11 @@ app.get('/config/status', (_req, res) => res.json({
 }));
 
 app.get('/auth/facebook', (req, res) => {
+  if (!req.session.customerAccount?.id) return res.status(401).send('Sign in to your customer account before connecting Facebook.');
   if (!META_APP_ID || !APP_BASE_URL) return res.status(500).json({ error: 'Facebook login is not configured on the server.' });
   const state = crypto.randomBytes(24).toString('hex');
   req.session.oauthState = state;
+  req.session.oauthCustomerId = req.session.customerAccount.id;
   const oauthParams = { client_id: META_APP_ID, redirect_uri: `${APP_BASE_URL}/auth/facebook/callback`, state, response_type: 'code' };
   if (META_LOGIN_CONFIG_ID) {
     // Login for Business configurations define the requested permissions in Meta.
@@ -154,8 +167,9 @@ app.get('/auth/facebook', (req, res) => {
 app.get('/auth/facebook/callback', async (req, res) => {
   const { code, state, error, error_description: errorDescription } = req.query;
   if (error) return res.status(400).send(`Facebook login failed: ${String(errorDescription || error)}. You can close this tab and return to the app.`);
-  if (!code || !state || state !== req.session.oauthState) return res.status(400).send('Login could not be verified. Please return to the app and try Connect with Facebook again.');
+  if (!code || !state || state !== req.session.oauthState || !req.session.customerAccount?.id || req.session.oauthCustomerId !== req.session.customerAccount.id) return res.status(400).send('Login could not be verified for this customer account. Please return to the app and try Connect with Facebook again.');
   delete req.session.oauthState;
+  delete req.session.oauthCustomerId;
   try {
     const tokenUrl = new URL(graph('oauth/access_token'));
     tokenUrl.search = new URLSearchParams({ client_id: META_APP_ID, client_secret: META_APP_SECRET, redirect_uri: `${APP_BASE_URL}/auth/facebook/callback`, code: String(code) }).toString();
@@ -185,7 +199,7 @@ app.get('/auth/facebook/callback', async (req, res) => {
     const meResponse = await fetch(`${graph('me')}?${new URLSearchParams({ fields: 'id,name', access_token: tokenData.access_token })}`);
     const me = await meResponse.json();
     if (!meResponse.ok || !me.id) throw new Error(me.error?.message || 'Could not read the Facebook account.');
-    req.session.fbUser = { id: String(me.id), name: me.name || 'Facebook user', accessToken: tokenData.access_token };
+    req.session.fbUser = { id: String(me.id), name: me.name || 'Facebook user', accessToken: tokenData.access_token, customerId: req.session.customerAccount.id };
     await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
     res.redirect(`${FRONTEND_SUCCESS_URL}?facebook_connected=1`);
 
@@ -198,7 +212,8 @@ app.get('/auth/status', (req, res) => res.json({ connected: Boolean(req.session.
 app.post('/auth/logout', (req, res) => req.session.destroy(err => err ? res.status(500).json({ error: 'Could not log out.' }) : res.json({ ok: true })));
 
 function requireAuth(req, res, next) {
-  if (!req.session.fbUser) return res.status(401).json({ error: 'Connect with Facebook first.' });
+  if (!req.session.customerAccount?.id) return res.status(401).json({ error: 'Sign in to your customer account first.' });
+  if (!req.session.fbUser || req.session.fbUser.customerId !== req.session.customerAccount.id) return res.status(401).json({ error: 'Connect Facebook to this customer account first.' });
   next();
 }
 
@@ -257,9 +272,9 @@ app.get('/api/pages', requireAuth, async (req, res) => {
     }
     const uniqueRawPages = [...new Map(rawPages.filter(p => p?.id).map(p => [String(p.id), p])).values()];
     const pages = uniqueRawPages.map(p => ({ id: String(p.id), name: p.name, tasks: p.tasks || [] }));
-    const save = db.prepare('INSERT INTO pages(user_id,page_id,name,access_token,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id,page_id) DO UPDATE SET name=excluded.name, access_token=excluded.access_token, updated_at=excluded.updated_at');
+    const save = db.prepare('INSERT INTO customer_pages(customer_id,facebook_user_id,page_id,name,access_token,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(customer_id,page_id) DO UPDATE SET facebook_user_id=excluded.facebook_user_id,name=excluded.name,access_token=excluded.access_token,updated_at=excluded.updated_at');
     const tx = db.transaction(() => { for (const p of uniqueRawPages) {
-      if (p.id && p.access_token) save.run(u.id, String(p.id), p.name || 'Facebook Page', p.access_token, now());
+      if (p.id && p.access_token) save.run(req.session.customerAccount.id, u.id, String(p.id), p.name || 'Facebook Page', p.access_token, now());
     } });
     tx();
 
@@ -281,7 +296,7 @@ app.get('/api/pages', requireAuth, async (req, res) => {
 });
 
 app.get('/api/jobs', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE user_id=? ORDER BY scheduled_at DESC LIMIT 500').all(req.session.fbUser.id);
+  const rows = db.prepare('SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE customer_id=? AND user_id=? ORDER BY scheduled_at DESC LIMIT 500').all(req.session.customerAccount.id, req.session.fbUser.id);
   res.json({ jobs: rows });
 });
 
@@ -316,17 +331,17 @@ app.post('/api/schedule', requireAuth, (req, res) => {
   if (!photos.length && (typeof imageUrl !== 'string' || !/^https:\/\//i.test(imageUrl))) return res.status(400).json({ error: 'Upload JPG/PNG photos or provide a public HTTPS image URL.' });
   const invalidTime = validatedSchedules.find(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000);
   if (invalidTime) return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
-  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?,?)");
+  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at,customer_id) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?,?,?)");
   const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
   const created = [];
   const tx = db.transaction(() => {
     for (const requested of validatedSchedules) {
-      const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.fbUser.id, requested.pageId);
+      const page = db.prepare('SELECT page_id,name FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(req.session.customerAccount.id, req.session.fbUser.id, requested.pageId);
       if (!page) throw new Error('Page ' + requested.pageId + ' was not found for this Facebook account. Refresh the Page list and try again.');
       const id = crypto.randomUUID();
       const first = photos[0] || null;
       const pageScheduledAt = requested.date.toISOString();
-      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, pageScheduledAt, isAiContent ? 1 : 0, now(), now());
+      insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, pageScheduledAt, isAiContent ? 1 : 0, now(), now(), req.session.customerAccount.id);
       photos.forEach((photo,index) => insertPhoto.run(id,index,photo.buffer,photo.mime));
       created.push({ id, pageId: page.page_id, pageName: page.name, scheduledAt: pageScheduledAt, status: 'scheduled', photoCount: photos.length || 1 });
     }
@@ -364,11 +379,11 @@ app.post('/api/publish-now', requireAuth, async (req, res) => {
   try {
     const tx = db.transaction(() => {
       for (const pageId of ids) {
-        const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.fbUser.id, pageId);
+        const page = db.prepare('SELECT page_id,name FROM pages WHERE user_id=? AND page_id=?').get(req.session.customerAccount.id, req.session.fbUser.id, pageId);
         if (!page) throw new Error('A selected Page was not found for this Facebook account. Refresh the Page list and try again.');
         const id = crypto.randomUUID();
         const first = photos[0] || null;
-        insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, publishTime, isAiContent ? 1 : 0, now(), now());
+        insert.run(id, req.session.fbUser.id, page.page_id, page.name, String(message), first ? '' : imageUrl, first ? first.buffer : null, first ? first.mime : null, publishTime, isAiContent ? 1 : 0, now(), now(), req.session.customerAccount.id);
         photos.forEach((photo,index) => insertPhoto.run(id,index,photo.buffer,photo.mime));
         created.push(id);
       }
@@ -390,7 +405,7 @@ app.post('/api/publish-now', requireAuth, async (req, res) => {
 });
 
 app.delete('/api/schedule/:id', requireAuth, (req, res) => {
-  const result = db.prepare("DELETE FROM jobs WHERE id=? AND user_id=? AND status='scheduled'").run(req.params.id, req.session.fbUser.id);
+  const result = db.prepare("DELETE FROM jobs WHERE id=? AND customer_id=? AND user_id=? AND status='scheduled'").run(req.params.id, req.session.customerAccount.id, req.session.fbUser.id);
   if (!result.changes) return res.status(404).json({ error: 'Scheduled job not found or already started.' });
   res.json({ ok: true });
 });
@@ -412,7 +427,7 @@ async function publishDueJobs() {
     const claimed = db.prepare("UPDATE jobs SET status='publishing',updated_at=? WHERE id=? AND status='scheduled'").run(now(), job.id);
     if (!claimed.changes) continue;
     try {
-      const page = db.prepare('SELECT access_token FROM pages WHERE user_id=? AND page_id=?').get(job.user_id, job.page_id);
+      const page = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(job.customer_id, job.user_id, job.page_id);
       if (!page?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
       let response;
       const storedPhotos = db.prepare('SELECT image_data,image_mime_type FROM job_images WHERE job_id=? ORDER BY position').all(job.id);
