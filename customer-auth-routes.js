@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { hashCustomerPassword, verifyCustomerPassword, normalizeCustomerEmail } from './customer-auth.js';
 
+// Phase 2 Part 1 pilot cap. Raising/removing this cap belongs to Part 2.
+export const MAX_CUSTOMER_ACCOUNTS = 20;
+
 export function registerCustomerAuthRoutes(app, { db, trustedOrigins }) {
   const attempts = new Map();
   const windowMs = 15 * 60 * 1000;
@@ -53,14 +56,31 @@ export function registerCustomerAuthRoutes(app, { db, trustedOrigins }) {
       return res.status(400).json({ error: 'Password must be 10–128 characters long.' });
     }
     try {
-      if (db.prepare('SELECT id FROM customer_accounts WHERE email_normalized = ?').get(email)) {
-        return res.status(409).json({ error: 'An account with this email already exists. Sign in instead.' });
-      }
+      const passwordHash = await hashCustomerPassword(password);
       const id = crypto.randomUUID();
       const timestamp = new Date().toISOString();
-      const passwordHash = await hashCustomerPassword(password);
-      db.prepare('INSERT INTO customer_accounts(id,email_normalized,password_hash,status,created_at,updated_at) VALUES(?,?,?,?,?,?)')
-        .run(id, email, passwordHash, 'active', timestamp, timestamp);
+
+      // Atomic capacity check + insert: simultaneous registrations cannot exceed 20.
+      const result = db.transaction(() => {
+        if (db.prepare('SELECT id FROM customer_accounts WHERE email_normalized = ?').get(email)) {
+          return { kind: 'duplicate' };
+        }
+        const count = db.prepare('SELECT COUNT(*) AS count FROM customer_accounts').get().count;
+        if (count >= MAX_CUSTOMER_ACCOUNTS) return { kind: 'capacity' };
+        db.prepare('INSERT INTO customer_accounts(id,email_normalized,password_hash,status,created_at,updated_at) VALUES(?,?,?,?,?,?)')
+          .run(id, email, passwordHash, 'active', timestamp, timestamp);
+        return { kind: 'created' };
+      })();
+
+      if (result.kind === 'duplicate') {
+        return res.status(409).json({ error: 'An account with this email already exists. Sign in instead.' });
+      }
+      if (result.kind === 'capacity') {
+        return res.status(409).json({
+          error: 'The 20-customer pilot is currently full. New registrations are paused until the pilot limit is changed.'
+        });
+      }
+
       await saveCustomerSession(req, { id, email_normalized: email });
       return res.status(201).json({ ok: true, customer: { id, email } });
     } catch (error) {
