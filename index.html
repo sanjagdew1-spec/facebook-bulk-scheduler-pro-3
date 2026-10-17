@@ -174,8 +174,9 @@
     } catch (error) { customerStatus.textContent = error.message; }
   });
   connectFacebook.addEventListener('click', event => {
-    if (API.includes('YOUR-RENDER-SERVICE')) { event.preventDefault(); customerStatus.textContent = 'Phase 2 backend is not deployed yet.'; return; }
-    connectFacebook.href = API + '/auth/facebook';
+    event.preventDefault();
+    if (API.includes('YOUR-RENDER-SERVICE')) { customerStatus.textContent = 'Phase 2 backend is not deployed yet.'; return; }
+    window.location.assign(API + '/auth/facebook');
   });
 
   async function loadJobs() {
