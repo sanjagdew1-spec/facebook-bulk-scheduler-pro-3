@@ -157,3 +157,16 @@ Implemented on the Phase 2 branch only:
 - Run a dedicated two-customer acceptance test before any real customer data or public signup is enabled.
 
 **Current status:** core customer-auth routes and tenant-scoped backend paths have been implemented in the isolated branch, but this is still a development checkpoint—not a production-ready multi-customer release.
+
+
+### Token protection improvement
+
+- Added `token-crypto.js` using AES-256-GCM authenticated encryption for Facebook user tokens and Page access tokens at rest.
+- Facebook access tokens are no longer placed in the Phase 2 server-side session; the backend retrieves the encrypted customer connection and decrypts it only when needed.
+- Page tokens are encrypted when stored and decrypted only in the background publishing worker.
+- Facebook connection is blocked until `TOKEN_ENCRYPTION_KEY` is configured. The key must be 32 bytes (64 hex characters or base64-encoded 32 bytes), stored only in the Phase 2 service's secret environment settings. Never commit or send the key in chat.
+- Added encryption tests for round-trip behavior, random IVs, invalid keys, and rejecting plaintext token values.
+
+Local Node test run now: **15 tests passed, 0 failed**. GitHub Actions also passed the earlier backend syntax/test checkpoint; a new CI run is checking the encryption changes.
+
+Remaining token-storage work: decide a safe key-rotation/recovery procedure and verify encrypted values through a temporary SQLite integration test before deployment.
