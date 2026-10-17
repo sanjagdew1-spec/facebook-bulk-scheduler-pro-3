@@ -31,3 +31,5 @@ jobs:
           node --check token-crypto.js
       - name: Run unit tests
         run: npm test
+      - name: Build the backend Docker image
+        run: docker build --tag facebook-bulk-scheduler-pro-3-p2-api:test .
