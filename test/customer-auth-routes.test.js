@@ -10,8 +10,10 @@ function makeHarness() {
   };
   const inserted = [];
   const db = {
+    transaction(callback) { return (...args) => callback(...args); },
     prepare(sql) {
       if (sql.startsWith('SELECT id FROM customer_accounts')) return { get: () => null };
+      if (sql.startsWith('SELECT COUNT(*) AS count FROM customer_accounts')) return { get: () => ({ count: inserted.length }) };
       if (sql.startsWith('INSERT INTO customer_accounts')) return { run: (...args) => inserted.push(args) };
       throw new Error('Unexpected SQL in test: ' + sql);
     }
