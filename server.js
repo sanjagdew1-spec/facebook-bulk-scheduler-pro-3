@@ -4,6 +4,7 @@ import SQLiteStoreFactory from 'better-sqlite3-session-store';
 import Database from 'better-sqlite3';
 import cron from 'node-cron';
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
 import { encryptToken, decryptToken, isTokenEncryptionConfigured } from './token-crypto.js';
 
@@ -20,7 +21,16 @@ const FRONTEND_SUCCESS_URL = process.env.FRONTEND_SUCCESS_URL || 'https://sanjag
 const GRAPH_VERSION = 'v26.0';
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
 
-if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SECRET || !isTokenEncryptionConfigured()) {
+if (process.env.NODE_ENV === 'production') {
+  const missing = [];
+  if (!process.env.DB_PATH || !path.isAbsolute(DB_PATH)) missing.push('DB_PATH (absolute path on a persistent disk)');
+  if (!META_APP_ID) missing.push('META_APP_ID');
+  if (!META_APP_SECRET) missing.push('META_APP_SECRET');
+  if (!APP_BASE_URL) missing.push('APP_BASE_URL');
+  if (!process.env.SESSION_SECRET) missing.push('SESSION_SECRET');
+  if (!isTokenEncryptionConfigured()) missing.push('TOKEN_ENCRYPTION_KEY');
+  if (missing.length) throw new Error('Phase 2 production configuration is incomplete: ' + missing.join(', '));
+} else if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SECRET || !isTokenEncryptionConfigured()) {
   console.warn('Missing one or more required environment variables: META_APP_ID, META_APP_SECRET, APP_BASE_URL, SESSION_SECRET, TOKEN_ENCRYPTION_KEY');
 }
 
