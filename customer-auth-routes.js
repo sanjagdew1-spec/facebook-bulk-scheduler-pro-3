@@ -54,8 +54,8 @@ export function registerCustomerAuthRoutes(app, { db, trustedOrigins }) {
       const id = crypto.randomUUID();
       const timestamp = new Date().toISOString();
       const passwordHash = await hashCustomerPassword(password);
-      db.prepare('INSERT INTO customer_accounts(id,email_normalized,password_hash,status,created_at,updated_at) VALUES(?,?,?,\'active\',?,?)')
-        .run(id, email, passwordHash, timestamp, timestamp);
+      db.prepare('INSERT INTO customer_accounts(id,email_normalized,password_hash,status,created_at,updated_at) VALUES(?,?,?,?,?,?)')
+        .run(id, email, passwordHash, 'active', timestamp, timestamp);
       await saveCustomerSession(req, { id, email_normalized: email });
       return res.status(201).json({ ok: true, customer: { id, email } });
     } catch (error) {
