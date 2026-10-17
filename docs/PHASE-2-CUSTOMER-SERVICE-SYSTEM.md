@@ -145,7 +145,7 @@ Implemented on the Phase 2 branch only:
 - Facebook OAuth now requires a signed-in customer account and binds the OAuth state/callback to that same customer ID.
 - Added a separate `customer_pages` table, and changed Page listing, scheduled-job creation, Publish Now, job history, delete, and the background publisher to scope work by internal customer ID and Facebook identity.
 - Added a customer account sign-in/register panel to the Phase 2 branch's `index.html`. The API URL intentionally remains a placeholder until the isolated Phase 2 backend service is created and configured; this prevents accidentally pointing the Phase 2 UI at the stable backend.
-- Added route-level registration tests and helper tests. Local Node test run: **19 tests passed, 0 failed**, including real SQLite tenant-isolation tests, a fresh-database HTTP integration test for registration/session/login/logout, and a migration test against a Phase 1-style SQLite schema.
+- Added route-level registration tests and helper tests. Local Node test run: **20 tests passed, 0 failed**, including real SQLite tenant-isolation tests, fresh-database HTTP registration/session/login/logout, legacy-schema migration, and frontend JavaScript syntax validation.
 
 ## Remaining release blockers
 
