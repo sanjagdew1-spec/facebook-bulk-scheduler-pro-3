@@ -1,0 +1,97 @@
+import crypto from 'node:crypto';
+import { hashCustomerPassword, verifyCustomerPassword, normalizeCustomerEmail } from './customer-auth.js';
+
+export function registerCustomerAuthRoutes(app, { db, trustedOrigins }) {
+  const attempts = new Map();
+  const windowMs = 15 * 60 * 1000;
+  const maxAttempts = 12;
+
+  function trustedOrigin(req, res, next) {
+    const origin = req.headers.origin;
+    if (!origin || !trustedOrigins.has(origin)) {
+      return res.status(403).json({ error: 'Request origin could not be verified. Open the official app and try again.' });
+    }
+    next();
+  }
+
+  function limitAttempts(req, res, next) {
+    const key = String(req.ip || req.socket?.remoteAddress || 'unknown');
+    const time = Date.now();
+    const previous = attempts.get(key);
+    if (!previous || time - previous.startedAt > windowMs) {
+      attempts.set(key, { startedAt: time, count: 1 });
+      return next();
+    }
+    if (previous.count >= maxAttempts) {
+      res.setHeader('Retry-After', String(Math.ceil((windowMs - (time - previous.startedAt)) / 1000)));
+      return res.status(429).json({ error: 'Too many sign-in attempts. Please wait and try again.' });
+    }
+    previous.count++;
+    next();
+  }
+
+  function saveCustomerSession(req, customer) {
+    return new Promise((resolve, reject) => {
+      req.session.regenerate(err => {
+        if (err) return reject(err);
+        req.session.customerAccount = { id: customer.id, email: customer.email_normalized };
+        req.session.save(saveErr => saveErr ? reject(saveErr) : resolve());
+      });
+    });
+  }
+
+  app.post('/api/customer/register', trustedOrigin, limitAttempts, async (req, res) => {
+    const email = normalizeCustomerEmail(req.body?.email);
+    const password = req.body?.password;
+    if (!email) return res.status(400).json({ error: 'Enter a valid email address.' });
+    if (typeof password !== 'string' || password.length < 10 || password.length > 128) {
+      return res.status(400).json({ error: 'Password must be 10–128 characters long.' });
+    }
+    try {
+      if (db.prepare('SELECT id FROM customer_accounts WHERE email_normalized = ?').get(email)) {
+        return res.status(409).json({ error: 'An account with this email already exists. Sign in instead.' });
+      }
+      const id = crypto.randomUUID();
+      const timestamp = new Date().toISOString();
+      const passwordHash = await hashCustomerPassword(password);
+      db.prepare('INSERT INTO customer_accounts(id,email_normalized,password_hash,status,created_at,updated_at) VALUES(?,?,?,\'active\',?,?)')
+        .run(id, email, passwordHash, timestamp, timestamp);
+      await saveCustomerSession(req, { id, email_normalized: email });
+      return res.status(201).json({ ok: true, customer: { id, email } });
+    } catch (error) {
+      console.error('[customer-register] Failed:', String(error?.message || error));
+      return res.status(500).json({ error: 'Could not create the account right now. Please try again.' });
+    }
+  });
+
+  app.post('/api/customer/login', trustedOrigin, limitAttempts, async (req, res) => {
+    const email = normalizeCustomerEmail(req.body?.email);
+    const password = req.body?.password;
+    if (!email || typeof password !== 'string' || password.length > 128) {
+      return res.status(400).json({ error: 'Enter your email and password.' });
+    }
+    try {
+      const customer = db.prepare('SELECT id,email_normalized,password_hash,status FROM customer_accounts WHERE email_normalized = ?').get(email);
+      const valid = Boolean(customer?.status === 'active' && await verifyCustomerPassword(password, customer.password_hash));
+      if (!valid) return res.status(401).json({ error: 'Email or password is incorrect.' });
+      await saveCustomerSession(req, customer);
+      return res.json({ ok: true, customer: { id: customer.id, email: customer.email_normalized } });
+    } catch (error) {
+      console.error('[customer-login] Failed:', String(error?.message || error));
+      return res.status(500).json({ error: 'Could not sign in right now. Please try again.' });
+    }
+  });
+
+  app.get('/api/customer/status', (req, res) => {
+    const customer = req.session.customerAccount;
+    res.json({ signedIn: Boolean(customer?.id), customer: customer?.id ? { id: customer.id, email: customer.email } : null });
+  });
+
+  app.post('/api/customer/logout', trustedOrigin, (req, res) => {
+    req.session.destroy(error => {
+      if (error) return res.status(500).json({ error: 'Could not sign out. Please try again.' });
+      res.clearCookie('fb_scheduler_sid', { httpOnly: true, secure: true, sameSite: 'none' });
+      return res.json({ ok: true });
+    });
+  });
+}
