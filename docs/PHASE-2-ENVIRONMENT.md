@@ -43,7 +43,7 @@ Copy each generated value directly into the corresponding secret environment set
 
 1. Create new Phase 2 backend and frontend services from `phase-2/customer-service-system`; do not reuse the Stable service.
 2. Configure the correct Meta OAuth callback URL: `APP_BASE_URL/auth/facebook/callback`.
-3. Configure a durable database location and verify backup/restore.
+3. Configure a durable database location using a **new, empty Phase 2 database file**; never point Phase 2 at the Stable database or copy its SQLite file. Verify backup/restore.
 4. Set the exact Phase 2 frontend origin and success URL.
 5. Run the CI checks and a two-customer integration test.
 6. Verify that `/config/status` reports `configured: true` and `tokenEncryptionConfigured: true` without exposing any secret values.
