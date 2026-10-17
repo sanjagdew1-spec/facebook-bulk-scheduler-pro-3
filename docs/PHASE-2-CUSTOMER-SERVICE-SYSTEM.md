@@ -101,3 +101,23 @@ This audit is based on the current `server.js` on the Phase 2 branch. It is an i
 5. Add isolated test configuration and run tests before creating/deploying a Phase 2 Render service.
 
 **Release gate:** Do not point the existing stable frontend at Phase 2 and do not deploy Phase 2 over any stable service. This branch is not yet production-ready for multiple customers.
+
+
+## Phase 2 implementation progress (2026-10-17)
+
+Completed on `phase-2/customer-service-system` only:
+
+- Added a Node built-in test runner command: `npm test`.
+- Added initial fail-closed tenant security primitives in `tenant-security.js`. Customer identity is read from the server-side session only; request body/query customer IDs are not accepted as identity.
+- Added unit tests for missing customer sessions and customer-scoped Page/job lookups in `test/tenant-security.test.js`.
+- Added initial schema foundations for `customer_accounts` and `customer_facebook_connections`, plus nullable `customer_id` fields and indexes on Pages/jobs to support staged migration without changing existing route behavior.
+
+Important limitations at this checkpoint:
+
+- The new customer account schema is not yet wired to registration/login routes.
+- Existing Facebook scheduler endpoints still use the existing Facebook-user session model; the new tenant helper is not yet applied to those routes.
+- Facebook access tokens are currently stored as the existing app stores them; encryption/key management must be designed before customer production use.
+- Tests need to be run in the project environment, and integration tests plus route refactoring are still required.
+- No deployment has been made and no stable branch/service was changed.
+
+Next: implement customer registration/sign-in with secure password hashing, session regeneration and CSRF protection; then bind Facebook OAuth to the signed-in customer account and refactor every customer-specific endpoint to internal customer IDs before deployment.
