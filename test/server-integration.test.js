@@ -323,6 +323,15 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
   assert.deepEqual((await alicePagesResponse.json()).pages.map(page => page.id), ['page-alice']);
   assert.deepEqual((await bobPagesResponse.json()).pages.map(page => page.id), ['page-bob']);
 
+  const tokenDb = new Database(dbPath);
+  const storedUserToken = tokenDb.prepare('SELECT access_token FROM customer_facebook_connections WHERE customer_id=(SELECT id FROM customer_accounts WHERE email_normalized=?)').get('alice@example.com').access_token;
+  const storedPageToken = tokenDb.prepare('SELECT access_token FROM customer_pages WHERE page_id=?').get('page-alice').access_token;
+  assert.ok(storedUserToken.startsWith('enc:v1:'), 'Facebook user access tokens must be encrypted at rest');
+  assert.ok(storedPageToken.startsWith('enc:v1:'), 'Page access tokens must be encrypted at rest');
+  assert.ok(!storedUserToken.includes('user-token-alice'));
+  assert.ok(!storedPageToken.includes('page-token-alice'));
+  tokenDb.close();
+
   const crossTenantSchedule = await fetch(baseUrl + '/api/schedule', {
     method: 'POST', headers: { ...headers, cookie: aliceCookie },
     body: JSON.stringify({ pageSchedules: [{ pageId: 'page-bob', scheduledAt: new Date(Date.now() + 60000).toISOString() }], images: [{ imageData: 'data:image/jpeg;base64,/9j/2Q==', imageMimeType: 'image/jpeg' }] })
