@@ -4,6 +4,7 @@ import SQLiteStoreFactory from 'better-sqlite3-session-store';
 import Database from 'better-sqlite3';
 import cron from 'node-cron';
 import crypto from 'node:crypto';
+import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -107,6 +108,8 @@ app.use(session({
   store: new (SQLiteStoreFactory(session))( { client: db, expired: { clear: true, intervalMs: 15 * 60 * 1000 } } ),
   cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
+
+registerCustomerAuthRoutes(app, { db, trustedOrigins: new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io']) });
 
 const graph = (path) => `https://graph.facebook.com/${GRAPH_VERSION}/${path}`;
 const now = () => new Date().toISOString();
