@@ -10,7 +10,7 @@ services:
     autoDeploy: true
     envVars:
       - key: NODE_ENV
-        value: test
+        value: development
       - key: DB_PATH
         value: /tmp/phase2-test.sqlite
       - key: APP_BASE_URL
