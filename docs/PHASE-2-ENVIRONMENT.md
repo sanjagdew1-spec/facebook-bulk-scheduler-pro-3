@@ -50,3 +50,18 @@ Copy each generated value directly into the corresponding secret environment set
 7. Test account creation, login/logout, Facebook linking, Pages, immediate publishing, scheduled publishing, and cross-customer access denial with test accounts only.
 
 Do not enable public customer signups until the release checklist passes.
+
+
+## Free-plan pilot — temporary testing only
+
+The Phase 2 Part 1 registration limit is enforced in backend code at **20 customer accounts**. This cap is not a subscription/billing feature and must not be raised as part of Part 1.
+
+A free Render web service is suitable for controlled integration testing and demos only:
+- It may sleep after 15 minutes without inbound traffic, causing a cold-start delay.
+- Its local SQLite database and uploaded files can disappear on restart, spin-down, or redeploy.
+- Free Render Postgres expires after 30 days and has no managed backups.
+
+Do not use the free service as the sole store for real paying customers' Facebook tokens, scheduled posts, images, or history. Do not claim scheduled publishing is reliable while the service can sleep. No Render resource should be created or upgraded without explicit approval.
+
+## Deferred to Phase 2 Part 2
+Unlimited/customer-cap expansion, subscription tiers, payment processing, plan-based scheduling windows, billing status, and plan enforcement are deliberately out of scope until the user approves starting Part 2.
