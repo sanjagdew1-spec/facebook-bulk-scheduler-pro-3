@@ -72,6 +72,24 @@ test('HTTP customer registration, session status, login, and logout work on an i
   assert.equal(registerResponse.status, 201);
   const registered = await registerResponse.json();
   assert.equal(registered.customer.email, 'browsertest@example.com');
+
+  // Fill the pilot to 20 accounts directly, then verify the public registration route blocks account 21.
+  const seedDb = new Database(dbPath);
+  const seedCustomer = seedDb.prepare('INSERT INTO customer_accounts(id,email_normalized,password_hash,status,created_at,updated_at) VALUES(?,?,?,?,?,?)');
+  for (let i = 1; i <= 19; i++) {
+    const stamp = new Date().toISOString();
+    seedCustomer.run('seed-customer-' + i, 'seed-customer-' + i + '@example.com', 'not-used-in-this-test', 'active', stamp, stamp);
+  }
+  assert.equal(seedDb.prepare('SELECT COUNT(*) AS count FROM customer_accounts').get().count, 20);
+  seedDb.close();
+
+  const overflowResponse = await fetch(baseUrl + '/api/customer/register', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ email: 'twentyfirst@example.com', password: 'a-long-enough-integration-password' })
+  });
+  assert.equal(overflowResponse.status, 409);
+  assert.match((await overflowResponse.json()).error, /20-customer pilot is currently full/);
   const firstCookie = registerResponse.headers.get('set-cookie')?.split(';')[0];
   assert.ok(firstCookie, 'registration should set the secure session cookie');
 
