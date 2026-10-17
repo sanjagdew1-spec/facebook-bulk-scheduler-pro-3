@@ -1,0 +1,38 @@
+# Phase 2 Part 1 free test deployment only.
+# Do not deploy this blueprint onto either Phase 1 Stable service.
+services:
+  - type: web
+    name: facebook-bulk-scheduler-pro-3-p2-api
+    runtime: docker
+    plan: free
+    branch: phase-2/customer-service-system
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: test
+      - key: DB_PATH
+        value: /tmp/phase2-test.sqlite
+      - key: APP_BASE_URL
+        value: https://facebook-bulk-scheduler-pro-3-p2-api.onrender.com
+      - key: FRONTEND_ORIGIN
+        value: https://facebook-bulk-scheduler-pro-3-p2-web.onrender.com
+      - key: FRONTEND_SUCCESS_URL
+        value: https://facebook-bulk-scheduler-pro-3-p2-web.onrender.com/
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_LOGIN_CONFIG_ID
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+
+  - type: static
+    name: facebook-bulk-scheduler-pro-3-p2-web
+    branch: phase-2/customer-service-system
+    buildCommand: echo "Static Phase 2 test frontend"
+    staticPublishPath: .
+    autoDeploy: true
