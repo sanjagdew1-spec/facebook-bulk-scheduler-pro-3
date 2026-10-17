@@ -17,14 +17,14 @@
   <div class="wrap">
     <header class="top">
       <div class="brand"><div class="logo" aria-hidden="true">FB</div><div>Facebook Bulk Scheduler Pro 3</div></div>
-      <div class="pill">Early access · Connection testing</div>
+      <div class="pill">Phase 2 · Development only</div>
     </header>
     <main>
       <section class="hero">
         <div class="main">
           <div class="eyebrow">Page publishing workspace</div>
           <h1>Manage your Facebook publishing workflow.</h1>
-          <p>Connect your Facebook account to begin testing the account authorization flow. Page selection, publishing, and scheduled posting will become available only after the required Meta permissions and backend features are configured and verified.</p>
+          <p>Sign in to a customer account first, then link that account to Facebook. This Phase 2 build is still under development and is not ready for public customers or real customer data.</p>
           <section id="customerAuthPanel" style="margin:18px 0;padding:16px;background:#080d1b;border:1px solid #26334c;border-radius:12px">
             <h2 style="margin:0 0 8px;font-size:20px">Customer account</h2>
             <p style="font-size:13px;color:#aab7cf;line-height:1.5">Create your own scheduler account or sign in. Then connect Facebook to link your Pages to this customer account.</p>
@@ -74,18 +74,18 @@
         </div>
         <aside class="side">
           <h2>Getting started</h2>
-          <div class="step"><div class="num">1</div><div><b>Authorize Facebook</b><span>Sign in and review the access requested by the app.</span></div></div>
-          <div class="step"><div class="num">2</div><div><b>Verify Page access</b><span>Page listing requires the appropriate Meta permissions and Page role.</span></div></div>
-          <div class="step"><div class="num">3</div><div><b>Test publishing</b><span>Publishing and scheduled jobs must be implemented and tested before production use.</span></div></div>
+          <div class="step"><div class="num">1</div><div><b>Customer account</b><span>Create an account or sign in to your own workspace.</span></div></div>
+          <div class="step"><div class="num">2</div><div><b>Connect Facebook</b><span>Link Facebook to the signed-in customer account.</span></div></div>
+          <div class="step"><div class="num">3</div><div><b>Verify isolation</b><span>Each customer's Pages, jobs, images, and tokens must remain private to that account.</span></div></div>
         </aside>
       </section>
       <h2 class="section-title">Workspace status</h2>
       <section class="tiles">
-        <article class="tile"><div class="ico" aria-hidden="true">🔐</div><h3>Facebook connection</h3><p>Use the connection button above to test the current OAuth flow.</p><span class="status">Testing required</span></article>
-        <article class="tile"><div class="ico" aria-hidden="true">🗂️</div><h3>Facebook Pages</h3><p>Page selection depends on successful login and approved Page permissions.</p><span class="status">Not verified yet</span></article>
-        <article class="tile"><div class="ico" aria-hidden="true">🗓️</div><h3>Publishing & scheduling</h3><p>Do not rely on automated publishing until the backend scheduler and real Page publishing are verified.</p><span class="status">Not production-ready</span></article>
+        <article class="tile"><div class="ico" aria-hidden="true">🔐</div><h3>Facebook connection</h3><p>Facebook can only be connected after signing in to a customer account.</p><span class="status">Development only</span></article>
+        <article class="tile"><div class="ico" aria-hidden="true">🗂️</div><h3>Facebook Pages</h3><p>Page access must be verified with isolated test customer accounts.</p><span class="status">Integration testing</span></article>
+        <article class="tile"><div class="ico" aria-hidden="true">🗓️</div><h3>Publishing & scheduling</h3><p>Publishing and scheduled jobs must pass end-to-end tests before customer rollout.</p><span class="status">Not production-ready</span></article>
       </section>
-      <div class="warning"><strong>Important:</strong> This is the initial static website interface. It does not claim that Page publishing or automatic scheduling is already working. Never enter your Facebook password anywhere except on an official Facebook page, and never share app secrets or access tokens.</div>
+      <div class="warning"><strong>Important:</strong> This Phase 2 development build is not deployed to its own backend yet. Do not use real customer data until service configuration, integration tests, encryption-key backup, and the release checklist are complete. Never enter your Facebook password anywhere except on an official Facebook page, and never share app secrets or access tokens.</div>
     </main>
     <footer class="footer"><span>© <span id="year">2026</span> Facebook Bulk Scheduler Pro 3</span><span><a href="https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/privacy-policy.html">Privacy Policy</a> · <a href="https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/data-deletion.html">Data Deletion</a> · <a href="https://github.com/sanjagdew1-spec/facebook-bulk-scheduler-pro-3">GitHub repository</a></span></footer>
   </div>
