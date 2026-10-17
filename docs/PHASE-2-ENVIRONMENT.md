@@ -14,7 +14,7 @@ This checklist is for a **new, separate Phase 2 backend service only**. Do not a
 
 Optional:
 - `META_LOGIN_CONFIG_ID`: the Meta Login for Business configuration ID, if used by the app.
-- `DB_PATH`: database file path. Set this only after selecting and testing the Phase 2 service's durable storage location.
+- `DB_PATH`: absolute path to the database file on the Phase 2 persistent disk. Production startup requires this value; verify the disk mount is actually persistent.
 - `NODE_ENV=production`.
 
 ## Generate keys on Windows PowerShell
