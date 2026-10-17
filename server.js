@@ -20,8 +20,8 @@ const FRONTEND_SUCCESS_URL = process.env.FRONTEND_SUCCESS_URL || 'https://sanjag
 const GRAPH_VERSION = 'v26.0';
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
 
-if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SECRET) {
-  console.warn('Missing one or more required environment variables: META_APP_ID, META_APP_SECRET, APP_BASE_URL, SESSION_SECRET');
+if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SECRET || !isTokenEncryptionConfigured()) {
+  console.warn('Missing one or more required environment variables: META_APP_ID, META_APP_SECRET, APP_BASE_URL, SESSION_SECRET, TOKEN_ENCRYPTION_KEY');
 }
 
 const db = new Database(DB_PATH);
@@ -128,7 +128,7 @@ const now = () => new Date().toISOString();
 const scopes = ['public_profile', 'pages_show_list', 'pages_manage_posts', 'pages_read_engagement'];
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'Facebook Bulk Scheduler Pro 3', timestamp: now() }));
 app.get('/config/status', (_req, res) => res.json({
-  configured: Boolean(META_APP_ID && META_APP_SECRET && APP_BASE_URL && process.env.SESSION_SECRET),
+  configured: Boolean(META_APP_ID && META_APP_SECRET && APP_BASE_URL && process.env.SESSION_SECRET && isTokenEncryptionConfigured()),
   appIdPresent: Boolean(META_APP_ID), appSecretPresent: Boolean(META_APP_SECRET),
   appIdLength: META_APP_ID.length, appSecretLength: META_APP_SECRET.length,
   appIdHasOuterWhitespace: META_APP_ID_RAW !== META_APP_ID,
