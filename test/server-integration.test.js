@@ -277,6 +277,7 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
       SESSION_SECRET: crypto.randomBytes(48).toString('hex'),
       TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString('hex'),
       META_GRAPH_BASE_URL: 'http://127.0.0.1:' + graphPort + '/v26.0',
+      TEST_SCHEDULER_CRON: '* * * * * *',
       NODE_ENV: 'test'
     }
   });
@@ -337,8 +338,26 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
   assert.equal(published.jobs.length, 1);
   assert.equal(published.jobs[0].status, 'published');
 
+  const scheduledAt = new Date(Date.now() + 16000).toISOString();
+  const scheduleResponse = await fetch(baseUrl + '/api/schedule', {
+    method: 'POST', headers: { ...headers, cookie: aliceCookie },
+    body: JSON.stringify({ pageSchedules: [{ pageId: 'page-alice', scheduledAt }], images: [{ imageData: 'data:image/jpeg;base64,/9j/2Q==', imageMimeType: 'image/jpeg' }], message: 'Automated scheduled publish test' })
+  });
+  assert.equal(scheduleResponse.status, 201);
+  const scheduleData = await scheduleResponse.json();
+  const scheduledJobId = scheduleData.jobs[0].id;
+  const pollDeadline = Date.now() + 26000;
+  let scheduledStatus = 'scheduled';
+  while (Date.now() < pollDeadline && scheduledStatus === 'scheduled') {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const db = new Database(dbPath);
+    scheduledStatus = db.prepare('SELECT status FROM jobs WHERE id=?').get(scheduledJobId)?.status || 'missing';
+    db.close();
+  }
+  assert.equal(scheduledStatus, 'published', 'the background scheduler should publish due jobs in the isolated test environment');
+
   const aliceJobs = await fetch(baseUrl + '/api/jobs', { headers: authHeaders(aliceCookie) });
   const bobJobs = await fetch(baseUrl + '/api/jobs', { headers: authHeaders(bobCookie) });
-  assert.equal((await aliceJobs.json()).jobs.length, 1);
+  assert.equal((await aliceJobs.json()).jobs.length, 2);
   assert.equal((await bobJobs.json()).jobs.length, 0, 'Bob cannot see Alice’s publishing history');
 });
