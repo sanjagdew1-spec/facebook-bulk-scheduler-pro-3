@@ -520,7 +520,10 @@ async function publishDueJobs() {
     }
   }
 }
-cron.schedule('* * * * *', () => publishDueJobs().catch(err => console.error('Scheduler loop failed:', err)));
+const schedulerExpression = process.env.NODE_ENV === 'test' && process.env.TEST_SCHEDULER_CRON
+  ? process.env.TEST_SCHEDULER_CRON
+  : '* * * * *';
+cron.schedule(schedulerExpression, () => publishDueJobs().catch(err => console.error('Scheduler loop failed:', err)));
 
 app.get('/', (_req, res) => res.type('text').send('Facebook Bulk Scheduler Pro 3 backend is running.'));
 app.listen(PORT, () => console.log(`Facebook Bulk Scheduler Pro 3 listening on ${PORT}`));
