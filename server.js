@@ -25,9 +25,30 @@ if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SE
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.exec(`
+CREATE TABLE IF NOT EXISTS customer_accounts (
+  id TEXT PRIMARY KEY,
+  email_normalized TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS customer_facebook_connections (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL,
+  facebook_user_id TEXT NOT NULL,
+  display_name TEXT NOT NULL DEFAULT '',
+  access_token TEXT NOT NULL,
+  connected_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(customer_id, facebook_user_id),
+  FOREIGN KEY(customer_id) REFERENCES customer_accounts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS customer_fb_user_idx ON customer_facebook_connections(facebook_user_id);
 CREATE TABLE IF NOT EXISTS pages (
   user_id TEXT NOT NULL, page_id TEXT NOT NULL, name TEXT NOT NULL,
   access_token TEXT NOT NULL, updated_at TEXT NOT NULL,
+  customer_id TEXT,
   PRIMARY KEY (user_id, page_id)
 );
 CREATE TABLE IF NOT EXISTS jobs (
@@ -35,7 +56,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   page_name TEXT NOT NULL, message TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '',
   image_data BLOB, image_mime_type TEXT,
   scheduled_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled',
-  post_id TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  post_id TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  customer_id TEXT
 );
 CREATE INDEX IF NOT EXISTS jobs_due_idx ON jobs(status, scheduled_at);
 CREATE TABLE IF NOT EXISTS job_images (
@@ -44,7 +66,18 @@ CREATE TABLE IF NOT EXISTS job_images (
 );
 CREATE INDEX IF NOT EXISTS job_images_job_idx ON job_images(job_id, position);
 `);
-for (const migration of ['ALTER TABLE jobs ADD COLUMN image_data BLOB', 'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT', 'ALTER TABLE jobs ADD COLUMN is_ai_content INTEGER NOT NULL DEFAULT 0']) { try { db.exec(migration); } catch (e) { if (!String(e.message || e).includes('duplicate column name')) throw e; } }
+for (const migration of [
+  'ALTER TABLE jobs ADD COLUMN image_data BLOB',
+  'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT',
+  'ALTER TABLE jobs ADD COLUMN is_ai_content INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE jobs ADD COLUMN customer_id TEXT',
+  'ALTER TABLE pages ADD COLUMN customer_id TEXT'
+]) {
+  try { db.exec(migration); }
+  catch (e) { if (!String(e.message || e).includes('duplicate column name')) throw e; }
+}
+db.exec('CREATE INDEX IF NOT EXISTS pages_customer_idx ON pages(customer_id, page_id)');
+db.exec('CREATE INDEX IF NOT EXISTS jobs_customer_idx ON jobs(customer_id, scheduled_at)');
 
 app.set('trust proxy', 1);
 // GitHub Pages and Render are different origins. Allow the project site to call this API
