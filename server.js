@@ -19,6 +19,10 @@ const META_APP_SECRET = META_APP_SECRET_RAW.trim();
 const META_LOGIN_CONFIG_ID = (process.env.META_LOGIN_CONFIG_ID || '').trim();
 const FRONTEND_SUCCESS_URL = process.env.FRONTEND_SUCCESS_URL || 'https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/';
 const GRAPH_VERSION = 'v26.0';
+// Allow a local fake Graph API only in automated tests; production always uses Meta's official endpoint.
+const GRAPH_BASE_URL = process.env.NODE_ENV === 'test' && process.env.META_GRAPH_BASE_URL
+  ? process.env.META_GRAPH_BASE_URL.replace(/\\/$/, '')
+  : `https://graph.facebook.com/${GRAPH_VERSION}`;
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
 
 if (process.env.NODE_ENV === 'production') {
@@ -133,7 +137,7 @@ app.use(session({
 
 registerCustomerAuthRoutes(app, { db, trustedOrigins: new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io']) });
 
-const graph = (path) => `https://graph.facebook.com/${GRAPH_VERSION}/${path}`;
+const graph = (path) => `${GRAPH_BASE_URL}/${path}`;
 const now = () => new Date().toISOString();
 const scopes = ['public_profile', 'pages_show_list', 'pages_manage_posts', 'pages_read_engagement'];
 
