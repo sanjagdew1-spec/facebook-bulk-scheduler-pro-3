@@ -65,3 +65,20 @@ Do not use the free service as the sole store for real paying customers' Faceboo
 
 ## Deferred to Phase 2 Part 2
 Unlimited/customer-cap expansion, subscription tiers, payment processing, plan-based scheduling windows, billing status, and plan enforcement are deliberately out of scope until the user approves starting Part 2.
+
+
+## Prepared free test deployment (not yet created)
+
+A separate, isolated blueprint is available at [`render.phase2-free.yaml`](../render.phase2-free.yaml). It names two **new Phase 2 test services**:
+- `facebook-bulk-scheduler-pro-3-p2-api` — free backend
+- `facebook-bulk-scheduler-pro-3-p2-web` — free static frontend
+
+This blueprint is not the existing `render.yaml` and must not be applied to either Phase 1 Stable service. It has **not** been deployed yet. Before using it:
+1. Confirm the exact service URLs are available in Render.
+2. Set the Meta App ID and App Secret only in Render's secret environment fields; never commit them or send them in chat.
+3. Set `TOKEN_ENCRYPTION_KEY` to a fresh random 32-byte key (64 hexadecimal characters).
+4. Add `https://facebook-bulk-scheduler-pro-3-p2-api.onrender.com/auth/facebook/callback` to the Meta app's valid OAuth redirect URIs after confirming the actual backend URL.
+5. Use test Facebook accounts only. The blueprint uses `NODE_ENV=test` and `/tmp/phase2-test.sqlite` deliberately because free service storage is ephemeral; **all account data, sessions, images, and schedules may be lost** on restart, spin-down, or redeploy.
+6. Do not use this free deployment as the live service for paying customers or depend on it for guaranteed scheduled publishing.
+
+No Render resources have been created by adding this blueprint. Creating the free services is a separate deployment action.
