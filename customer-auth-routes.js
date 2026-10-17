@@ -83,8 +83,13 @@ export function registerCustomerAuthRoutes(app, { db, trustedOrigins }) {
   });
 
   app.get('/api/customer/status', (req, res) => {
-    const customer = req.session.customerAccount;
-    res.json({ signedIn: Boolean(customer?.id), customer: customer?.id ? { id: customer.id, email: customer.email } : null });
+    const sessionCustomer = req.session.customerAccount;
+    if (!sessionCustomer?.id) return res.json({ signedIn: false, customer: null });
+    const customer = db.prepare('SELECT id,email_normalized,status FROM customer_accounts WHERE id=?').get(sessionCustomer.id);
+    if (!customer || customer.status !== 'active') {
+      return req.session.destroy(() => res.json({ signedIn: false, customer: null }));
+    }
+    return res.json({ signedIn: true, customer: { id: customer.id, email: customer.email_normalized } });
   });
 
   app.post('/api/customer/logout', trustedOrigin, (req, res) => {
