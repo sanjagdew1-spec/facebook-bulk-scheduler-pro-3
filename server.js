@@ -448,6 +448,8 @@ async function publishDueJobs() {
     const claimed = db.prepare("UPDATE jobs SET status='publishing',updated_at=? WHERE id=? AND status='scheduled'").run(now(), job.id);
     if (!claimed.changes) continue;
     try {
+      const customer = db.prepare('SELECT status FROM customer_accounts WHERE id=?').get(job.customer_id);
+      if (!customer || customer.status !== 'active') throw new Error('Customer account is inactive; scheduled post was not published.');
       const encryptedPage = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(job.customer_id, job.user_id, job.page_id);
       if (!encryptedPage?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
       const page = { access_token: decryptToken(encryptedPage.access_token) };
