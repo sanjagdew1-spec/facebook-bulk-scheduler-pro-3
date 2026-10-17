@@ -3,8 +3,13 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
-  "scripts": { "start": "node server.js" },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
     "better-sqlite3-session-store": "^0.1.0",
