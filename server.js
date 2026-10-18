@@ -44,6 +44,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS customer_accounts (
   id TEXT PRIMARY KEY,
   email_normalized TEXT NOT NULL UNIQUE,
+  username TEXT UNIQUE,
   password_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL,
@@ -94,6 +95,7 @@ CREATE TABLE IF NOT EXISTS job_images (
 CREATE INDEX IF NOT EXISTS job_images_job_idx ON job_images(job_id, position);
 `);
 for (const migration of [
+  'ALTER TABLE customer_accounts ADD COLUMN username TEXT',
   'ALTER TABLE jobs ADD COLUMN image_data BLOB',
   'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT',
   'ALTER TABLE jobs ADD COLUMN is_ai_content INTEGER NOT NULL DEFAULT 0',
@@ -103,6 +105,16 @@ for (const migration of [
   try { db.exec(migration); }
   catch (e) { if (!String(e.message || e).includes('duplicate column name')) throw e; }
 }
+// Backfill stable, unique usernames for existing pilot accounts.
+const accountsMissingUsername = db.prepare("SELECT id FROM customer_accounts WHERE username IS NULL OR username = ''").all();
+const usernameExists = db.prepare('SELECT id FROM customer_accounts WHERE username = ?');
+const setUsername = db.prepare('UPDATE customer_accounts SET username = ? WHERE id = ?');
+for (const account of accountsMissingUsername) {
+  let username;
+  do { username = 'user_' + crypto.randomBytes(4).toString('hex'); } while (usernameExists.get(username));
+  setUsername.run(username, account.id);
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS customer_accounts_username_idx ON customer_accounts(username)');
 db.exec('CREATE INDEX IF NOT EXISTS pages_customer_idx ON pages(customer_id, page_id)');
 db.exec('CREATE INDEX IF NOT EXISTS jobs_customer_idx ON jobs(customer_id, scheduled_at)');
 
