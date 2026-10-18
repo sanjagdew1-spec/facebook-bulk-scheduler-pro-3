@@ -86,6 +86,7 @@ test('HTTP customer registration, session status, login, and logout work on an i
   assert.equal(registerResponse.status, 201);
   const registered = await registerResponse.json();
   assert.equal(registered.customer.email, 'browsertest@example.com');
+  assert.match(registered.customer.username, /^user_[a-f0-9]{8}$/);
 
   // Fill the pilot to 20 accounts directly, then verify the public registration route blocks account 21.
   const seedDb = new Database(dbPath);
@@ -113,7 +114,7 @@ test('HTTP customer registration, session status, login, and logout work on an i
   assert.equal(statusResponse.status, 200);
   assert.deepEqual(await statusResponse.json(), {
     signedIn: true,
-    customer: { id: registered.customer.id, email: 'browsertest@example.com' }
+    customer: { id: registered.customer.id, email: 'browsertest@example.com', username: registered.customer.username }
   });
 
   const pagesResponse = await fetch(baseUrl + '/api/pages', {
@@ -142,7 +143,9 @@ test('HTTP customer registration, session status, login, and logout work on an i
     body: JSON.stringify({ email: 'browsertest@example.com', password: 'a-long-enough-integration-password' })
   });
   assert.equal(loginResponse.status, 200);
-  assert.equal((await loginResponse.json()).customer.id, registered.customer.id);
+  const loggedIn = await loginResponse.json();
+  assert.equal(loggedIn.customer.id, registered.customer.id);
+  assert.equal(loggedIn.customer.username, registered.customer.username);
   assert.ok(loginResponse.headers.get('set-cookie'), 'login should issue a fresh secure session cookie');
 });
 
