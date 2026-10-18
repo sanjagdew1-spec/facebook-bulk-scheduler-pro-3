@@ -121,6 +121,10 @@
   function setCustomerUI(signedIn, email, connected=false, username='', id='') {
     customerEmail.disabled = signedIn;
     customerPassword.disabled = signedIn;
+    customerEmail.hidden = signedIn;
+    customerPassword.hidden = signedIn;
+    if (customerEmail.previousElementSibling) customerEmail.previousElementSibling.hidden = signedIn;
+    if (customerPassword.previousElementSibling) customerPassword.previousElementSibling.hidden = signedIn;
     registerCustomer.hidden = signedIn;
     loginCustomer.hidden = signedIn;
     logoutCustomer.hidden = !signedIn;
