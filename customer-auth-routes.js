@@ -72,40 +72,6 @@ export function registerCustomerAuthRoutes(app, { db, trustedOrigins }) {
     }
   }
 
-  function createUniqueUsername() {
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const username = 'user_' + crypto.randomBytes(4).toString('hex');
-      if (!db.prepare('SELECT id FROM customer_accounts WHERE username = ?').get(username)) return username;
-    }
-    throw new Error('Could not allocate a unique username.');
-  }
-
-  async function sendWelcomeEmail(email, username) {
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.EMAIL_FROM;
-    if (!apiKey || !from) return { sent: false, reason: 'not_configured' };
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from,
-          to: [email],
-          subject: 'Your Facebook Bulk Scheduler Pro account is ready',
-          text: 'Your Facebook Bulk Scheduler Pro customer account was created.\\n\\nUsername: ' + username + '\\nEmail: ' + email + '\\n\\nSign in using your email and the password you created. This is separate from your Facebook password.\\n\\nIf you did not create this account, you can ignore this email.'
-        })
-      });
-      if (!response.ok) {
-        console.warn('[customer-email] Provider rejected welcome email with status', response.status);
-        return { sent: false, reason: 'provider_error' };
-      }
-      return { sent: true };
-    } catch (error) {
-      console.warn('[customer-email] Could not send welcome email:', String(error?.message || error));
-      return { sent: false, reason: 'provider_error' };
-    }
-  }
-
   function saveCustomerSession(req, customer) {
     return new Promise((resolve, reject) => {
       req.session.regenerate(err => {
