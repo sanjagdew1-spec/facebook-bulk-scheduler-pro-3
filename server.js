@@ -25,6 +25,17 @@ const GRAPH_BASE_URL = process.env.NODE_ENV === 'test' && process.env.META_GRAPH
   : `https://graph.facebook.com/${GRAPH_VERSION}`;
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
 
+// Safe startup diagnostics: report configuration presence only; never print secrets or tokens.
+console.log('[config-check]', JSON.stringify({
+  metaAppIdPresent: Boolean(META_APP_ID),
+  metaAppIdLength: META_APP_ID.length,
+  loginConfigIdPresent: Boolean(META_LOGIN_CONFIG_ID),
+  appBaseUrlPresent: Boolean(APP_BASE_URL),
+  callbackUrl: APP_BASE_URL ? `${APP_BASE_URL}/auth/facebook/callback` : null,
+  tokenEncryptionConfigured: isTokenEncryptionConfigured(),
+  sessionSecretPresent: Boolean(process.env.SESSION_SECRET)
+}));
+
 if (process.env.NODE_ENV === 'production') {
   const missing = [];
   if (!process.env.DB_PATH || !path.isAbsolute(DB_PATH)) missing.push('DB_PATH (absolute path on a persistent disk)');
