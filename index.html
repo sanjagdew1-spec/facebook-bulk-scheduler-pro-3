@@ -27,6 +27,7 @@
           <p>Sign in to a customer account first, then link that account to Facebook. This Phase 2 Part 1 build is limited to a 20-customer pilot. It is still under development and is not ready for public customers or real customer data until testing and durable data storage are verified.</p>
           <section id="customerAuthPanel" style="margin:18px 0;padding:16px;background:#080d1b;border:1px solid #26334c;border-radius:12px">
             <h2 style="margin:0 0 8px;font-size:20px">Customer account</h2>
+            <div id="customerProfile" hidden style="margin:10px 0;padding:12px;border:1px solid #2f4770;border-radius:10px;background:#101d34"><div style="font-size:11px;color:#aab7cf;text-transform:uppercase;letter-spacing:1px">Currently signed in</div><div id="customerUsername" style="font-weight:800;font-size:18px;color:#9ec1ff;margin-top:4px"></div><div id="customerProfileEmail" style="font-size:13px;color:#f4f7ff;margin-top:4px;overflow-wrap:anywhere"></div><div id="customerProfileId" style="font-size:10px;color:#7f91ad;margin-top:4px;overflow-wrap:anywhere"></div></div>
             <p style="font-size:13px;color:#aab7cf;line-height:1.5">Create your own scheduler account or sign in. Then connect Facebook to link your Pages to this customer account.</p>
             <label for="customerEmail" style="display:block;margin:8px 0">Email address</label>
             <input id="customerEmail" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
@@ -37,7 +38,7 @@
               <button class="btn secondary" id="loginCustomer" type="button">Sign in</button>
               <button class="btn secondary" id="logoutCustomer" type="button" hidden>Sign out</button>
             </div>
-            <p id="customerAccountStatus" role="status" style="font-size:12px;color:#aab7cf;line-height:1.5;margin-bottom:0">Checking Phase 2 service configuration…</p>
+            <p id="customerAccountStatus" role="status" aria-live="polite" style="font-size:12px;color:#aab7cf;line-height:1.5;margin-bottom:0;padding:10px 0">Checking Phase 2 service configuration…</p>
           </section>
           <div class="actions">
             <a class="btn primary" id="connectFacebook" href="#" hidden>Connect Facebook <span aria-hidden="true">→</span></a>
@@ -113,7 +114,11 @@
   const logoutCustomer = document.getElementById('logoutCustomer');
   const connectFacebook = document.getElementById('connectFacebook');
   const checkServer = document.getElementById('checkServer');
-  function setCustomerUI(signedIn, email, connected=false) {
+  const customerProfile = document.getElementById('customerProfile');
+  const customerUsername = document.getElementById('customerUsername');
+  const customerProfileEmail = document.getElementById('customerProfileEmail');
+  const customerProfileId = document.getElementById('customerProfileId');
+  function setCustomerUI(signedIn, email, connected=false, username='', id='') {
     customerEmail.disabled = signedIn;
     customerPassword.disabled = signedIn;
     registerCustomer.hidden = signedIn;
@@ -121,6 +126,10 @@
     logoutCustomer.hidden = !signedIn;
     connectFacebook.hidden = !signedIn || connected;
     btn.hidden = !connected;
+    customerProfile.hidden = !signedIn;
+    customerUsername.textContent = signedIn ? (username || 'Customer') : '';
+    customerProfileEmail.textContent = signedIn ? email : '';
+    customerProfileId.textContent = signedIn ? ('Customer ID: ' + id) : '';
     if (signedIn) customerStatus.textContent = 'Signed in as ' + email + '. Your Facebook connection will be linked to this customer account.';
     else customerStatus.textContent = 'Create an account or sign in before connecting Facebook.';
     if (connected) customerStatus.textContent = 'Signed in as ' + email + ' · Facebook is connected to this customer account.';
@@ -137,7 +146,7 @@
       const customer = await api('/api/customer/status');
       const facebook = await api('/auth/status');
       const connected = Boolean(customer.signedIn && facebook.connected);
-      setCustomerUI(Boolean(customer.signedIn), customer.customer?.email || '', connected);
+      setCustomerUI(Boolean(customer.signedIn), customer.customer?.email || '', connected, customer.customer?.username || '', customer.customer?.id || '');
       if (connected) loadPages();
     } catch (error) {
       customerStatus.textContent = error.message;
@@ -155,8 +164,10 @@
     try {
       const data = await api('/api/customer/' + mode, { method:'POST', body:JSON.stringify({ email, password }) });
       customerPassword.value = '';
-      setCustomerUI(true, data.customer.email, false);
-      customerStatus.textContent = (mode === 'register' ? 'Customer account created. ' : 'Signed in. ') + 'Now choose Connect Facebook.';
+      setCustomerUI(true, data.customer.email, false, data.customer.username, data.customer.id);
+      customerStatus.textContent = mode === 'register'
+        ? ('✅ Account created successfully! Your username is ' + data.customer.username + '. Save it for reference. ' + (data.emailNotice === 'sent' ? 'A confirmation email has been sent.' : data.emailNotice === 'not_configured' ? 'Email confirmation is not enabled on the server yet, so no email was sent.' : 'The account is created, but the confirmation email could not be sent.'))
+        : ('✅ Sign-in successful. Welcome back, ' + data.customer.username + '. Now choose Connect Facebook.');
     } catch (error) {
       customerStatus.textContent = error.message;
     } finally {
@@ -169,8 +180,9 @@
     try {
       await api('/api/customer/logout', { method:'POST', body:'{}' });
       panel.style.display = 'none'; pageList.innerHTML = ''; jobList.innerHTML = '';
+      customerEmail.value = ''; customerPassword.value = '';
       setCustomerUI(false, '');
-      customerStatus.textContent = 'Signed out.';
+      customerStatus.textContent = '✅ You have been signed out. Your customer identity is cleared from this page. Enter your email and Scheduler password to sign in again.';
     } catch (error) { customerStatus.textContent = error.message; }
   });
   connectFacebook.addEventListener('click', event => {
