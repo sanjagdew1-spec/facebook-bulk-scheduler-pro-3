@@ -31,8 +31,11 @@
             <p style="font-size:13px;color:#aab7cf;line-height:1.5">Create your own scheduler account or sign in. Then connect Facebook to link your Pages to this customer account.</p>
             <label for="customerEmail" style="display:block;margin:8px 0">Email address</label>
             <input id="customerEmail" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
-            <label for="customerPassword" style="display:block;margin:10px 0 8px">Password (10–128 characters)</label>
-            <input id="customerPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" required placeholder="Create or enter your password" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+            <label id="customerPasswordLabel" for="customerPassword" style="display:block;margin:10px 0 8px">Scheduler password (10–128 characters)</label>
+            <div id="customerPasswordWrap" class="password-wrap" style="position:relative;width:100%">
+              <input id="customerPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" required placeholder="Create or enter your password" style="width:100%;padding:11px 48px 11px 11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
+              <button id="toggleCustomerPassword" type="button" class="password-toggle" aria-label="Show scheduler password" aria-pressed="false" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:1px solid #40506c;border-radius:8px;background:#172238;color:#edf3ff;cursor:pointer;padding:6px 9px;font-size:16px;line-height:1">👁</button>
+            </div>
             <div class="actions" style="margin-top:12px">
               <button class="btn primary" id="registerCustomer" type="button">Create account</button>
               <button class="btn secondary" id="loginCustomer" type="button">Sign in</button>
@@ -109,6 +112,9 @@
   const customerStatus = document.getElementById('customerAccountStatus');
   const customerEmail = document.getElementById('customerEmail');
   const customerPassword = document.getElementById('customerPassword');
+  const customerPasswordLabel = document.getElementById('customerPasswordLabel');
+  const customerPasswordWrap = document.getElementById('customerPasswordWrap');
+  const toggleCustomerPassword = document.getElementById('toggleCustomerPassword');
   const registerCustomer = document.getElementById('registerCustomer');
   const loginCustomer = document.getElementById('loginCustomer');
   const logoutCustomer = document.getElementById('logoutCustomer');
@@ -124,7 +130,8 @@
     customerEmail.hidden = signedIn;
     customerPassword.hidden = signedIn;
     if (customerEmail.previousElementSibling) customerEmail.previousElementSibling.hidden = signedIn;
-    if (customerPassword.previousElementSibling) customerPassword.previousElementSibling.hidden = signedIn;
+    customerPasswordLabel.hidden = signedIn;
+    customerPasswordWrap.hidden = signedIn;
     registerCustomer.hidden = signedIn;
     loginCustomer.hidden = signedIn;
     logoutCustomer.hidden = !signedIn;
@@ -178,6 +185,15 @@
       registerCustomer.disabled = false; loginCustomer.disabled = false;
     }
   }
+  toggleCustomerPassword.addEventListener('click', () => {
+    const reveal = customerPassword.type === 'password';
+    customerPassword.type = reveal ? 'text' : 'password';
+    toggleCustomerPassword.setAttribute('aria-pressed', String(reveal));
+    toggleCustomerPassword.setAttribute('aria-label', reveal ? 'Hide scheduler password' : 'Show scheduler password');
+    toggleCustomerPassword.title = reveal ? 'Hide password' : 'Show password';
+    toggleCustomerPassword.textContent = reveal ? '🙈' : '👁';
+  });
+
   registerCustomer.addEventListener('click', () => submitCustomerAuth('register'));
   loginCustomer.addEventListener('click', () => submitCustomerAuth('login'));
   logoutCustomer.addEventListener('click', async () => {
