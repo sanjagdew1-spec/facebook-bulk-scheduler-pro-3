@@ -70,7 +70,7 @@ test('registration normalizes email, stores a password verifier, and creates a s
   assert.equal(inserted.length, 1);
   assert.equal(inserted[0][1], 'tester@example.com');
   assert.match(inserted[0][2], /^user_[a-f0-9]{8}$/);
-  assert.match(inserted[0][3], /^scrypt\\$[a-f0-9]{32}\\$[a-f0-9]{128}$/);
+  assert.match(inserted[0][3], /^scrypt[$][a-f0-9]{32}[$][a-f0-9]{128}$/);
   assert.equal(inserted[0][4], 'active');
   assert.equal(result.body.customer.username, inserted[0][2]);
   assert.equal(result.req.session.customerAccount.id, result.body.customer.id);
