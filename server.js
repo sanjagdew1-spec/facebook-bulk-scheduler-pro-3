@@ -176,11 +176,12 @@ function requireTrustedOrigin(req, res, next) {
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'Facebook Bulk Scheduler Pro 3', timestamp: now() }));
 app.get('/config/status', (_req, res) => res.json({
   configured: Boolean(META_APP_ID && META_APP_SECRET && APP_BASE_URL && process.env.SESSION_SECRET && isTokenEncryptionConfigured()),
-  appIdPresent: Boolean(META_APP_ID), appSecretPresent: Boolean(META_APP_SECRET),
-  appIdLength: META_APP_ID.length, appSecretLength: META_APP_SECRET.length,
+  appIdPresent: Boolean(META_APP_ID), appId: META_APP_ID || null,
+  appSecretPresent: Boolean(META_APP_SECRET), appIdLength: META_APP_ID.length, appSecretLength: META_APP_SECRET.length,
+  loginConfigIdPresent: Boolean(META_LOGIN_CONFIG_ID), loginConfigIdSuffix: META_LOGIN_CONFIG_ID ? META_LOGIN_CONFIG_ID.slice(-4) : null,
   appIdHasOuterWhitespace: META_APP_ID_RAW !== META_APP_ID,
   appSecretHasOuterWhitespace: META_APP_SECRET_RAW !== META_APP_SECRET,
-  loginConfigIdPresent: Boolean(META_LOGIN_CONFIG_ID), tokenEncryptionConfigured: isTokenEncryptionConfigured(),
+  tokenEncryptionConfigured: isTokenEncryptionConfigured(),
   callbackUrl: `${APP_BASE_URL}/auth/facebook/callback`, graphVersion: GRAPH_VERSION,
   note: 'Page publishing requires Meta app access and approval for requested permissions.'
 }));
