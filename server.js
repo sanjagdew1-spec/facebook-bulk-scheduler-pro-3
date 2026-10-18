@@ -115,6 +115,16 @@ for (const account of accountsMissingUsername) {
   setUsername.run(username, account.id);
 }
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS customer_accounts_username_idx ON customer_accounts(username)');
+// Backfill stable, unique usernames for existing pilot accounts.
+const accountsMissingUsername = db.prepare("SELECT id FROM customer_accounts WHERE username IS NULL OR username = ''").all();
+const usernameExists = db.prepare('SELECT id FROM customer_accounts WHERE username = ?');
+const setUsername = db.prepare('UPDATE customer_accounts SET username = ? WHERE id = ?');
+for (const account of accountsMissingUsername) {
+  let username;
+  do { username = 'user_' + crypto.randomBytes(4).toString('hex'); } while (usernameExists.get(username));
+  setUsername.run(username, account.id);
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS customer_accounts_username_idx ON customer_accounts(username)');
 db.exec('CREATE INDEX IF NOT EXISTS pages_customer_idx ON pages(customer_id, page_id)');
 db.exec('CREATE INDEX IF NOT EXISTS jobs_customer_idx ON jobs(customer_id, scheduled_at)');
 
