@@ -38,13 +38,14 @@ console.log('[config-check]', JSON.stringify({
 
 if (process.env.NODE_ENV === 'production') {
   const missing = [];
-  if (!process.env.DB_PATH || !path.isAbsolute(DB_PATH)) missing.push('DB_PATH (absolute path on a persistent disk)');
-  if (!META_APP_ID) missing.push('META_APP_ID');
-  if (!META_APP_SECRET) missing.push('META_APP_SECRET');
+  if (!process.env.DB_PATH || !path.isAbsolute(DB_PATH)) missing.push('DB_PATH (absolute path)');
   if (!APP_BASE_URL) missing.push('APP_BASE_URL');
-  if (!process.env.SESSION_SECRET) missing.push('SESSION_SECRET');
-  if (!isTokenEncryptionConfigured()) missing.push('TOKEN_ENCRYPTION_KEY');
-  if (missing.length) throw new Error('Phase 2 production configuration is incomplete: ' + missing.join(', '));
+  // Phase 3 may boot in setup mode before the owner enters Meta credentials.
+  // Facebook login/publishing endpoints remain unavailable until required secrets are configured.
+  if (missing.length) throw new Error('Phase 3 service configuration is incomplete: ' + missing.join(', '));
+  if (!META_APP_ID || !META_APP_SECRET || !process.env.SESSION_SECRET || !isTokenEncryptionConfigured()) {
+    console.warn('[setup-mode] Meta app credentials, session secret, or token encryption key are not configured; Facebook actions are not ready.');
+  }
 } else if (!META_APP_ID || !META_APP_SECRET || !APP_BASE_URL || !process.env.SESSION_SECRET || !isTokenEncryptionConfigured()) {
   console.warn('Missing one or more required environment variables: META_APP_ID, META_APP_SECRET, APP_BASE_URL, SESSION_SECRET, TOKEN_ENCRYPTION_KEY');
 }
