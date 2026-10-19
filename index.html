@@ -1,425 +1,117 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b1020">
-  <meta name="description" content="Facebook Bulk Scheduler Pro 3 — connect your Facebook account and manage the next steps for Page publishing and scheduling.">
-  <title>Facebook Bulk Scheduler Pro 3</title>
-  <style>
-    :root{color-scheme:dark;--bg:#080d1b;--panel:#111a2d;--line:#26334c;--text:#f4f7ff;--muted:#aab7cf;--blue:#3978f6;--blue2:#245bd1;--gold:#f2c66d}
-    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 75% 0%,#172a50 0%,var(--bg) 55%);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);min-height:100vh}
-    .wrap{max-width:1080px;margin:auto;padding:26px 20px 44px}.top{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:8px 0 30px}.brand{display:flex;align-items:center;gap:12px;font-weight:750;letter-spacing:.1px}.logo{display:grid;place-items:center;width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#3f82ff,#1649b7);box-shadow:0 8px 24px #1f5be444;font-size:20px}.pill{border:1px solid #3d4b65;color:#c4d1e7;border-radius:99px;padding:7px 12px;font-size:12px;white-space:nowrap}.hero{display:grid;grid-template-columns:1.3fr .7fr;gap:22px;align-items:stretch}.main,.side,.tile{background:linear-gradient(145deg,#141e33f2,#0f1729f2);border:1px solid var(--line);border-radius:22px;box-shadow:0 20px 55px #0002}.main{padding:clamp(24px,5vw,48px)}.eyebrow{color:var(--gold);font-size:12px;text-transform:uppercase;letter-spacing:1.7px;font-weight:800}.main h1{font-size:clamp(34px,5vw,56px);line-height:1.06;letter-spacing:-1.7px;margin:15px 0}.main p{color:var(--muted);line-height:1.7;max-width:610px}.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:27px}.btn{display:inline-flex;justify-content:center;align-items:center;gap:9px;padding:13px 18px;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;border:1px solid transparent}.primary{background:var(--blue);color:#fff}.primary:hover{background:var(--blue2)}.secondary{border-color:#40506c;color:#edf3ff;background:#172238}.note{font-size:12px!important;margin-top:18px}.side{padding:25px;display:flex;flex-direction:column;justify-content:center}.side h2{font-size:19px;margin:0 0 18px}.step{display:flex;gap:12px;margin:12px 0}.num{flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:#1d3156;color:#9ec1ff;display:grid;place-items:center;font-weight:800}.step b{display:block;font-size:14px;margin-bottom:4px}.step span{font-size:12px;line-height:1.55;color:var(--muted)}.section-title{font-size:20px;margin:32px 0 14px}.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.tile{padding:20px;border-radius:17px}.tile .ico{font-size:22px}.tile h3{font-size:15px;margin:12px 0 7px}.tile p{color:var(--muted);font-size:13px;line-height:1.6;margin:0}.status{display:inline-block;margin-top:12px;border-radius:8px;background:#322b1a;color:#f4d48b;padding:5px 8px;font-size:11px;font-weight:700}.footer{border-top:1px solid var(--line);margin-top:32px;padding-top:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;color:var(--muted);font-size:12px}.footer a{color:#b9d0ff;text-decoration:none}.footer a:hover{text-decoration:underline}.warning{margin-top:20px;border:1px solid #57482a;background:#211d15;color:#e9d9b2;padding:13px 15px;border-radius:12px;font-size:12px;line-height:1.6}
-    @media(max-width:760px){.hero{grid-template-columns:1fr}.tiles{grid-template-columns:1fr}.top{align-items:flex-start}.pill{white-space:normal;text-align:center}.main h1{letter-spacing:-.8px}}
-  </style>
-</head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1020">
+<meta name="description" content="Facebook Bulk Scheduler Pro 3 — bulk Page publishing, photo batches, scheduling and history.">
+<title>Facebook Bulk Scheduler Pro 3</title>
+<style>
+:root{color-scheme:dark;--bg:#090e1b;--panel:#111a2d;--panel2:#151f34;--line:#293752;--text:#f4f7ff;--muted:#9fadc5;--blue:#4d83ff;--blue2:#2e64df;--green:#55d6a2;--red:#ff7c89;--gold:#f3c96d}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 72% -8%,#1b3260 0,transparent 40%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);min-height:100vh}button,input,textarea,select{font:inherit}button{cursor:pointer}.shell{min-height:100vh;display:grid;grid-template-columns:245px minmax(0,1fr)}.sidebar{border-right:1px solid var(--line);background:#0b1221f2;padding:22px 14px;display:flex;flex-direction:column;gap:24px}.brand{display:flex;align-items:center;gap:11px;padding:0 8px}.logo{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(140deg,#5c91ff,#2554be);font-size:21px;box-shadow:0 8px 24px #2b60d733}.brand strong{display:block;font-size:14px;line-height:1.35}.brand small{color:var(--muted);font-size:11px}.nav-label{padding:0 12px;color:#6f7f9a;text-transform:uppercase;font-size:10px;font-weight:800;letter-spacing:1.3px}.nav{display:grid;gap:5px}.nav button{display:flex;align-items:center;gap:12px;width:100%;text-align:left;color:#aebbd0;border:1px solid transparent;background:transparent;padding:12px;border-radius:10px;font-size:13px}.nav button .ico{width:20px;text-align:center;font-size:16px}.nav button:hover,.nav button.active{background:#172641;border-color:#263c60;color:white}.nav button.active{box-shadow:inset 3px 0 var(--blue)}.sidebar-foot{margin-top:auto;border:1px solid var(--line);border-radius:13px;padding:13px;background:#101a2b}.sidebar-foot b{font-size:12px}.sidebar-foot p{font-size:11px;color:var(--muted);line-height:1.55;margin:7px 0 0}.main{min-width:0;padding:28px clamp(18px,3vw,42px) 50px;max-width:1600px;width:100%;margin:0 auto}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:26px}.eyebrow{color:#8da7d4;font-size:11px;text-transform:uppercase;letter-spacing:1.6px;font-weight:800}.topbar h1{font-size:26px;margin:5px 0 0;letter-spacing:-.6px}.user-pill{border:1px solid var(--line);border-radius:99px;padding:8px 12px;color:#b6c4da;font-size:12px;white-space:nowrap}.view{display:none}.view.active{display:block}.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:24px;border:1px solid #2b4165;border-radius:17px;background:linear-gradient(115deg,#172c50,#111b30 65%,#121a2a);margin-bottom:18px}.hero h2{font-size:21px;margin:7px 0 9px;letter-spacing:-.4px}.hero p{margin:0;max-width:680px;color:#b6c5dd;font-size:13px;line-height:1.7}.hero .hero-icon{font-size:37px;padding:14px;border:1px solid #36517b;background:#20385b;border-radius:15px}.btn{border:1px solid transparent;background:var(--blue);color:white;border-radius:9px;padding:10px 14px;font-size:12px;font-weight:750;transition:.15s}.btn:hover{filter:brightness(1.08)}.btn:disabled{opacity:.55;cursor:not-allowed}.btn.secondary{background:#17243a;border-color:#344663;color:#dce7fb}.btn.ghost{background:transparent;border-color:#344663;color:#b9c8df}.btn.danger{background:#3b1c2a;border-color:#713442;color:#ffb5bd}.btn.green{background:#166849}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:18px 0}.stat,.card{border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#121c30,#0f1728);padding:17px}.stat-top{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:11px}.stat-icon{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#1b2c49;font-size:15px}.stat strong{display:block;font-size:27px;letter-spacing:-.8px;margin-top:13px}.stat small{display:block;color:#7f90ab;font-size:11px;margin-top:4px}.grid2{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:16px}.card{padding:20px;margin-bottom:16px}.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:15px}.card h3{margin:0;font-size:15px}.muted{color:var(--muted);font-size:12px;line-height:1.6}.field{display:grid;gap:7px;margin:13px 0}.field label,.label{font-size:12px;color:#c5d1e5;font-weight:650}.field input,.field textarea,.field select,.control{width:100%;min-width:0;background:#0b1323;border:1px solid #34435f;border-radius:9px;color:#f4f7ff;padding:11px 12px;outline:none}.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--blue);box-shadow:0 0 0 3px #4d83ff20}.field textarea{min-height:100px;resize:vertical}.field small{color:#8292ad;font-size:11px}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.notice{border:1px solid #5d4b2b;background:#2b2417;color:#f2dba5;padding:12px 14px;border-radius:10px;font-size:12px;line-height:1.6;margin:12px 0}.notice.blue{border-color:#29476d;background:#12233a;color:#b8d7ff}.notice.green{border-color:#245a48;background:#112b25;color:#a6f0d0}.notice.red{border-color:#70303d;background:#301923;color:#ffbdc4}.list{display:grid;gap:9px}.empty{border:1px dashed #354560;border-radius:11px;text-align:center;padding:27px 16px;color:#91a0ba;font-size:12px;line-height:1.7}.rowitem{display:flex;align-items:center;gap:12px;border:1px solid #263651;background:#0e1728;border-radius:11px;padding:12px}.thumb{width:48px;height:48px;border-radius:9px;background:#1c2d49;display:grid;place-items:center;overflow:hidden;flex-shrink:0;color:#9eb7e7}.thumb img{width:100%;height:100%;object-fit:cover}.rowbody{min-width:0;flex:1}.rowbody b{font-size:12px;display:block;overflow-wrap:anywhere}.rowbody small{display:block;color:var(--muted);font-size:11px;margin-top:4px;overflow-wrap:anywhere}.tag{font-size:10px;font-weight:800;padding:5px 8px;border-radius:99px;background:#202e44;color:#c4d3e9;white-space:nowrap}.tag.published{background:#153c30;color:#8ce8c0}.tag.scheduled{background:#352b17;color:#f1d185}.tag.failed{background:#411e29;color:#ffadb8}.tag.draft{background:#202e44;color:#c4d3e9}.section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:20px 0 12px}.section-title h2{font-size:18px;margin:0}.section-title p{margin:5px 0 0;color:var(--muted);font-size:12px}.split{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}.page-list{display:grid;gap:8px}.page-choice{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #2a3a55;border-radius:10px;background:#0e1728}.page-choice input{accent-color:var(--blue);width:16px;height:16px}.page-choice .page-name{flex:1;font-size:12px;font-weight:650}.page-choice small{display:block;color:var(--muted);font-size:10px;margin-top:4px}.page-count{font-size:11px;color:#9fb3d3}.upload{border:1px dashed #405678;background:#0d1728;border-radius:12px;text-align:center;padding:20px 14px;cursor:pointer}.upload:hover{border-color:var(--blue);background:#111f36}.upload .upicon{font-size:26px}.upload b{display:block;font-size:12px;margin:7px 0}.upload p{font-size:11px;color:var(--muted);margin:0}.previews{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.preview{position:relative;min-width:0}.preview img{width:100%;height:88px;object-fit:cover;border-radius:8px;border:1px solid #34435f}.preview button{width:100%;margin-top:4px;padding:5px;font-size:10px}.post-slot{border:1px solid #2d3d59;border-radius:13px;padding:15px;margin:13px 0;background:#0e1728}.slot-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.slot-head b{font-size:13px}.slot-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,.8fr);gap:14px}.slot-images{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:9px}.slot-images img{width:100%;height:65px;object-fit:cover;border-radius:7px}.footer-note{font-size:11px;color:#7e8eaa;line-height:1.6;margin-top:16px}.toast{position:fixed;right:22px;bottom:22px;z-index:50;max-width:min(420px,calc(100vw - 32px));border:1px solid #36517b;background:#14223a;color:#eaf2ff;border-radius:12px;padding:13px 16px;box-shadow:0 16px 45px #0008;font-size:12px;line-height:1.6;display:none}.toast.show{display:block}.mobile-head{display:none}
+@media(max-width:1000px){.shell{grid-template-columns:205px minmax(0,1fr)}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.split{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}.slot-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.shell{display:block}.sidebar{position:sticky;top:0;z-index:20;padding:10px 12px;border-right:0;border-bottom:1px solid var(--line);gap:10px}.brand{padding:0 4px}.brand .logo{width:34px;height:34px}.brand strong{font-size:12px}.nav-label,.sidebar-foot{display:none}.nav{display:flex;overflow-x:auto;gap:4px;padding-bottom:2px}.nav button{width:auto;flex-shrink:0;padding:9px 10px;font-size:11px;gap:6px}.nav button .ico{width:auto}.main{padding:20px 13px 35px}.topbar{margin-bottom:18px}.topbar h1{font-size:22px}.hero{padding:18px}.hero h2{font-size:18px}.hero .hero-icon{display:none}.stats{gap:8px}.stat{padding:12px}.stat strong{font-size:23px}.card{padding:15px}.two{grid-template-columns:1fr}.previews{grid-template-columns:repeat(3,minmax(0,1fr))}.user-pill{font-size:10px}.slot-images{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style></head>
 <body>
-  <div class="wrap">
-    <header class="top">
-      <div class="brand"><div class="logo" aria-hidden="true">FB</div><div>Facebook Bulk Scheduler Pro 3</div></div>
-      <div class="pill">Phase 2 · Development only</div>
-    </header>
-    <main>
-      <section class="hero">
-        <div class="main">
-          <div class="eyebrow">Page publishing workspace</div>
-          <h1>Manage your Facebook publishing workflow.</h1>
-          <p>Sign in to a customer account first, then link that account to Facebook. This Phase 2 Part 1 build is limited to a 20-customer pilot. It is still under development and is not ready for public customers or real customer data until testing and durable data storage are verified.</p>
-          <section id="customerAuthPanel" style="margin:18px 0;padding:16px;background:#080d1b;border:1px solid #26334c;border-radius:12px">
-            <h2 style="margin:0 0 8px;font-size:20px">Customer account</h2>
-            <div id="customerProfile" hidden style="margin:10px 0;padding:12px;border:1px solid #2f4770;border-radius:10px;background:#101d34"><div style="font-size:11px;color:#aab7cf;text-transform:uppercase;letter-spacing:1px">Currently signed in</div><div id="customerUsername" style="font-weight:800;font-size:18px;color:#9ec1ff;margin-top:4px"></div><div id="customerProfileEmail" style="font-size:13px;color:#f4f7ff;margin-top:4px;overflow-wrap:anywhere"></div><div id="customerProfileId" style="font-size:10px;color:#7f91ad;margin-top:4px;overflow-wrap:anywhere"></div></div>
-            <p style="font-size:13px;color:#aab7cf;line-height:1.5">Create your own scheduler account or sign in. Then connect Facebook to link your Pages to this customer account.</p>
-            <label for="customerEmail" style="display:block;margin:8px 0">Email address</label>
-            <input id="customerEmail" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
-            <label id="customerPasswordLabel" for="customerPassword" style="display:block;margin:10px 0 8px">Scheduler password (10–128 characters)</label>
-            <div id="customerPasswordWrap" class="password-wrap" style="position:relative;width:100%">
-              <input id="customerPassword" type="password" autocomplete="current-password" minlength="10" maxlength="128" required placeholder="Create or enter your password" style="width:100%;padding:11px 48px 11px 11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
-              <button id="toggleCustomerPassword" type="button" class="password-toggle" aria-label="Show scheduler password" aria-pressed="false" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:1px solid #40506c;border-radius:8px;background:#172238;color:#edf3ff;cursor:pointer;padding:6px 9px;font-size:16px;line-height:1">👁</button>
-            </div>
-            <div class="actions" style="margin-top:12px">
-              <button class="btn primary" id="registerCustomer" type="button">Create account</button>
-              <button class="btn secondary" id="loginCustomer" type="button">Sign in</button>
-              <button class="btn secondary" id="logoutCustomer" type="button" hidden>Sign out</button>
-            </div>
-            <p id="customerAccountStatus" role="status" aria-live="polite" style="font-size:12px;color:#aab7cf;line-height:1.5;margin-bottom:0;padding:10px 0">Checking Phase 2 service configuration…</p>
-          </section>
-          <div class="actions">
-            <a class="btn primary" id="connectFacebook" href="#" hidden>Connect Facebook <span aria-hidden="true">→</span></a>
-            <a class="btn secondary" id="checkServer" href="#" target="_blank" rel="noopener">Check server status ↗</a>
-          </div>
-          <div class="actions" style="margin-top:14px">
-            <button class="btn secondary" id="checkPages" type="button" hidden>Check Facebook connection & Pages</button>
-          </div>
-          <pre id="apiResult" role="status" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;background:#080d1b;border:1px solid #26334c;border-radius:12px;padding:14px;color:#d9e5ff;font-size:12px;line-height:1.6"></pre>
-          <section id="pagePanel" style="display:none;margin-top:16px;background:#080d1b;border:1px solid #26334c;border-radius:12px;padding:14px">
-            <h3 style="margin-top:0">Your Facebook Pages</h3><div id="pageList"></div>
-            <h3>Schedule a photo post</h3>
-            <label for="imageFile" style="display:block;margin:8px 0">Upload up to 10 photos (JPG/PNG, max 6 MB each; combined max 30 MB)</label>
-            <div id="dropZone" style="border:2px dashed #40506c;border-radius:12px;padding:14px;background:#0d1425;transition:border-color .15s,background .15s">
-              <div style="font-size:13px;color:#c4d1e7;margin-bottom:8px">Drag and drop photos here, or use Choose Files below. You can add more photos in multiple batches.</div>
-              <input id="imageFile" type="file" accept="image/jpeg,image/png" multiple style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
-            </div>
-            <div id="imagePreview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:12px"></div>
-            <p style="font-size:12px;color:#aab7cf;line-height:1.5">Choose up to 10 photos from your computer. All selected photos will be published together in one Facebook post at the scheduled time.</p>
-            <details style="margin:10px 0;color:#aab7cf"><summary style="cursor:pointer">Optional: use an image URL instead</summary>
-              <input id="imageUrl" type="url" placeholder="https://example.com/photo.jpg" style="width:100%;margin-top:8px;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
-            </details>
-            <label for="caption" style="display:block;margin:8px 0">Caption</label>
-            <textarea id="caption" rows="3" placeholder="Write your post caption..." style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff"></textarea>
-            <label for="aiContent" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 6px;padding:11px;border:1px solid #40506c;border-radius:10px;background:#0d1425;cursor:pointer"><input id="aiContent" type="checkbox" style="margin-top:3px;flex-shrink:0"><span><b style="display:block;color:#f4f7ff">This post contains AI-generated content</b><small style="display:block;color:#aab7cf;line-height:1.5;margin-top:4px">Save this disclosure in schedule history as a reminder. This does not directly set Facebook’s AI label; Facebook may label content using its own systems.</small></span></label>
-            <label for="scheduleAt" style="display:block;margin:8px 0">Default date and time (optional; used if a selected Page has no individual time)</label>
-            <input id="scheduleAt" type="datetime-local" style="width:100%;padding:11px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff">
-            <button class="btn secondary" id="applyDefaultTime" type="button" style="margin-top:8px;padding:9px 12px">Apply default time to selected Pages</button>
-            <p style="font-size:12px;color:#aab7cf;line-height:1.5">You can set a different date/time in each Page row above. Only selected Pages will be scheduled.</p>
-            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px"><button class="btn primary" id="publishNowBtn" type="button">Publish Now</button><button class="btn secondary" id="scheduleBtn" type="button">Schedule for selected Pages</button></div>
-            <h3>Recent schedule history</h3><div id="jobList"></div>
-          </section>
-          <p class="note">After Facebook login, use “Check Facebook connection & Pages” here so the browser sends the session cookie. This test does not publish anything.</p>
-        </div>
-        <aside class="side">
-          <h2>Getting started</h2>
-          <div class="step"><div class="num">1</div><div><b>Customer account</b><span>Create an account or sign in to your own workspace.</span></div></div>
-          <div class="step"><div class="num">2</div><div><b>Connect Facebook</b><span>Link Facebook to the signed-in customer account.</span></div></div>
-          <div class="step"><div class="num">3</div><div><b>Verify isolation</b><span>Each customer's Pages, jobs, images, and tokens must remain private to that account.</span></div></div>
-        </aside>
-      </section>
-      <h2 class="section-title">Workspace status</h2>
-      <section class="tiles">
-        <article class="tile"><div class="ico" aria-hidden="true">🔐</div><h3>Facebook connection</h3><p>Facebook can only be connected after signing in to a customer account.</p><span class="status">Development only</span></article>
-        <article class="tile"><div class="ico" aria-hidden="true">🗂️</div><h3>Facebook Pages</h3><p>Page access must be verified with isolated test customer accounts.</p><span class="status">Integration testing</span></article>
-        <article class="tile"><div class="ico" aria-hidden="true">🗓️</div><h3>Publishing & scheduling</h3><p>Publishing and scheduled jobs must pass end-to-end tests before customer rollout.</p><span class="status">Not production-ready</span></article>
-      </section>
-      <div class="warning"><strong>Important:</strong> This Phase 2 pilot is deployed for testing only. Do not use it for paying customers or real customer data yet: Free Render storage is temporary and can be lost on restart, and scheduled publishing may pause while the service wakes up. Complete Meta configuration, real Facebook publishing tests, durable data storage, a support contact, and the release checklist before public launch. Never enter your Facebook password anywhere except on an official Facebook page, and never share app secrets or access tokens.</div>
-    </main>
-    <footer class="footer"><span>© <span id="year">2026</span> Facebook Bulk Scheduler Pro 3</span><span><a href="privacy-policy.html">Privacy Policy</a> · <a href="data-deletion.html">Data Deletion</a> · <a href="https://github.com/sanjagdew1-spec/facebook-bulk-scheduler-pro-3">GitHub repository</a></span></footer>
-  </div>
+<div class="shell">
+<aside class="sidebar">
+<div class="brand"><div class="logo">▦</div><div><strong>Facebook Bulk<br>Scheduler Pro 3</strong><small>Page publishing workspace</small></div></div>
+<div class="nav-label">Workspace</div>
+<nav class="nav" aria-label="Main navigation">
+<button class="active" data-view="dashboard"><span class="ico">◫</span>Dashboard</button>
+<button data-view="notes"><span class="ico">▤</span>Notes</button>
+<button data-view="bulk-pages"><span class="ico">▦</span>Bulk Pages</button>
+<button data-view="bulk-photos"><span class="ico">▧</span>Bulk Photos</button>
+<button data-view="history"><span class="ico">◷</span>History</button>
+<button data-view="settings"><span class="ico">⚙</span>Settings</button>
+</nav>
+<div class="sidebar-foot"><b>Workspace status</b><p id="sideStatus">Setup pending · connect the dedicated Phase 3 API to enable live Facebook actions.</p></div>
+</aside>
+<main class="main">
+<header class="topbar"><div><div class="eyebrow">Publishing workspace</div><h1 id="pageTitle">Dashboard</h1></div><div class="user-pill" id="connectionPill">● Not connected</div></header>
+
+<section class="view active" id="view-dashboard">
+<div class="hero"><div><div class="eyebrow">Your publishing overview</div><h2>Plan, publish, and manage Pages in one place.</h2><p>Prepare one post for multiple Pages, or build a batch of separate photo posts with their own captions. Review scheduled and published work from History.</p><div class="actions"><button class="btn" data-go="bulk-pages">＋ Create bulk Page post</button><button class="btn secondary" data-go="bulk-photos">▧ Create photo batch</button></div></div><div class="hero-icon">▦</div></div>
+<div class="stats">
+<div class="stat"><div class="stat-top">Connected Pages <span class="stat-icon">▦</span></div><strong id="statPages">—</strong><small id="statPagesNote">Available after Facebook connection</small></div>
+<div class="stat"><div class="stat-top">Published <span class="stat-icon">✓</span></div><strong id="statPublished">0</strong><small>Confirmed successful posts</small></div>
+<div class="stat"><div class="stat-top">Scheduled <span class="stat-icon">◷</span></div><strong id="statScheduled">0</strong><small>Upcoming post jobs</small></div>
+<div class="stat"><div class="stat-top">Failed <span class="stat-icon">!</span></div><strong id="statFailed">0</strong><small>Items needing attention</small></div>
+</div>
+<div class="grid2"><div class="card"><div class="card-head"><h3>Recent activity</h3><button class="btn ghost" data-go="history">View history</button></div><div id="dashboardRecent" class="list"><div class="empty">No activity yet.<br>Published and scheduled jobs will appear here after the Phase 3 backend is connected.</div></div></div>
+<div class="card"><div class="card-head"><h3>Quick guide</h3><span class="tag">Phase 3</span></div><div class="list"><div class="rowitem"><div class="thumb">▦</div><div class="rowbody"><b>Bulk Pages</b><small>One photo/caption post to selected Pages, publish now or schedule.</small></div></div><div class="rowitem"><div class="thumb">▧</div><div class="rowbody"><b>Bulk Photos</b><small>1–10 separate post slots, each with up to 10 images and its own caption.</small></div></div><div class="rowitem"><div class="thumb">◷</div><div class="rowbody"><b>History</b><small>Track status, timestamps, Page, preview and any errors.</small></div></div></div></div></div>
+</section>
+
+<section class="view" id="view-notes"><div class="section-title"><div><h2>Notes</h2><p>Keep content ideas and reminders for your publishing workflow.</p></div></div><div class="card"><div class="field"><label for="noteTitle">Note title</label><input id="noteTitle" maxlength="120" placeholder="e.g. Monday home inspiration batch"></div><div class="field"><label for="noteBody">Note</label><textarea id="noteBody" placeholder="Write caption ideas, page reminders, or content plans…"></textarea></div><div class="actions"><button class="btn" id="saveNote">Save note</button><button class="btn secondary" id="clearNoteForm">Clear</button></div></div><div class="card"><div class="card-head"><h3>Saved notes</h3><span class="tag" id="noteCount">0 notes</span></div><div id="notesList" class="list"><div class="empty">No notes yet. Add a note above.</div></div><p class="footer-note">Notes are saved in this browser only in this Phase 3 build. They are not uploaded to Facebook.</p></div></section>
+
+<section class="view" id="view-bulk-pages">
+<div class="hero"><div><div class="eyebrow">Same post · multiple Pages</div><h2>Bulk Pages</h2><p>Select the Pages you want, prepare one caption and a photo set, then publish now or schedule. Scheduling is configured per selected Page when needed.</p></div><div class="hero-icon">▦</div></div>
+<div class="notice blue" id="apiNotice">Facebook actions are disabled until the separate Phase 3 backend is deployed and configured. You can prepare the workflow now; this page will never claim a post succeeded without a server confirmation.</div>
+<div class="split"><div class="card"><div class="card-head"><h3>1. Choose Pages</h3><span class="page-count" id="selectedPagesCount">0 selected</span></div><div id="pagesList" class="page-list"><div class="empty">Pages will load after you connect Facebook through the Phase 3 API.</div></div><div class="actions"><button class="btn secondary" id="selectAllPages">Select all</button><button class="btn ghost" id="clearPages">Clear selection</button><button class="btn secondary" id="reloadPages">Refresh Pages</button></div>
+<div class="field"><label for="bulkScheduleAt">Default schedule time (optional for per-Page scheduling)</label><input id="bulkScheduleAt" type="datetime-local"><small>For Publish Now, this field is ignored. Schedule requires a future time.</small></div><div class="actions"><button class="btn secondary" id="applyBulkTime">Apply time to selected Pages</button></div><div id="pageTimes" class="list" style="margin-top:12px"></div></div>
+<div class="card"><div class="card-head"><h3>2. Post content</h3><span class="tag">One post</span></div><div class="field"><label for="bulkCaption">Caption</label><textarea id="bulkCaption" maxlength="63206" placeholder="Write the caption that will be used for each selected Page…"></textarea></div><label class="upload" for="bulkFiles"><span class="upicon">⇧</span><b>Add photos</b><p>Choose JPG or PNG · up to 10 images per post</p><input id="bulkFiles" type="file" accept="image/jpeg,image/png" multiple hidden></label><div id="bulkPreviews" class="previews"></div><div class="field"><label for="bulkImageUrl">Or public HTTPS image URL (optional)</label><input id="bulkImageUrl" type="url" placeholder="https://example.com/photo.jpg"></div><div class="actions"><button class="btn" id="bulkPublish">Publish Now</button><button class="btn secondary" id="bulkSchedule">Schedule post</button></div><p class="footer-note">A successful message appears only after the backend confirms the result. Facebook permissions, media limits and scheduling rules still apply.</p></div></div>
+</section>
+
+<section class="view" id="view-bulk-photos">
+<div class="hero"><div><div class="eyebrow">Separate posts · one Page</div><h2>Bulk Photos</h2><p>Choose one Page, then create 1–10 separate post slots. Every slot has its own caption and can contain 1–10 images.</p></div><div class="hero-icon">▧</div></div>
+<div class="notice blue">This composer is separate from Bulk Pages: each slot is its own post. Publishing stays disabled until the dedicated Phase 3 API is ready.</div>
+<div class="card"><div class="two"><div class="field"><label for="photoPage">Facebook Page</label><select id="photoPage"><option value="">Connect Facebook to load Pages</option></select></div><div class="field"><label for="slotCount">Number of separate posts</label><select id="slotCount"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></div></div><div class="field"><label for="batchSchedule">Schedule mode</label><select id="batchSchedule"><option value="now">Publish all now</option><option value="schedule">Schedule each post</option></select><small>For scheduled batches, each post has its own date and time.</small></div></div>
+<div id="slots"></div>
+<div class="card"><div class="actions"><button class="btn" id="batchPublish">Publish batch now</button><button class="btn secondary" id="batchScheduleBtn">Schedule batch</button><button class="btn ghost" id="clearBatch">Clear batch</button></div><p class="footer-note">Each slot is sent as an individual post request. Partial success and failures must be shown individually based on actual server responses.</p></div>
+</section>
+
+<section class="view" id="view-history"><div class="section-title"><div><h2>Publishing history</h2><p>Published, scheduled, and failed jobs with Page, caption, preview and timestamps.</p></div><div class="actions" style="margin:0"><button class="btn secondary" id="refreshHistory">Refresh</button><button class="btn danger" id="clearHistory">Clear history</button></div></div><div class="card"><div class="two"><div class="field"><label for="historyFilter">Status filter</label><select id="historyFilter"><option value="all">All statuses</option><option value="published">Published</option><option value="scheduled">Scheduled</option><option value="failed">Failed</option><option value="draft">Draft</option></select></div><div class="field"><label for="historySearch">Search Page or caption</label><input id="historySearch" placeholder="Search history…"></div></div><div id="historyList" class="list"><div class="empty">No history available yet. Connect the Phase 3 backend to load real jobs.</div></div></div><div class="notice">Clear History removes the app's history records only. It does not delete actual posts from Facebook.</div></section>
+
+<section class="view" id="view-settings"><div class="section-title"><div><h2>Settings</h2><p>Connection status and Phase 3 service configuration.</p></div></div><div class="card"><div class="card-head"><h3>Facebook connection</h3><span class="tag" id="settingsConnection">Not connected</span></div><p class="muted">Customer login and Facebook Page access will be handled by the separate Phase 3 backend. The public frontend does not store Meta App Secret or access tokens.</p><div class="field"><label for="apiUrl">Phase 3 API base URL</label><input id="apiUrl" type="url" placeholder="https://your-phase-3-api.onrender.com"><small>Enter the dedicated Phase 3 API URL after it has been deployed. Do not use the Phase 1 or Phase 2 API here.</small></div><div class="actions"><button class="btn" id="saveApi">Save API URL</button><button class="btn secondary" id="checkApi">Check API health</button><button class="btn" id="connectFacebook">Connect with Facebook</button><button class="btn ghost" id="signOut">Sign out</button></div><div id="settingsMessage" class="notice blue">API not configured. No Facebook publishing action will be reported as successful.</div></div>
+<div class="card"><div class="card-head"><h3>Posting limits and safety</h3></div><div class="list"><div class="rowitem"><div class="thumb">✓</div><div class="rowbody"><b>Per-post image cap</b><small>Composer limits each post to 10 images; server/API limits remain authoritative.</small></div></div><div class="rowitem"><div class="thumb">✓</div><div class="rowbody"><b>Honest status reporting</b><small>Published or scheduled status is shown only when the backend confirms it.</small></div></div><div class="rowitem"><div class="thumb">✓</div><div class="rowbody"><b>History safety</b><small>Clearing history must not remove posts from Facebook.</small></div></div></div></div>
+</section>
+</main></div><div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
-(() => {
-  const API = 'https://facebook-bulk-scheduler-pro-3-p2-api.onrender.com';
-  const result = document.getElementById('apiResult');
-  const panel = document.getElementById('pagePanel');
-  const pageList = document.getElementById('pageList');
-  const jobList = document.getElementById('jobList');
-  const btn = document.getElementById('checkPages');
-  const show = (value) => { result.style.display = 'block'; result.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
-  const selectedPageIds = () => [...pageList.querySelectorAll('input[type=checkbox]:checked')].map(el => el.value);
-  async function api(path, options={}) {
-    const response = await fetch(API + path, { credentials:'include', ...options, headers:{'Content-Type':'application/json', ...(options.headers||{})} });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || data.diagnostic?.message || ('Request failed (' + response.status + ')'));
-    return data;
-  }
-  const customerStatus = document.getElementById('customerAccountStatus');
-  const customerEmail = document.getElementById('customerEmail');
-  const customerPassword = document.getElementById('customerPassword');
-  const customerPasswordLabel = document.getElementById('customerPasswordLabel');
-  const customerPasswordWrap = document.getElementById('customerPasswordWrap');
-  const toggleCustomerPassword = document.getElementById('toggleCustomerPassword');
-  const registerCustomer = document.getElementById('registerCustomer');
-  const loginCustomer = document.getElementById('loginCustomer');
-  const logoutCustomer = document.getElementById('logoutCustomer');
-  const connectFacebook = document.getElementById('connectFacebook');
-  const checkServer = document.getElementById('checkServer');
-  const customerProfile = document.getElementById('customerProfile');
-  const customerUsername = document.getElementById('customerUsername');
-  const customerProfileEmail = document.getElementById('customerProfileEmail');
-  const customerProfileId = document.getElementById('customerProfileId');
-  function setCustomerUI(signedIn, email, connected=false, username='', id='') {
-    customerEmail.disabled = signedIn;
-    customerPassword.disabled = signedIn;
-    customerEmail.hidden = signedIn;
-    customerPassword.hidden = signedIn;
-    if (customerEmail.previousElementSibling) customerEmail.previousElementSibling.hidden = signedIn;
-    customerPasswordLabel.hidden = signedIn;
-    customerPasswordWrap.hidden = signedIn;
-    registerCustomer.hidden = signedIn;
-    loginCustomer.hidden = signedIn;
-    logoutCustomer.hidden = !signedIn;
-    connectFacebook.hidden = !signedIn || connected;
-    btn.hidden = !connected;
-    customerProfile.hidden = !signedIn;
-    customerUsername.textContent = signedIn ? (username || 'Customer') : '';
-    customerProfileEmail.textContent = signedIn ? email : '';
-    customerProfileId.textContent = signedIn ? ('Customer ID: ' + id) : '';
-    if (signedIn) customerStatus.textContent = 'Signed in as ' + email + '. Your Facebook connection will be linked to this customer account.';
-    else customerStatus.textContent = 'Create an account or sign in before connecting Facebook.';
-    if (connected) customerStatus.textContent = 'Signed in as ' + email + ' · Facebook is connected to this customer account.';
-  }
-  async function refreshCustomerState() {
-    if (API.includes('YOUR-RENDER-SERVICE')) {
-      customerStatus.textContent = 'Phase 2 backend is not deployed yet. This development interface will be connected after the separate service is configured.';
-      registerCustomer.disabled = true; loginCustomer.disabled = true; connectFacebook.hidden = true; btn.hidden = true;
-      checkServer.href = '#';
-      return;
-    }
-    checkServer.href = API + '/health';
-    try {
-      const customer = await api('/api/customer/status');
-      const facebook = await api('/auth/status');
-      const connected = Boolean(customer.signedIn && facebook.connected);
-      setCustomerUI(Boolean(customer.signedIn), customer.customer?.email || '', connected, customer.customer?.username || '', customer.customer?.id || '');
-      if (connected) loadPages();
-    } catch (error) {
-      customerStatus.textContent = error.message;
-    }
-  }
-  async function submitCustomerAuth(mode) {
-    if (API.includes('YOUR-RENDER-SERVICE')) {
-      customerStatus.textContent = 'Phase 2 backend is not deployed yet. No account data has been sent.';
-      return;
-    }
-    const email = customerEmail.value.trim();
-    const password = customerPassword.value;
-    if (!email || !password) { customerStatus.textContent = 'Enter your email and password first.'; return; }
-    registerCustomer.disabled = true; loginCustomer.disabled = true;
-    try {
-      const data = await api('/api/customer/' + mode, { method:'POST', body:JSON.stringify({ email, password }) });
-      customerPassword.value = '';
-      setCustomerUI(true, data.customer.email, false, data.customer.username, data.customer.id);
-      customerStatus.textContent = mode === 'register'
-        ? ('✅ Account created successfully! Your username is ' + data.customer.username + '. Save it for reference. ' + (data.emailNotice === 'sent' ? 'A confirmation email has been sent.' : data.emailNotice === 'not_configured' ? 'Email confirmation is not enabled on the server yet, so no email was sent.' : 'The account is created, but the confirmation email could not be sent.'))
-        : ('✅ Sign-in successful. Welcome back, ' + data.customer.username + '. Now choose Connect Facebook.');
-    } catch (error) {
-      customerStatus.textContent = error.message;
-    } finally {
-      registerCustomer.disabled = false; loginCustomer.disabled = false;
-    }
-  }
-  toggleCustomerPassword.addEventListener('click', () => {
-    const reveal = customerPassword.type === 'password';
-    customerPassword.type = reveal ? 'text' : 'password';
-    toggleCustomerPassword.setAttribute('aria-pressed', String(reveal));
-    toggleCustomerPassword.setAttribute('aria-label', reveal ? 'Hide scheduler password' : 'Show scheduler password');
-    toggleCustomerPassword.title = reveal ? 'Hide password' : 'Show password';
-    toggleCustomerPassword.textContent = reveal ? '🙈' : '👁';
-  });
-
-  registerCustomer.addEventListener('click', () => submitCustomerAuth('register'));
-  loginCustomer.addEventListener('click', () => submitCustomerAuth('login'));
-  logoutCustomer.addEventListener('click', async () => {
-    try {
-      await api('/api/customer/logout', { method:'POST', body:'{}' });
-      panel.style.display = 'none'; pageList.innerHTML = ''; jobList.innerHTML = '';
-      customerEmail.value = ''; customerPassword.value = '';
-      setCustomerUI(false, '');
-      customerStatus.textContent = '✅ You have been signed out. Your customer identity is cleared from this page. Enter your email and Scheduler password to sign in again.';
-    } catch (error) { customerStatus.textContent = error.message; }
-  });
-  connectFacebook.addEventListener('click', event => {
-    event.preventDefault();
-    if (API.includes('YOUR-RENDER-SERVICE')) { customerStatus.textContent = 'Phase 2 backend is not deployed yet.'; return; }
-    window.location.assign(API + '/auth/facebook');
-  });
-
-  async function loadJobs() {
-    try {
-      const data = await api('/api/jobs');
-      jobList.innerHTML = data.jobs.length ? data.jobs.map(j => '<div style="padding:8px 0;border-bottom:1px solid #26334c"><b>' + escapeHtml(j.page_name) + '</b> — ' + escapeHtml(j.status) + (j.is_ai_content ? '<br><small style="color:#f5c96a">AI content disclosure noted (Facebook label not guaranteed)</small>' : '') + '<br><small>' + escapeHtml(new Date(j.scheduled_at).toLocaleString()) + (j.error ? ' · ' + escapeHtml(j.error) : '') + '</small></div>').join('') : '<p>No scheduled jobs yet.</p>';
-    } catch(e) { jobList.textContent = e.message; }
-  }
-  function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  async function loadPages() {
-    if (API.includes('YOUR-RENDER-SERVICE')) { show('Setup pending: replace YOUR-RENDER-SERVICE with the real Render service URL after the backend is deployed.'); return; }
-    try {
-      const data = await api('/api/pages');
-      panel.style.display = 'block';
-      pageList.innerHTML = data.pages.length ? `
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px">
-          <button class="btn secondary" id="selectAllPages" type="button" style="padding:8px 11px">Select all Pages</button>
-          <button class="btn secondary" id="clearAllPages" type="button" style="padding:8px 11px">Clear selection</button>
-          <span id="selectedPageCount" style="align-self:center;color:#aab7cf;font-size:12px">0 of ${data.pages.length} Pages selected</span>
-        </div>
-        <p style="font-size:12px;color:#aab7cf;line-height:1.5">Tick each Page and set its own publish time. The main time field below can be applied to selected Pages as a starting time.</p>
-        ` + data.pages.map(p => '<div data-page-row="' + escapeHtml(p.id) + '" style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(190px,240px);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #26334c"><label style="display:flex;gap:8px;align-items:center;overflow-wrap:anywhere"><input type="checkbox" value="' + escapeHtml(p.id) + '"> ' + escapeHtml(p.name) + '</label><input data-page-time type="datetime-local" aria-label="Schedule time for ' + escapeHtml(p.name) + '" style="width:100%;min-width:0;padding:8px;border-radius:8px;border:1px solid #40506c;background:#111a2d;color:#fff"></div>').join('') : '<p>Meta returned no Pages. Check Page access and permissions.</p>';
-      const updatePageCount = () => {
-        const selected = selectedPageIds().length;
-        const count = document.getElementById('selectedPageCount');
-        if (count) count.textContent = selected + ' of ' + data.pages.length + ' Pages selected';
-      };
-      pageList.querySelectorAll('input[type=checkbox]').forEach(box => box.addEventListener('change', updatePageCount));
-      document.getElementById('selectAllPages')?.addEventListener('click', () => { pageList.querySelectorAll('input[type=checkbox]').forEach(box => box.checked = true); updatePageCount(); });
-      document.getElementById('clearAllPages')?.addEventListener('click', () => { pageList.querySelectorAll('input[type=checkbox]').forEach(box => box.checked = false); updatePageCount(); });
-      show(data.diagnostic || {pagesReceived:data.pages.length});
-      await loadJobs();
-    } catch(e) { show(e.message); if (e.message.includes('Connect with Facebook')) { window.location.href = API + '/auth/facebook'; } }
-  }
-  const imageFile = document.getElementById('imageFile');
-  const imagePreview = document.getElementById('imagePreview');
-  const dropZone = document.getElementById('dropZone');
-  let selectedFiles = [];
-  let schedulingInProgress = false;
-  function renderSelectedPhotos() {
-    imagePreview.innerHTML = '';
-    selectedFiles.forEach((file,index) => {
-      const card = document.createElement('div');
-      card.style.cssText = 'min-width:0;border:1px solid #40506c;border-radius:10px;padding:6px;background:#111a2d;position:relative';
-      const img = document.createElement('img');
-      img.src = URL.createObjectURL(file);
-      img.alt = file.name;
-      img.style.cssText = 'width:100%;height:95px;object-fit:cover;border-radius:6px;display:block';
-      const label = document.createElement('div');
-      label.textContent = (index+1) + '. ' + file.name;
-      label.title = file.name;
-      label.style.cssText = 'font-size:11px;color:#aab7cf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:5px';
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.textContent = 'Remove';
-      remove.style.cssText = 'width:100%;margin-top:6px;padding:5px;border-radius:6px;border:1px solid #40506c;background:#172238;color:#fff;cursor:pointer;font-size:11px';
-      remove.addEventListener('click', () => {
-        selectedFiles.splice(index,1);
-        renderSelectedPhotos();
-        show(selectedFiles.length + ' photo(s) selected.');
-      });
-      card.append(img,label,remove);
-      imagePreview.append(card);
-    });
-    if (selectedFiles.length) {
-      const count = document.createElement('div');
-      count.style.cssText = 'grid-column:1/-1;color:#aab7cf;font-size:12px';
-      count.textContent = selectedFiles.length + ' of 10 photos selected. You can add more photos or remove any photo above.';
-      imagePreview.append(count);
-    }
-  }
-  function addPhotoFiles(filesLike) {
-    const incoming = [...(filesLike || [])];
-    if (!incoming.length) return;
-    const combined = [...selectedFiles];
-    const seen = new Set(combined.map(file => file.name + '|' + file.size + '|' + file.lastModified));
-    for (const file of incoming) {
-      if (!['image/jpeg','image/png'].includes(file.type) || file.size > 6 * 1024 * 1024) {
-        show('Every photo must be JPG or PNG and smaller than 6 MB. No new photos were added.');
-        return;
-      }
-      const key = file.name + '|' + file.size + '|' + file.lastModified;
-      if (!seen.has(key)) { combined.push(file); seen.add(key); }
-    }
-    if (combined.length > 10) {
-      show('A post can contain up to 10 photos. You currently have ' + selectedFiles.length + '; no new photos were added.');
-      return;
-    }
-    if (combined.reduce((sum,file) => sum + file.size,0) > 30 * 1024 * 1024) {
-      show('The combined size of all photos must be 30 MB or less. No new photos were added.');
-      return;
-    }
-    selectedFiles = combined;
-    renderSelectedPhotos();
-    show(selectedFiles.length + ' photo(s) selected. Add more, drag more in, or schedule when ready.');
-  }
-  imageFile.addEventListener('change', () => {
-    const newlyPicked = [...(imageFile.files || [])];
-    imageFile.value = '';
-    addPhotoFiles(newlyPicked);
-  });
-  ['dragenter','dragover'].forEach(eventName => dropZone.addEventListener(eventName, event => {
-    event.preventDefault();
-    dropZone.style.borderColor = '#3978f6';
-    dropZone.style.background = '#142342';
-  }));
-  ['dragleave','drop'].forEach(eventName => dropZone.addEventListener(eventName, event => {
-    event.preventDefault();
-    dropZone.style.borderColor = '#40506c';
-    dropZone.style.background = '#0d1425';
-  }));
-  dropZone.addEventListener('drop', event => addPhotoFiles(event.dataTransfer && event.dataTransfer.files));
-
-  btn.addEventListener('click', loadPages);
-  refreshCustomerState();
-  const scheduleBtn = document.getElementById('scheduleBtn');
-  document.getElementById('applyDefaultTime').addEventListener('click', () => {
-    const defaultTime = document.getElementById('scheduleAt').value;
-    if (!defaultTime) { show('Choose a default date/time first.'); return; }
-    let count = 0;
-    pageList.querySelectorAll('input[type=checkbox]:checked').forEach(box => {
-      const row = box.closest('[data-page-row]');
-      const timeInput = row && row.querySelector('[data-page-time]');
-      if (timeInput) { timeInput.value = defaultTime; count++; }
-    });
-    show('Default time applied to ' + count + ' selected Page(s). You can still edit each Page time separately.');
-  });
-  function clearPostForm() {
-    selectedFiles = [];
-    imageFile.value = '';
-    imagePreview.innerHTML = '';
-    document.getElementById('imageUrl').value = '';
-    document.getElementById('caption').value = '';
-    document.getElementById('aiContent').checked = false;
-    document.getElementById('scheduleAt').value = '';
-    pageList.querySelectorAll('[data-page-time]').forEach(input => { input.value = ''; });
-  }
-  const publishNowBtn = document.getElementById('publishNowBtn');
-  async function submitPost(event) {
-    if (schedulingInProgress) return;
-    const isPublishNow = event.currentTarget.id === 'publishNowBtn';
-    schedulingInProgress = true;
-    const activeButton = event.currentTarget;
-    const originalText = activeButton.textContent;
-    const otherButton = isPublishNow ? scheduleBtn : publishNowBtn;
-    activeButton.disabled = true;
-    otherButton.disabled = true;
-    activeButton.style.opacity = '.65';
-    activeButton.style.cursor = 'wait';
-    activeButton.textContent = isPublishNow ? 'Publishing… please wait' : 'Scheduling… please wait';
-    try {
-      const pageIds = selectedPageIds();
-      if (!pageIds.length) throw new Error('Select at least one Page.');
-      let pageSchedules = [];
-      if (!isPublishNow) {
-        pageSchedules = pageIds.map(pageId => {
-          const row = pageList.querySelector('[data-page-row="' + CSS.escape(pageId) + '"]');
-          const timeInput = row && row.querySelector('[data-page-time]');
-          const localTimeForPage = timeInput?.value || document.getElementById('scheduleAt').value;
-          if (!localTimeForPage) throw new Error('Choose a schedule time for every selected Page, or set a default time and apply it.');
-          const scheduledDate = new Date(localTimeForPage);
-          if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() < Date.now() + 15_000) throw new Error('Every selected Page needs a valid future time at least 15 seconds from now. Check each Page row.');
-          return { pageId, scheduledAt: scheduledDate.toISOString() };
-        });
-      }
-      const files = [...selectedFiles];
-      const imageUrl = document.getElementById('imageUrl').value.trim();
-      const message = document.getElementById('caption').value;
-      const isAiContent = document.getElementById('aiContent').checked;
-      if (!files.length && !imageUrl) throw new Error('Upload one or more JPG/PNG photos or provide an HTTPS image URL.');
-      if (files.length > 10) throw new Error('Choose no more than 10 photos per post.');
-      if (files.reduce((sum,file) => sum + file.size,0) > 30 * 1024 * 1024) throw new Error('The combined size of all photos must be 30 MB or less.');
-      for (const file of files) {
-        if (!['image/jpeg','image/png'].includes(file.type)) throw new Error('Every photo must be JPG or PNG.');
-        if (file.size > 6 * 1024 * 1024) throw new Error('Each photo must be smaller than 6 MB.');
-      }
-      const images = await Promise.all(files.map(file => new Promise((resolve,reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve({imageData:String(reader.result || ''),imageMimeType:file.type,name:file.name});
-        reader.onerror = () => reject(new Error('Could not read ' + file.name + '. Please choose the photo again.'));
-        reader.readAsDataURL(file);
-      })));
-      const endpoint = isPublishNow ? '/api/publish-now' : '/api/schedule';
-      const payload = isPublishNow ? {pageIds,imageUrl,images,message,isAiContent} : {pageSchedules,imageUrl,images,message,isAiContent};
-      const data = await api(endpoint, {method:'POST', body:JSON.stringify(payload)});
-      clearPostForm();
-      if (isPublishNow) {
-        const published = (data.jobs || []).filter(j => j.status === 'published').length;
-        const failed = (data.jobs || []).filter(j => j.status === 'failed');
-        const details = failed.map(j => j.page_name + ': ' + (j.error || 'Publishing failed')).join(' | ');
-        show('Publish Now result: ' + published + ' of ' + (data.jobs || []).length + ' Page(s) published.' + (failed.length ? ' Failed: ' + details : ''));
-      } else {
-        show('✅ Successfully created ' + data.jobs.length + ' Page-specific schedule(s) for ' + (files.length || 1) + ' photo(s). Each Page will publish at its own selected time. The photo, caption, and time fields have been cleared. Check Recent schedule history below.');
-      }
-      await loadJobs();
-    } catch(e) {
-      show('⚠️ ' + e.message + ' Your entered data has been kept so you can retry without entering it again.');
-    } finally {
-      schedulingInProgress = false;
-      activeButton.disabled = false;
-      otherButton.disabled = false;
-      activeButton.style.opacity = '';
-      activeButton.style.cursor = '';
-      activeButton.textContent = originalText;
-    }
-  }
-  scheduleBtn.addEventListener('click', submitPost);
-  publishNowBtn.addEventListener('click', submitPost);
-  if (new URLSearchParams(location.search).has('facebook_connected')) { refreshCustomerState(); }
-  if (location.protocol === 'file:') show('Open this site through GitHub Pages after deployment; file:// mode cannot use the secure login session.');
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const API_KEY='fbsp3_phase3_api_url';
+let apiBase=localStorage.getItem(API_KEY)||'';
+let pages=[],selectedBulk=new Set(),bulkFiles=[],slots=[],jobs=[],notes=[];
+const titles={dashboard:'Dashboard',notes:'Notes','bulk-pages':'Bulk Pages','bulk-photos':'Bulk Photos',history:'History',settings:'Settings'};
+function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),4200)}
+function safe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function apiUrl(path){return apiBase.replace(/\/$/,'')+path}
+async function api(path,opts={}){if(!apiBase)throw Error('Phase 3 API URL is not configured yet. Save it in Settings after the dedicated backend is deployed.');const r=await fetch(apiUrl(path),{credentials:'include',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});let data={};try{data=await r.json()}catch{}if(!r.ok)throw Error(data.error||data.message||('Request failed ('+r.status+')'));return data}
+function showView(name){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));$('pageTitle').textContent=titles[name]||name;window.scrollTo({top:0,behavior:'smooth'});if(name==='history')renderHistory();if(name==='bulk-photos')renderSlots()}
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.go)));
+function setConnection(connected){$('connectionPill').textContent=connected?'● Facebook connected':'● Not connected';$('connectionPill').style.color=connected?'#85e8bd':'#b6c4da';$('settingsConnection').textContent=connected?'Connected':'Not connected';$('sideStatus').textContent=connected?'Facebook connection detected. Page access is loaded from the Phase 3 API.':'Setup pending · connect the dedicated Phase 3 API to enable live Facebook actions.'}
+function fileToData(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({imageData:String(r.result||''),imageMimeType:file.type,name:file.name});r.onerror=()=>rej(Error('Could not read '+file.name));r.readAsDataURL(file)})}
+function checkFiles(list,existing=[]){const next=[...existing];for(const f of [...list]){if(!['image/jpeg','image/png'].includes(f.type)){toast('Only JPG and PNG photos are supported.');return existing}if(f.size>6*1024*1024){toast('Each image must be 6 MB or smaller.');return existing}next.push(f)}if(next.length>10){toast('Maximum 10 images per post.');return existing}if(next.reduce((s,f)=>s+f.size,0)>30*1024*1024){toast('Combined image size must be 30 MB or less per post.');return existing}return next}
+function renderPreviews(container,files,onRemove){container.innerHTML='';files.forEach((f,i)=>{const d=document.createElement('div');d.className='preview';const img=document.createElement('img');img.src=URL.createObjectURL(f);img.alt=f.name;const b=document.createElement('button');b.className='btn ghost';b.textContent='Remove';b.type='button';b.addEventListener('click',()=>onRemove(i));d.append(img,b);container.append(d)})}
+$('bulkFiles').addEventListener('change',e=>{bulkFiles=checkFiles(e.target.files,bulkFiles);e.target.value='';renderPreviews($('bulkPreviews'),bulkFiles,i=>{bulkFiles.splice(i,1);renderPreviews($('bulkPreviews'),bulkFiles,removeBulkFile)})});
+function removeBulkFile(i){bulkFiles.splice(i,1);renderPreviews($('bulkPreviews'),bulkFiles,removeBulkFile)}
+function renderPageList(){const root=$('pagesList');if(!pages.length){root.innerHTML='<div class="empty">No Pages loaded. Connect Facebook and refresh Pages when the Phase 3 API is configured.</div>';return}root.innerHTML=pages.map(p=>'<label class="page-choice"><input type="checkbox" data-page="'+safe(p.id)+'" '+(selectedBulk.has(String(p.id))?'checked':'')+'><span class="page-name">'+safe(p.name||p.page_name||'Facebook Page')+'<small>'+safe(p.category||'Facebook Page')+'</small></span><span class="tag">Page</span></label>').join('');root.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>{i.checked?selectedBulk.add(i.dataset.page):selectedBulk.delete(i.dataset.page);$('selectedPagesCount').textContent=selectedBulk.size+' selected';renderPageTimes()}));$('selectedPagesCount').textContent=selectedBulk.size+' selected';const opts=pages.map(p=>'<option value="'+safe(p.id)+'">'+safe(p.name||p.page_name||p.id)+'</option>').join('');$('photoPage').innerHTML='<option value="">Choose a Page</option>'+opts}
+function renderPageTimes(){const chosen=pages.filter(p=>selectedBulk.has(String(p.id)));$('pageTimes').innerHTML=chosen.map(p=>'<div class="field"><label>'+safe(p.name||p.page_name)+' schedule time</label><input type="datetime-local" data-time-page="'+safe(p.id)+'"></div>').join('')}
+async function loadPages(){try{const data=await api('/api/pages');pages=data.pages||[];renderPageList();$('statPages').textContent=pages.length;$('statPagesNote').textContent='Pages available to this account';setConnection(true);toast('Loaded '+pages.length+' Page(s).')}catch(e){toast(e.message);if(!apiBase)$('apiNotice').textContent='Configure the dedicated Phase 3 API in Settings to enable Facebook Page access.'}}
+$('selectAllPages').addEventListener('click',()=>{pages.forEach(p=>selectedBulk.add(String(p.id)));renderPageList()});$('clearPages').addEventListener('click',()=>{selectedBulk.clear();renderPageList()});$('reloadPages').addEventListener('click',loadPages);
+$('applyBulkTime').addEventListener('click',()=>{const v=$('bulkScheduleAt').value;if(!v)return toast('Choose a default date and time first.');document.querySelectorAll('[data-time-page]').forEach(i=>i.value=v);toast('Default time applied to selected Pages.')});
+function getPageSchedules(){return [...selectedBulk].map(id=>{const el=document.querySelector('[data-time-page="'+CSS.escape(id)+'"]');return {pageId:id,scheduledAt:new Date(el?.value||$('bulkScheduleAt').value).toISOString()}})}
+async function submitBulk(mode){try{if(!selectedBulk.size)throw Error('Select at least one Page.');if(!bulkFiles.length&&!$('bulkImageUrl').value.trim())throw Error('Add at least one photo or provide a public HTTPS image URL.');const images=await Promise.all(bulkFiles.map(fileToData));const payload={pageIds:[...selectedBulk],message:$('bulkCaption').value,imageUrl:$('bulkImageUrl').value.trim(),images,isAiContent:false};let data;if(mode==='schedule'){const raw=[...selectedBulk].map(id=>{const el=document.querySelector('[data-time-page="'+CSS.escape(id)+'"]');return {pageId:id,scheduledAt:new Date(el?.value||$('bulkScheduleAt').value).toISOString()}});for(const x of raw)if(!x.scheduledAt||Number.isNaN(Date.parse(x.scheduledAt))||Date.parse(x.scheduledAt)<Date.now()+60000)throw Error('Set a valid future time for every selected Page (at least 1 minute ahead).');data=await api('/api/schedule',{method:'POST',body:JSON.stringify({...payload,pageSchedules:raw})})}else data=await api('/api/publish-now',{method:'POST',body:JSON.stringify(payload)});const returned=data.jobs||[];jobs=[...returned,...jobs];renderStats();renderHistory();toast(mode==='schedule'?'Server accepted '+returned.length+' schedule(s). Check History for confirmed status.':'Publish request finished. Check History for the server-confirmed result.');}catch(e){toast(e.message)}}
+$('bulkPublish').addEventListener('click',()=>submitBulk('now'));$('bulkSchedule').addEventListener('click',()=>submitBulk('schedule'));
+function buildSlots(){const n=Number($('slotCount').value)||1;slots=Array.from({length:n},(_,i)=>slots[i]||{caption:'',files:[],time:''});renderSlots()}
+function renderSlots(){const root=$('slots');if(!root)return;const n=Number($('slotCount').value)||1;if(slots.length!==n)slots=Array.from({length:n},(_,i)=>slots[i]||{caption:'',files:[],time:''});root.innerHTML=slots.map((s,i)=>'<div class="post-slot" data-slot="'+i+'"><div class="slot-head"><b>Post '+(i+1)+'</b><span class="tag">'+s.files.length+'/10 images</span></div><div class="slot-grid"><div><label class="upload" for="slotFiles'+i+'"><span class="upicon">⇧</span><b>Add images for post '+(i+1)+'</b><p>JPG/PNG · max 10 images · 6 MB each</p><input hidden type="file" id="slotFiles'+i+'" data-slot-files="'+i+'" accept="image/jpeg,image/png" multiple></label><div class="slot-images">'+s.files.map(f=>'<img alt="'+safe(f.name)+'" src="'+URL.createObjectURL(f)+'">').join('')+'</div><div class="actions"><button type="button" class="btn ghost" data-slot-clear="'+i+'">Remove all images</button></div></div><div><div class="field"><label>Caption for post '+(i+1)+'</label><textarea data-slot-caption="'+i+'" placeholder="Write a unique caption…">'+safe(s.caption)+'</textarea></div><div class="field" '+($('batchSchedule').value==='schedule'?'':'hidden')+'><label>Schedule date & time</label><input type="datetime-local" data-slot-time="'+i+'" value="'+safe(s.time)+'"></div></div></div></div>').join('');root.querySelectorAll('[data-slot-files]').forEach(inp=>inp.addEventListener('change',e=>{const i=Number(e.target.dataset.slotFiles);slots[i].files=checkFiles(e.target.files,slots[i].files);renderSlots()}));root.querySelectorAll('[data-slot-caption]').forEach(el=>el.addEventListener('input',()=>slots[Number(el.dataset.slotCaption)].caption=el.value));root.querySelectorAll('[data-slot-time]').forEach(el=>el.addEventListener('change',()=>slots[Number(el.dataset.slotTime)].time=el.value));root.querySelectorAll('[data-slot-clear]').forEach(el=>el.addEventListener('click',()=>{slots[Number(el.dataset.slotClear)].files=[];renderSlots()}))}
+$('slotCount').addEventListener('change',buildSlots);$('batchSchedule').addEventListener('change',renderSlots);
+async function submitBatch(mode){try{const pageId=$('photoPage').value;if(!pageId)throw Error('Choose one Facebook Page.');const prepared=[];for(let i=0;i<slots.length;i++){const s=slots[i];if(!s.files.length)throw Error('Post '+(i+1)+' needs at least one image.');if(mode==='schedule'){const t=new Date(s.time);if(!s.time||Number.isNaN(t.getTime())||t.getTime()<Date.now()+60000)throw Error('Set a valid future schedule time for post '+(i+1)+'.')}prepared.push({message:s.caption,images:await Promise.all(s.files.map(fileToData)),scheduledAt:mode==='schedule'?new Date(s.time).toISOString():null})}const data=await api('/api/bulk-photos',{method:'POST',body:JSON.stringify({pageId,posts:prepared,mode})});jobs=[...(data.jobs||[]),...jobs];renderStats();renderHistory();toast('Batch request completed. Review History for confirmed outcomes.')}catch(e){toast(e.message)}}
+$('batchPublish').addEventListener('click',()=>submitBatch('now'));$('batchScheduleBtn').addEventListener('click',()=>submitBatch('schedule'));$('clearBatch').addEventListener('click',()=>{slots=Array.from({length:Number($('slotCount').value)||1},()=>({caption:'',files:[],time:''}));renderSlots()});
+function statusOf(j){const s=String(j.status||'draft').toLowerCase();return ['published','scheduled','failed'].includes(s)?s:'draft'}
+function jobName(j){return j.page_name||j.pageName||pages.find(p=>String(p.id)===String(j.page_id||j.pageId))?.name||'Facebook Page'}
+function jobCaption(j){return j.message||j.caption||'(No caption)'}
+function jobTime(j){const t=j.published_at||j.scheduled_at||j.created_at||j.scheduledAt;return t?new Date(t).toLocaleString():'Time unavailable'}
+function renderStats(){const all=jobs; $('statPublished').textContent=all.filter(j=>statusOf(j)==='published').length;$('statScheduled').textContent=all.filter(j=>statusOf(j)==='scheduled').length;$('statFailed').textContent=all.filter(j=>statusOf(j)==='failed').length;const recent=all.slice(0,4);$('dashboardRecent').innerHTML=recent.length?recent.map(j=>'<div class="rowitem"><div class="thumb">▧</div><div class="rowbody"><b>'+safe(jobName(j))+'</b><small>'+safe(jobCaption(j).slice(0,100))+' · '+safe(jobTime(j))+'</small></div><span class="tag '+statusOf(j)+'">'+safe(statusOf(j))+'</span></div>').join(''):'<div class="empty">No activity yet. Published and scheduled jobs will appear here after the API is connected.</div>'}
+function renderHistory(){const filter=$('historyFilter').value,query=$('historySearch').value.toLowerCase();const filtered=jobs.filter(j=>(filter==='all'||statusOf(j)===filter)&&(jobName(j)+' '+jobCaption(j)).toLowerCase().includes(query));$('historyList').innerHTML=filtered.length?filtered.map(j=>'<div class="rowitem"><div class="thumb">▧</div><div class="rowbody"><b>'+safe(jobName(j))+'</b><small>'+safe(jobCaption(j))+'</small><small>'+safe(j.type||'Photo post')+' · '+safe(jobTime(j))+(j.error?' · '+safe(j.error):'')+'</small>'+(j.post_url?'<small><a style="color:#8fb6ff" target="_blank" rel="noopener" href="'+safe(j.post_url)+'">Open Facebook post</a></small>':'')+'</div><span class="tag '+statusOf(j)+'">'+safe(statusOf(j))+'</span></div>').join(''):'<div class="empty">No matching history records.</div>'}
+$('historyFilter').addEventListener('change',renderHistory);$('historySearch').addEventListener('input',renderHistory);$('refreshHistory').addEventListener('click',async()=>{try{const d=await api('/api/jobs');jobs=d.jobs||[];renderHistory();renderStats();toast('History refreshed from server.')}catch(e){toast(e.message)}});
+$('clearHistory').addEventListener('click',async()=>{if(!confirm('Clear the app history records? This will not delete posts from Facebook.'))return;try{await api('/api/history/clear',{method:'POST',body:'{}'});jobs=[];renderHistory();renderStats();toast('App history cleared. Facebook posts were not deleted.')}catch(e){toast('History clear is not enabled on the Phase 3 API yet. No Facebook posts were deleted. '+e.message)}});
+$('saveNote').addEventListener('click',()=>{const title=$('noteTitle').value.trim(),body=$('noteBody').value.trim();if(!title&&!body)return toast('Enter a title or note first.');notes.unshift({id:Date.now(),title:title||'Untitled note',body,created:new Date().toLocaleString()});renderNotes();$('noteTitle').value='';$('noteBody').value='';toast('Note saved in this browser.')});$('clearNoteForm').addEventListener('click',()=>{$('noteTitle').value='';$('noteBody').value=''});function renderNotes(){$('noteCount').textContent=notes.length+' notes';$('notesList').innerHTML=notes.length?notes.map(n=>'<div class="rowitem"><div class="thumb">▤</div><div class="rowbody"><b>'+safe(n.title)+'</b><small>'+safe(n.body)+'</small><small>'+safe(n.created)+'</small></div><button class="btn ghost" data-delete-note="'+n.id+'">Delete</button></div>').join(''):'<div class="empty">No notes yet. Add a note above.</div>';document.querySelectorAll('[data-delete-note]').forEach(b=>b.addEventListener('click',()=>{notes=notes.filter(n=>n.id!==Number(b.dataset.deleteNote));renderNotes()}))}
+$('saveApi').addEventListener('click',()=>{const v=$('apiUrl').value.trim().replace(/\/$/,'');if(v&&!/^https:\/\//i.test(v))return toast('Use the HTTPS URL of the dedicated Phase 3 API.');apiBase=v;localStorage.setItem(API_KEY,v);$('settingsMessage').className='notice blue';$('settingsMessage').textContent=v?'API URL saved in this browser. Click Check API health before connecting.':'API URL cleared. Live actions remain disabled.';toast('Settings saved in this browser.')});
+$('checkApi').addEventListener('click',async()=>{try{const d=await api('/health');$('settingsMessage').className='notice green';$('settingsMessage').textContent='API health check succeeded. '+JSON.stringify(d);toast('Phase 3 API is reachable.')}catch(e){$('settingsMessage').className='notice red';$('settingsMessage').textContent='Health check failed: '+e.message;toast(e.message)}});
+$('connectFacebook').addEventListener('click',()=>{if(!apiBase)return toast('Set the dedicated Phase 3 API URL first.');window.location.assign(apiUrl('/auth/facebook'))});
+$('signOut').addEventListener('click',async()=>{try{await api('/api/customer/logout',{method:'POST',body:'{}'});setConnection(false);toast('Signed out.')}catch(e){toast(e.message)}});
+async function init(){if(apiBase)$('apiUrl').value=apiBase;buildSlots();renderStats();renderHistory();renderNotes();if(apiBase){try{await api('/health');$('settingsMessage').className='notice green';$('settingsMessage').textContent='Phase 3 API is reachable. Connect Facebook to load Pages.';try{const s=await api('/auth/status');setConnection(Boolean(s.connected));if(s.connected)await loadPages()}catch{}}catch(e){$('settingsMessage').className='notice red';$('settingsMessage').textContent='API is not reachable yet: '+e.message}}}
+init();
 })();
-</script>
-</body>
-</html>
+</script></body></html>
