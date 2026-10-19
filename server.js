@@ -364,6 +364,71 @@ app.get('/api/pages', requireAuth, async (req, res) => {
   }
 });
 
+app.post('/api/history/clear', requireTrustedOrigin, requireAuth, (req, res) => {
+  // Clear only terminal app-history rows; never delete scheduled jobs or Facebook posts.
+  const result = db.prepare("DELETE FROM jobs WHERE customer_id=? AND user_id=? AND status IN ('published','failed')").run(req.session.customerAccount.id, req.session.fbUser.id);
+  res.json({ ok: true, cleared: result.changes, note: 'Only published/failed app history records were cleared. Facebook posts were not deleted.' });
+});
+
+app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res) => {
+  const { pageId, posts, mode = 'now' } = req.body || {};
+  if (typeof pageId !== 'string' && typeof pageId !== 'number') return res.status(400).json({ error: 'Choose one Facebook Page.' });
+  if (!Array.isArray(posts) || posts.length < 1 || posts.length > 10) return res.status(400).json({ error: 'A photo batch must contain between 1 and 10 separate posts.' });
+  if (!['now','schedule'].includes(mode)) return res.status(400).json({ error: 'Choose publish now or schedule.' });
+  const page = db.prepare('SELECT page_id,name FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(req.session.customerAccount.id, req.session.fbUser.id, String(pageId));
+  if (!page) return res.status(400).json({ error: 'Selected Page was not found for this Facebook account. Refresh Pages and try again.' });
+  const prepared = [];
+  for (let index = 0; index < posts.length; index++) {
+    const item = posts[index] || {};
+    if (!Array.isArray(item.images) || item.images.length < 1 || item.images.length > 10) return res.status(400).json({ error: 'Post ' + (index + 1) + ' must contain 1 to 10 images.' });
+    let bytes = 0;
+    const photos = [];
+    for (const photo of item.images) {
+      const match = typeof photo?.imageData === 'string' ? photo.imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/) : null;
+      if (!match) return res.status(400).json({ error: 'Post ' + (index + 1) + ' contains an invalid JPG/PNG image.' });
+      const buffer = Buffer.from(match[2], 'base64');
+      if (!buffer.length || buffer.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'Each image must be 6 MB or smaller.' });
+      if (photo.imageMimeType && photo.imageMimeType !== match[1]) return res.status(400).json({ error: 'Image type mismatch in post ' + (index + 1) + '.' });
+      bytes += buffer.length;
+      photos.push({ buffer, mime: match[1] });
+    }
+    if (bytes > 30 * 1024 * 1024) return res.status(400).json({ error: 'Images in each post must total 30 MB or less.' });
+    let scheduledAt = now();
+    if (mode === 'schedule') {
+      const date = new Date(item.scheduledAt);
+      if (!item.scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 15000) return res.status(400).json({ error: 'Set a valid future time for every post (at least 15 seconds ahead).' });
+      scheduledAt = date.toISOString();
+    }
+    prepared.push({ message: String(item.message || ''), photos, scheduledAt });
+  }
+  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at,customer_id) VALUES(?,?,?,?,?,'',?,?,?,'scheduled',0,?,?,?)");
+  const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
+  const created = [];
+  try {
+    const tx = db.transaction(() => {
+      for (const item of prepared) {
+        const id = crypto.randomUUID();
+        const first = item.photos[0];
+        insert.run(id, req.session.fbUser.id, String(page.page_id), page.name, item.message, first.buffer, first.mime, item.scheduledAt, now(), now(), req.session.customerAccount.id);
+        item.photos.forEach((photo, position) => insertPhoto.run(id, position, photo.buffer, photo.mime));
+        created.push(id);
+      }
+    });
+    tx();
+    if (mode === 'now') {
+      for (let attempt = 0; attempt < Math.ceil(created.length / 10) + 2; attempt++) {
+        await publishDueJobs();
+        const remaining = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE id IN (" + created.map(() => '?').join(',') + ") AND status IN ('scheduled','publishing') AND scheduled_at<=?").get(...created, now()).count;
+        if (!remaining) break;
+      }
+    }
+    const rows = db.prepare("SELECT id,page_id,page_name,message,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE id IN (" + created.map(() => '?').join(',') + ") ORDER BY created_at").all(...created);
+    res.status(201).json({ jobs: rows, requestedCount: prepared.length, createdCount: rows.length });
+  } catch (e) {
+    res.status(400).json({ error: String(e.message || e) });
+  }
+});
+
 app.get('/api/jobs', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE customer_id=? AND user_id=? ORDER BY scheduled_at DESC LIMIT 500').all(req.session.customerAccount.id, req.session.fbUser.id);
   res.json({ jobs: rows });
