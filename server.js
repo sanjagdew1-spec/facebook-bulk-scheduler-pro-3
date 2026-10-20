@@ -578,6 +578,8 @@ async function publishDueJobs() {
           body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
           body.set('published', 'false');
           body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
+          body.set('created_with_ai', job.is_ai_content ? 'true' : 'false');
+          body.set('edited_with_ai', 'false');
           body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
           body.set('access_token', page.access_token);
           const uploadResponse = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
@@ -585,7 +587,7 @@ async function publishDueJobs() {
           if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(describeMetaError(uploadData, uploadResponse.status));
           mediaIds.push(String(uploadData.id));
         }
-        const feedBody = new URLSearchParams({ message: job.message || '', access_token: page.access_token, is_gen_ai: job.is_ai_content ? 'true' : 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE' });
+        const feedBody = new URLSearchParams({ message: job.message || '', access_token: page.access_token, is_gen_ai: job.is_ai_content ? 'true' : 'false', created_with_ai: job.is_ai_content ? 'true' : 'false', edited_with_ai: 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE' });
         mediaIds.forEach((mediaId,index) => feedBody.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
         response = await fetch(graph(job.page_id + '/feed'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: feedBody });
       } else if (photos.length === 1) {
@@ -594,11 +596,13 @@ async function publishDueJobs() {
         body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
         body.set('caption', job.message || '');
         body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
+        body.set('created_with_ai', job.is_ai_content ? 'true' : 'false');
+        body.set('edited_with_ai', 'false');
         body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
         body.set('access_token', page.access_token);
         response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
       } else {
-        const body = new URLSearchParams({ url: job.image_url, caption: job.message, is_gen_ai: job.is_ai_content ? 'true' : 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE', access_token: page.access_token });
+        const body = new URLSearchParams({ url: job.image_url, caption: job.message, is_gen_ai: job.is_ai_content ? 'true' : 'false', created_with_ai: job.is_ai_content ? 'true' : 'false', edited_with_ai: 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE', access_token: page.access_token });
         response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
       }
       const data = await response.json().catch(() => ({}));
