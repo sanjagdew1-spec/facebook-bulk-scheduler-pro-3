@@ -400,9 +400,9 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res)
       if (!item.scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 15000) return res.status(400).json({ error: 'Set a valid future time for every post (at least 15 seconds ahead).' });
       scheduledAt = date.toISOString();
     }
-    prepared.push({ message: String(item.message || ''), photos, scheduledAt });
+    prepared.push({ message: String(item.message || ''), photos, scheduledAt, isAiContent: Boolean(item.isAiContent) });
   }
-  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at,customer_id) VALUES(?,?,?,?,?,'',?,?,?,'scheduled',0,?,?,?)");
+  const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at,customer_id) VALUES(?,?,?,?,?,'',?,?,?,'scheduled',?,?,?,?)");
   const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
   const created = [];
   try {
@@ -410,7 +410,7 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res)
       for (const item of prepared) {
         const id = crypto.randomUUID();
         const first = item.photos[0];
-        insert.run(id, req.session.fbUser.id, String(page.page_id), page.name, item.message, first.buffer, first.mime, item.scheduledAt, now(), now(), req.session.customerAccount.id);
+        insert.run(id, req.session.fbUser.id, String(page.page_id), page.name, item.message, first.buffer, first.mime, item.scheduledAt, item.isAiContent ? 1 : 0, now(), now(), req.session.customerAccount.id);
         item.photos.forEach((photo, position) => insertPhoto.run(id, position, photo.buffer, photo.mime));
         created.push(id);
       }
