@@ -585,7 +585,7 @@ async function publishDueJobs() {
           if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(describeMetaError(uploadData, uploadResponse.status));
           mediaIds.push(String(uploadData.id));
         }
-        const feedBody = new URLSearchParams({ message: job.message || '', access_token: page.access_token });
+        const feedBody = new URLSearchParams({ message: job.message || '', access_token: page.access_token, is_gen_ai: job.is_ai_content ? 'true' : 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE' });
         mediaIds.forEach((mediaId,index) => feedBody.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
         response = await fetch(graph(job.page_id + '/feed'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: feedBody });
       } else if (photos.length === 1) {
