@@ -48,7 +48,7 @@
 <article class="guide"><div class="guide-art"><div class="guide-ui"><div class="line short"></div><div class="line"></div><div class="line"></div><div class="line short"></div><div class="fakebtn"></div></div></div><div class="guide-copy"><div class="guide-label">Guide 03 · Multiple Pages</div><h3>Publish or schedule with Bulk Pages</h3><ol><li>Open Bulk Pages and select target Pages.</li><li>Add your caption and photos.</li><li>Choose Publish Now or Schedule.</li><li>Check History to review the job status.</li></ol></div></article>
 </div></div></section>
 <section class="section" id="plans"><div class="wrap"><div class="section-head"><div class="eyebrow">Simple plans</div><h2>Choose the plan that fits your Pages.</h2><p>Prices and limits below are the planned Phase 4 offer. Account entitlements and payment activation must be connected and verified before these plans can be sold live.</p></div>
-<div class="plans" id="planCards"><article class="plan"><h3>Loading plans…</h3><p class="muted">Fetching the current plan catalog.</p></article></div>
+<div class="plans" id="planCards"><article class="plan"><h3>Loading plans…</h3><p class="muted">Fetching the current plan catalog.</p></article></div><p id="planCatalogStatus" class="muted" role="status">Loading live plan catalog…</p>
 <div class="rules"><b>Plan rules:</b> one multi-photo post counts as one post. Bulk Pages and Bulk Photos share the same daily usage counter. Unused daily posts do not roll over. The allowed schedule date must fall within both the plan's maximum scheduling window and the active subscription period. After expiry, scheduled posts must not publish unless a valid plan is active.</div>
 </div></section>
 <section class="section alt" id="signup"><div class="wrap"><div class="section-head"><div class="eyebrow">Get started</div><h2>Start with your chosen plan.</h2><p>Select a plan above to prefill this form. Email verification and plan activation need the production email/payment services configured before live signup can be enabled.</p></div>
@@ -76,7 +76,7 @@ let planData=Object.create(null);
 const initialPlan=new URLSearchParams(location.search).get('plan')||'Free Demo';
 const select=document.getElementById('planChoice'),name=document.getElementById('selectedPlanName'),summary=document.getElementById('selectedPlanSummary'),planCards=document.getElementById('planCards');
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function renderPlanCatalog(items){
+function renderPlanCatalog(items,liveCatalog){
 planData=Object.create(null);const previous=select.value;select.innerHTML='';
 items.forEach(p=>{
 const price=Number(p.price)||0,days=Math.max(1,Number(p.days)||30),pages=Math.max(1,Number(p.pages)||1),posts=Math.max(0,Number(p.posts)||0),windowDays=Math.max(0,Number(p.schedule_window_days??p.scheduleWindowDays)||0),batch=Math.max(1,Number(p.slots_per_batch??p.slotsPerBatch)||10);
@@ -86,6 +86,7 @@ const summaryText='₹'+price+' / '+period+' · up to '+pages+' Pages · '+posts
 planData[p.name]={summary:summaryText};
 const option=document.createElement('option');option.value=p.name;option.textContent=p.name;select.appendChild(option);
 });
+document.getElementById('planCatalogStatus').textContent=liveCatalog?'Live plans loaded from the Owner plan catalog.':'Live catalog unavailable; showing the standard example plans.';
 planCards.innerHTML=items.map((p,i)=>{
 const price=Number(p.price)||0,days=Math.max(1,Number(p.days)||30),pages=Math.max(1,Number(p.pages)||1),posts=Math.max(0,Number(p.posts)||0),windowDays=Math.max(0,Number(p.schedule_window_days??p.scheduleWindowDays)||0),batch=Math.max(1,Number(p.slots_per_batch??p.slotsPerBatch)||10);
 const period=price===0?days+' days':(days===30?'month':days+' days');
@@ -98,9 +99,9 @@ const chosen=items.some(p=>p.name===initialPlan)?initialPlan:(items.some(p=>p.na
 setPlan(chosen);
 }
 async function loadPlanCatalog(){
-let items=fallbackPlans;
-try{const response=await fetch('https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com/public/plans',{cache:'no-store'});if(!response.ok)throw new Error('Plan catalog unavailable');const data=await response.json();if(Array.isArray(data)&&data.length)items=data;}catch{}
-renderPlanCatalog(items);
+let items=fallbackPlans,liveCatalog=false;
+try{const response=await fetch('https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com/public/plans',{cache:'no-store'});if(!response.ok)throw new Error('Plan catalog unavailable');const data=await response.json();if(Array.isArray(data)&&data.length){items=data;liveCatalog=true;}}catch{}
+renderPlanCatalog(items,liveCatalog);
 }
 function setView(view,updateUrl=true){
 if(!['details','manual','plans','signup'].includes(view))view='details';
