@@ -18,7 +18,7 @@ main{min-width:0}.topbar{height:74px;background:#fff;border-bottom:1px solid var
  <div class="login-card">
   <div class="brand-mark">P5</div><div class="eyebrow">Private administration</div>
   <h1>Owner Control Center</h1><p class="muted">Manage plans, creators, developer access and customer entitlements from one private workspace.</p>
-  <div class="field"><label for="ownerSlot">Password slot</label><select id="ownerSlot"><option value="A">1</option><option value="B">2</option><option value="C">3</option><option value="D">4</option></select></div>
+  <div class="field"><label for="ownerSlot">Your random password number</label><select id="ownerSlot" disabled><option value="A">1</option><option value="B">2</option><option value="C">3</option><option value="D">4</option></select></div>
   <div class="field"><label for="ownerPassword">10-digit password</label><input id="ownerPassword" type="password" inputmode="numeric" minlength="10" maxlength="10" pattern="[0-9]{10}" placeholder="Enter the password for selected slot" autocomplete="current-password"></div>
   <button class="btn block" id="ownerLogin">Sign in securely</button><button class="btn ghost block" id="previewDemo" style="margin-top:9px">Preview panel with sample data</button>
   <div class="hint">The number is selected randomly when you are signed out. Enter only the 10-digit password assigned to that number. The selected number stays unchanged during your signed-in session and changes after you sign out. Five failed attempts temporarily lock that slot from this network.</div>
