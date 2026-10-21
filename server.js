@@ -340,8 +340,10 @@ function enforcePlanLimits(req, res, { batchCount = 1, targetCount = 0, pageIds 
     const time = value instanceof Date ? value.getTime() : Date.parse(value);
     if (!Number.isFinite(time)) { res.status(400).json({ error: 'One or more schedule times are invalid.' }); return false; }
     if (time < Date.now() - 60000 || time > expiry) { res.status(403).json({ error: 'Your ' + access.planName + ' plan does not allow publishing beyond its active subscription period.' }); return false; }
-    if ((windowDays <= 0 && time > Date.now() + 60000) || (windowDays > 0 && time > Date.now() + windowDays * 86400000)) { res.status(403).json({ error: 'Your ' + access.planName + ' plan does not allow scheduling that far ahead.' }); return false; }
-    const day = new Date(time); day.setUTCHours(0,0,0,0); const key = day.toISOString();
+    const day = new Date(time); day.setUTCHours(0,0,0,0);
+    const tomorrow = new Date(day.getTime()+86400000).getTime();
+    if ((windowDays <= 0 && time >= tomorrow) || (windowDays > 0 && time > Date.now() + windowDays * 86400000)) { res.status(403).json({ error: 'Your ' + access.planName + ' plan does not allow scheduling that far ahead.' }); return false; }
+    const key = day.toISOString();
     dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
   }
   const dailyLimit = Number(limits.postsPerDay);
