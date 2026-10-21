@@ -565,7 +565,7 @@ app.get('/internal/security/customer', (req, res) => {
   if (!email.endsWith('@gmail.com') || email.indexOf('@') <= 0 || email.includes(' ')) return res.status(400).json({ error: 'Enter a valid customer Gmail.' });
   const customer = db.prepare('SELECT id,email_normalized,username,status,created_at FROM customer_accounts WHERE email_normalized=?').get(email);
   if (!customer) return res.status(404).json({ error: 'No scheduler account was found for this email.' });
-  const jobs = db.prepare("SELECT id,page_name,message,scheduled_at,status,created_at,image_data,image_mime_type FROM jobs WHERE customer_id=? AND status='scheduled' ORDER BY scheduled_at ASC").all(customer.id);
+  const jobs = db.prepare("SELECT id,page_name,message,scheduled_at,status,created_at,image_data,image_mime_type FROM jobs WHERE status='scheduled' AND (customer_id=? OR (customer_id IS NULL AND user_id IN (SELECT facebook_user_id FROM customer_facebook_connections WHERE customer_id=?))) ORDER BY scheduled_at ASC").all(customer.id, customer.id);
   const getImages = db.prepare('SELECT position,image_data,image_mime_type FROM job_images WHERE job_id=? ORDER BY position ASC');
   const result = jobs.map(job => {
     const images = getImages.all(job.id).map(photo => ({ position: photo.position + 1, mimeType: photo.image_mime_type, dataBase64: Buffer.from(photo.image_data).toString('base64') }));
@@ -582,7 +582,7 @@ app.post('/internal/security/remove-customer', (req, res) => {
   const customer = db.prepare('SELECT id,email_normalized FROM customer_accounts WHERE email_normalized=?').get(email);
   if (!customer) return res.status(404).json({ error: 'No scheduler account was found for this email.' });
   const removeAccount = db.transaction(() => {
-    const scheduledIds = db.prepare("SELECT id FROM jobs WHERE customer_id=? AND status IN ('scheduled','publishing')").all(customer.id).map(row => row.id);
+    const scheduledIds = db.prepare("SELECT id FROM jobs WHERE status IN ('scheduled','publishing') AND (customer_id=? OR (customer_id IS NULL AND user_id IN (SELECT facebook_user_id FROM customer_facebook_connections WHERE customer_id=?)))").all(customer.id, customer.id).map(row => row.id);
     if (scheduledIds.length) {
       const marks = scheduledIds.map(() => '?').join(',');
       db.prepare('DELETE FROM job_images WHERE job_id IN (' + marks + ')').run(...scheduledIds);
