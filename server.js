@@ -550,6 +550,55 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, requirePlanAcces
   }
 });
 
+
+/* Private Owner Security & Content Review bridge. Never expose this data to customer-facing routes. */
+function securityBridgeAuthorized(req) {
+  const expected = String(PHASE5_ACCESS_SYNC_SECRET || '');
+  const provided = String(req.headers['x-phase5-access-secret'] || '');
+  if (!expected || !provided) return false;
+  const a = Buffer.from(expected), b = Buffer.from(provided);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+app.get('/internal/security/customer', (req, res) => {
+  if (!securityBridgeAuthorized(req)) return res.status(401).json({ error: 'Owner security bridge not authorized.' });
+  const email = String(req.query.email || '').trim().toLowerCase();
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid customer Gmail.' });
+  const customer = db.prepare('SELECT id,email_normalized,username,status,created_at FROM customer_accounts WHERE email_normalized=?').get(email);
+  if (!customer) return res.status(404).json({ error: 'No scheduler account was found for this email.' });
+  const jobs = db.prepare("SELECT id,page_name,message,scheduled_at,status,created_at,image_data,image_mime_type FROM jobs WHERE customer_id=? AND status='scheduled' ORDER BY scheduled_at ASC").all(customer.id);
+  const getImages = db.prepare('SELECT position,image_data,image_mime_type FROM job_images WHERE job_id=? ORDER BY position ASC');
+  const result = jobs.map(job => {
+    const images = getImages.all(job.id).map(photo => ({ position: photo.position + 1, mimeType: photo.image_mime_type, dataBase64: Buffer.from(photo.image_data).toString('base64') }));
+    if (!images.length && job.image_data) images.push({ position: 1, mimeType: job.image_mime_type || 'image/jpeg', dataBase64: Buffer.from(job.image_data).toString('base64') });
+    return { id: job.id, pageName: job.page_name, caption: job.message || '', scheduledAt: job.scheduled_at, status: job.status, createdAt: job.created_at, images };
+  });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ customer: { id: customer.id, email: customer.email_normalized, username: customer.username || '', status: customer.status, createdAt: customer.created_at }, scheduledPostCount: result.length, photoCount: result.reduce((n, job) => n + job.images.length, 0), jobs: result });
+});
+app.post('/internal/security/remove-customer', (req, res) => {
+  if (!securityBridgeAuthorized(req)) return res.status(401).json({ error: 'Owner security bridge not authorized.' });
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid customer Gmail.' });
+  const customer = db.prepare('SELECT id,email_normalized FROM customer_accounts WHERE email_normalized=?').get(email);
+  if (!customer) return res.status(404).json({ error: 'No scheduler account was found for this email.' });
+  const removeAccount = db.transaction(() => {
+    const scheduledIds = db.prepare("SELECT id FROM jobs WHERE customer_id=? AND status IN ('scheduled','publishing')").all(customer.id).map(row => row.id);
+    if (scheduledIds.length) {
+      const marks = scheduledIds.map(() => '?').join(',');
+      db.prepare('DELETE FROM job_images WHERE job_id IN (' + marks + ')').run(...scheduledIds);
+      db.prepare('DELETE FROM jobs WHERE id IN (' + marks + ')').run(...scheduledIds);
+    }
+    db.prepare('DELETE FROM customer_facebook_connections WHERE customer_id=?').run(customer.id);
+    db.prepare('DELETE FROM customer_pages WHERE customer_id=?').run(customer.id);
+    db.prepare('DELETE FROM pages WHERE customer_id=?').run(customer.id);
+    db.prepare('DELETE FROM customer_accounts WHERE id=?').run(customer.id);
+    return scheduledIds.length;
+  });
+  const deletedScheduledPosts = removeAccount();
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ ok: true, email: customer.email_normalized, deletedScheduledPosts, accountRemoved: true, refund: false });
+});
+
 app.get('/api/jobs', requireAuth, (req, res) => {
   const rows = db.prepare('SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE customer_id=? AND user_id=? ORDER BY scheduled_at DESC LIMIT 500').all(req.session.customerAccount.id, req.session.fbUser.id);
   res.json({ jobs: rows });
