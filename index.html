@@ -67,10 +67,10 @@
 <script>
 (()=>{
 const fallbackPlans=[
-{id:'free',name:'Free Demo',days:7,posts:10,pages:10,price:0,schedule_window_days:0,slots_per_batch:10},
-{id:'starter',name:'Starter / Standard',days:28,posts:50,pages:10,price:299,schedule_window_days:1,slots_per_batch:10},
-{id:'pro',name:'Pro',days:28,posts:100,pages:25,price:699,schedule_window_days:3,slots_per_batch:50},
-{id:'business',name:'Business',days:28,posts:200,pages:50,price:1499,schedule_window_days:7,slots_per_batch:100}
+{id:'free',name:'Free Demo',days:7,posts:10,total_posts:70,pages:10,price:0,schedule_window_days:0,slots_per_batch:10},
+{id:'starter',name:'Starter / Standard',days:28,posts:50,total_posts:1400,pages:10,price:299,schedule_window_days:1,slots_per_batch:10},
+{id:'pro',name:'Pro',days:28,posts:100,total_posts:2800,pages:25,price:699,schedule_window_days:3,slots_per_batch:50},
+{id:'business',name:'Business',days:28,posts:200,total_posts:5600,pages:50,price:1499,schedule_window_days:7,slots_per_batch:100}
 ];
 let planData=Object.create(null);
 const initialPlan=new URLSearchParams(location.search).get('plan')||'Free Demo';
@@ -79,16 +79,16 @@ function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;',
 function renderPlanCatalog(items,liveCatalog){
 planData=Object.create(null);const previous=select.value;select.innerHTML='';
 items.forEach(p=>{
-const price=Number(p.price)||0,days=Math.max(1,Number(p.days)||30),pages=Math.max(1,Number(p.pages)||1),posts=Math.max(0,Number(p.posts)||0),windowDays=Math.max(0,Number(p.schedule_window_days??p.scheduleWindowDays)||0),batch=Math.max(1,Number(p.slots_per_batch??p.slotsPerBatch)||10);
+const price=Number(p.price)||0,days=Math.max(1,Number(p.days)||30),pages=Math.max(1,Number(p.pages)||1),posts=Math.max(0,Number(p.posts)||0),totalPosts=Math.max(0,Number(p.total_posts??p.totalPosts??(posts*days))||0),windowDays=Math.max(0,Number(p.schedule_window_days??p.scheduleWindowDays)||0),batch=Math.max(1,Number(p.slots_per_batch??p.slotsPerBatch)||10);
 const period=price===0?days+' days':(days===30?'month':days+' days');
 const schedule=windowDays===0?'Schedule same day only':'Schedule up to '+windowDays+' day'+(windowDays===1?'':'s')+' ahead';
-const summaryText='₹'+price+' / '+period+' · up to '+pages+' Pages · '+posts+' posts per day · '+(windowDays===0?'same-day scheduling':'schedule up to '+windowDays+' day'+(windowDays===1?'':'s')+' ahead')+'.';
+const summaryText='₹'+price+' / '+period+' · up to '+pages+' Pages · '+posts+' posts per day · '+totalPosts+' total posts · '+(windowDays===0?'same-day scheduling':'schedule up to '+windowDays+' day'+(windowDays===1?'':'s')+' ahead')+'.';
 planData[p.name]={summary:summaryText};
 const option=document.createElement('option');option.value=p.name;option.textContent=p.name;select.appendChild(option);
 });
 document.getElementById('planCatalogStatus').textContent=liveCatalog?'Live plans loaded from the Owner plan catalog.':'Live catalog unavailable; showing the standard example plans.';
 planCards.innerHTML=items.map((p,i)=>{
-const price=Number(p.price)||0,days=Math.max(1,Number(p.days)||30),pages=Math.max(1,Number(p.pages)||1),posts=Math.max(0,Number(p.posts)||0),windowDays=Math.max(0,Number(p.schedule_window_days??p.scheduleWindowDays)||0),batch=Math.max(1,Number(p.slots_per_batch??p.slotsPerBatch)||10);
+const price=Number(p.price)||0,days=Math.max(1,Number(p.days)||30),pages=Math.max(1,Number(p.pages)||1),posts=Math.max(0,Number(p.posts)||0),totalPosts=Math.max(0,Number(p.total_posts??p.totalPosts??(posts*days))||0),windowDays=Math.max(0,Number(p.schedule_window_days??p.scheduleWindowDays)||0),batch=Math.max(1,Number(p.slots_per_batch??p.slotsPerBatch)||10);
 const period=price===0?days+' days':(days===30?'month':days+' days');
 const schedule=windowDays===0?'Schedule same day only':'Schedule up to '+windowDays+' day'+(windowDays===1?'':'s')+' ahead';
 const featured=p.id==='pro';
