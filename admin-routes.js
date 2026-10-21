@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 const PLAN_SEEDS = [
   { key: 'free_demo', name: 'Free Demo', duration_days: 7, page_limit: 10, daily_post_limit: 10, schedule_window_days: 0, slots_per_batch: 10, price_inr: 0 },
-  { key: 'starter', name: 'Starter / Standard', duration_days: 30, page_limit: 10, daily_post_limit: 50, schedule_window_days: 1, slots_per_batch: 10, price_inr: 299 },
+  { key: 'starter', name: 'Starter / Standard', duration_days: 28, page_limit: 10, daily_post_limit: 50, schedule_window_days: 1, slots_per_batch: 10, price_inr: 299 },
   { key: 'pro', name: 'Pro', duration_days: 28, page_limit: 25, daily_post_limit: 100, schedule_window_days: 3, slots_per_batch: 50, price_inr: 699 },
   { key: 'business', name: 'Business', duration_days: 28, page_limit: 50, daily_post_limit: 200, schedule_window_days: 7, slots_per_batch: 100, price_inr: 1499 }
 ];
@@ -54,8 +54,9 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
   const insertPlan = db.prepare(`INSERT OR IGNORE INTO plan_catalog(plan_key,name,duration_days,page_limit,daily_post_limit,schedule_window_days,slots_per_batch,price_inr,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`);
   for (const plan of PLAN_SEEDS) insertPlan.run(plan.key, plan.name, plan.duration_days, plan.page_limit, plan.daily_post_limit, plan.schedule_window_days, plan.slots_per_batch, plan.price_inr, isoNow());
   // Update default templates only; already-purchased customer entitlements keep their saved end dates and limits.
-  db.prepare("UPDATE plan_catalog SET duration_days=28,slots_per_batch=50,updated_at=? WHERE plan_key='pro' AND duration_days=30 AND page_limit=25 AND daily_post_limit=100 AND price_inr=699 AND slots_per_batch=10").run(isoNow());
-  db.prepare("UPDATE plan_catalog SET duration_days=28,slots_per_batch=100,updated_at=? WHERE plan_key='business' AND duration_days=30 AND page_limit=50 AND daily_post_limit=200 AND price_inr=1499 AND slots_per_batch=10").run(isoNow());
+  db.prepare("UPDATE plan_catalog SET duration_days=28,updated_at=? WHERE plan_key IN ('starter','pro','business') AND duration_days<>28").run(isoNow());
+  db.prepare("UPDATE plan_catalog SET slots_per_batch=50,updated_at=? WHERE plan_key='pro' AND slots_per_batch<>50").run(isoNow());
+  db.prepare("UPDATE plan_catalog SET slots_per_batch=100,updated_at=? WHERE plan_key='business' AND slots_per_batch<>100").run(isoNow());
 
   const adminEmails = new Set(String(process.env.OWNER_ADMIN_EMAILS || '').split(',').map(cleanEmail).filter(Boolean));
   const adminIds = new Set(String(process.env.OWNER_ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
