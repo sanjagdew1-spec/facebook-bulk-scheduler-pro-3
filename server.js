@@ -257,7 +257,12 @@ app.get('/auth/facebook/callback', async (req, res) => {
       .run(crypto.randomUUID(), customerId, facebookUserId, me.name || 'Facebook user', encryptToken(tokenData.access_token), connectedAt, connectedAt);
     req.session.fbUser = { id: facebookUserId, name: me.name || 'Facebook user', customerId };
     await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
-    res.redirect(`${FRONTEND_SUCCESS_URL}?facebook_connected=1`);
+    // Preserve the configured frontend query (for example ?open=software) instead of appending a second '?'.
+    // Otherwise the workspace route stops matching after Facebook OAuth and users land on the public plans page.
+    const successUrl = new URL(FRONTEND_SUCCESS_URL);
+    if (!successUrl.searchParams.has('open')) successUrl.searchParams.set('open', 'software');
+    successUrl.searchParams.set('facebook_connected', '1');
+    res.redirect(successUrl.toString());
 
  } catch (e) {
     res.status(400).send(`Facebook connection failed: ${String(e.message || e)}. Check Meta app status, OAuth redirect URI, and permission access.`);
