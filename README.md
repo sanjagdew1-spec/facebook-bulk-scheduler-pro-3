@@ -26,3 +26,18 @@ Then add the exact callback URL `https://YOUR-RENDER-SERVICE.onrender.com/auth/f
 
 ## Important
 The UI currently schedules images by public HTTPS image URL; local image upload and multi-photo albums are not implemented in this starter. Verify Meta permission access and Page publishing before using it with real Pages. Use a persistent Render disk for SQLite if scheduled jobs must survive service restarts/redeploys. Never share or commit tokens, app secrets, or passwords.
+
+
+## Phase 4 — Owner/Admin Control Panel
+Phase 4 is isolated on branch `phase-4/owner-admin-control-panel`. The customer-facing Phase 3 deployment is not changed by this branch.
+
+- Private admin interface: `/owner-admin` on the Phase 4 API service.
+- Plans: Free Demo, Starter/Standard, Pro, Business; configure duration and optional Page, monthly-post, and batch-slot limits.
+- Customers: filter by plan, inspect account ID/email verification status, dates, remaining days, connected Page usage and monthly jobs, then assign/renew a plan.
+- Creators: save a sponsorship and activate Live for an existing customer account, with the selected plan duration and limits.
+- Developer: grant/revoke unlimited app entitlement for a customer ID or email.
+- Admin audit log: records plan, creator and developer entitlement changes.
+- The owner/admin allowlist is enforced server-side using `OWNER_ADMIN_EMAILS` and/or `OWNER_ADMIN_IDS`. Owner unlimited entitlement uses `OWNER_USER_EMAILS` and/or `OWNER_USER_IDS`. Use the exact customer-account email or ID; never expose these values in public frontend code.
+- `/api/customer/entitlement` reports owner/developer unlimited access or a customer's configured plan and usage.
+
+Before using the panel, set the allowlist environment variables on the Phase 4 API service and configure persistent storage for its SQLite database. The customer email field currently reports verification state from `email_verified_at`; existing accounts remain pending until an email-verification workflow is implemented. Plan limits are stored/displayed by Phase 4; enforcing those limits across every publishing route and the customer UI is a subsequent integration step, not claimed complete here.
