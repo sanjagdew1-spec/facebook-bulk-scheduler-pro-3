@@ -143,3 +143,4 @@ app.get('/api/customers',ownerOnly,(_req,res)=>res.json(db.prepare('SELECT * FRO
 app.get('/api/audit',ownerOnly,(_req,res)=>res.json(db.prepare('SELECT * FROM audit ORDER BY id DESC LIMIT 500').all()));app.delete('/api/audit',ownerOnly,(_req,res)=>{const result=db.prepare('DELETE FROM audit').run();audit('Owner slot '+_req.session.ownerSlot,'Audit log cleared',String(result.changes)+' records deleted');res.json({ok:true,deleted:result.changes});});
 app.get('/',(_req,res)=>res.type('text').send('Phase 5 Owner Admin API is running.'));
 app.listen(PORT,()=>console.log('Phase 5 Owner Admin API listening on '+PORT));
+// Deployment checkpoint: plan catalog edits affect new purchases; active purchases keep immutable snapshots.
