@@ -12,6 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/$/, '');
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'https://sanjagdew1-spec.github.io';
+const TRUSTED_APP_ORIGINS = new Set([FRONTEND_ORIGIN,'https://sanjagdew1-spec.github.io','https://facebook-bulk-scheduler-pro-3-p4-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p3-web.onrender.com']);
 const META_APP_ID_RAW = process.env.META_APP_ID || '';
 const META_APP_SECRET_RAW = process.env.META_APP_SECRET || '';
 const META_APP_ID = META_APP_ID_RAW.trim();
@@ -137,10 +138,7 @@ app.set('trust proxy', 1);
 // GitHub Pages and Render are different origins. Allow the project site to call this API
 // while preserving session cookies; never allow arbitrary origins.
 app.use((req, res, next) => {
-  const allowedOrigins = new Set([
-    FRONTEND_ORIGIN,
-    'https://sanjagdew1-spec.github.io'
-  ]);
+  const allowedOrigins = TRUSTED_APP_ORIGINS;
   const origin = req.headers.origin;
   if (origin && allowedOrigins.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -162,13 +160,13 @@ app.use(session({
   cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 
-registerCustomerAuthRoutes(app, { db, trustedOrigins: new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io']) });
+registerCustomerAuthRoutes(app, { db, trustedOrigins: TRUSTED_APP_ORIGINS });
 
 const graph = (path) => `${GRAPH_BASE_URL}/${path}`;
 const now = () => new Date().toISOString();
 const scopes = ['public_profile', 'pages_show_list', 'pages_manage_posts', 'pages_read_engagement'];
 
-const TRUSTED_ORIGINS = new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io']);
+const TRUSTED_ORIGINS = TRUSTED_APP_ORIGINS;
 function requireTrustedOrigin(req, res, next) {
   const origin = req.headers.origin;
   if (!origin || !TRUSTED_ORIGINS.has(origin)) {
