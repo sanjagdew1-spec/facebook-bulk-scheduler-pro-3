@@ -72,12 +72,12 @@ const fallbackPlans=[
 {id:'pro',name:'Pro',days:30,posts:100,pages:25,price:699,schedule_window_days:3,slots_per_batch:10},
 {id:'business',name:'Business',days:30,posts:200,pages:50,price:1499,schedule_window_days:7,slots_per_batch:10}
 ];
-let planData={};
+let planData=Object.create(null);
 const initialPlan=new URLSearchParams(location.search).get('plan')||'Free Demo';
 const select=document.getElementById('planChoice'),name=document.getElementById('selectedPlanName'),summary=document.getElementById('selectedPlanSummary'),planCards=document.getElementById('planCards');
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function renderPlanCatalog(items){
-planData={};const previous=select.value;select.innerHTML='';
+planData=Object.create(null);const previous=select.value;select.innerHTML='';
 items.forEach(p=>{
 const price=Number(p.price)||0,days=Math.max(1,Number(p.days)||30),pages=Math.max(1,Number(p.pages)||1),posts=Math.max(0,Number(p.posts)||0),windowDays=Math.max(0,Number(p.schedule_window_days??p.scheduleWindowDays)||0),batch=Math.max(1,Number(p.slots_per_batch??p.slotsPerBatch)||10);
 const period=price===0?days+' days':(days===30?'month':days+' days');
@@ -125,7 +125,7 @@ history.pushState({view},'',url);
 window.scrollTo({top:0,behavior:'auto'});
 }
 function setPlan(p){
-if(!planData[p])p='Free Demo';
+if(!planData[p]){const first=Object.keys(planData)[0];if(!first)return;p=first;}
 select.value=p;name.textContent=p;summary.textContent=planData[p].summary;
 }
 document.querySelectorAll('[data-view-link]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();setView(a.dataset.viewLink)}));
