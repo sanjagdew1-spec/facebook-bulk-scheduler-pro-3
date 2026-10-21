@@ -1,0 +1,21 @@
+name: Phase 4 Owner Admin CI
+on:
+  push:
+    branches:
+      - phase-4/owner-admin-control-panel
+  pull_request:
+    branches:
+      - phase-4/owner-admin-control-panel
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: node --check server.js
+      - run: node --check admin-routes.js
+      - run: node --check customer-auth-routes.js
+      - run: npm test
