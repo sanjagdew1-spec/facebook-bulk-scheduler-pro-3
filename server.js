@@ -321,28 +321,34 @@ async function requirePlanAccess(req, res, next) {
 }
 function enforcePlanLimits(req, res, { batchCount = 1, targetCount = 0, pageIds = [], scheduledDates = [] } = {}) {
   const access = req.planAccess;
-  if (!access || access.unlimited) return true;
-  const limits = access.limits || {};
+  if (!access || access.unlimited || access.role === 'developer') return true;
+  const limits = access.limits || {}, customerId = req.session.customerAccount.id;
   const uniquePages = [...new Set(pageIds.map(String))];
-  if (Number.isFinite(Number(limits.pages)) && uniquePages.length > Number(limits.pages)) {
-    res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.pages + ' Pages in one workflow.' }); return false;
-  }
-  if (Number.isFinite(Number(limits.slotsPerBatch)) && batchCount > Number(limits.slotsPerBatch)) {
-    res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.slotsPerBatch + ' separate posts per batch.' }); return false;
-  }
-  if (Number.isFinite(Number(limits.postsPerDay))) {
-    const start = new Date(); start.setUTCHours(0,0,0,0);
-    const used = db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=?').get(req.session.customerAccount.id, start.toISOString()).count;
-    if (used + targetCount > Number(limits.postsPerDay)) {
-      res.status(403).json({ error: 'Your ' + access.planName + ' plan allows ' + limits.postsPerDay + ' posts per day; ' + used + ' have already been used today.' }); return false;
-    }
+  if (Number.isFinite(Number(limits.pages)) && uniquePages.length > Number(limits.pages)) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.pages + ' Pages in one workflow.' }); return false; }
+  if (Number.isFinite(Number(limits.slotsPerBatch)) && batchCount > Number(limits.slotsPerBatch)) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.slotsPerBatch + ' separate posts per batch.' }); return false; }
+  const startsAt = access.startsAt ? new Date(access.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
+  const activeStatuses = "('scheduled','publishing','published')";
+  const totalLimit = Number(limits.totalPosts);
+  if (Number.isFinite(totalLimit)) {
+    const reservedTotal = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN " + activeStatuses).get(customerId, startsAt).count;
+    if (reservedTotal + targetCount > totalLimit) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows ' + totalLimit + ' total posts. ' + reservedTotal + ' posts are already scheduled or published in this plan period.' }); return false; }
   }
   const windowDays = Number(limits.scheduleWindowDays || 0), expiry = access.endsAt ? Date.parse(access.endsAt) : Infinity;
-  for (const value of scheduledDates) {
+  const dates = scheduledDates.length ? scheduledDates : Array.from({ length: targetCount }, () => new Date());
+  const dayCounts = new Map();
+  for (const value of dates) {
     const time = value instanceof Date ? value.getTime() : Date.parse(value);
-    if (!Number.isFinite(time) || windowDays <= 0 || time > Date.now() + windowDays * 86400000 || time > expiry) {
-      res.status(403).json({ error: 'Your ' + access.planName + ' plan does not allow scheduling that far ahead or beyond its expiry date.' }); return false;
-    }
+    if (!Number.isFinite(time)) { res.status(400).json({ error: 'One or more schedule times are invalid.' }); return false; }
+    if (time < Date.now() - 60000 || time > expiry) { res.status(403).json({ error: 'Your ' + access.planName + ' plan does not allow publishing beyond its active subscription period.' }); return false; }
+    if ((windowDays <= 0 && time > Date.now() + 60000) || (windowDays > 0 && time > Date.now() + windowDays * 86400000)) { res.status(403).json({ error: 'Your ' + access.planName + ' plan does not allow scheduling that far ahead.' }); return false; }
+    const day = new Date(time); day.setUTCHours(0,0,0,0); const key = day.toISOString();
+    dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
+  }
+  const dailyLimit = Number(limits.postsPerDay);
+  if (Number.isFinite(dailyLimit)) for (const [dayStart, requestedForDay] of dayCounts) {
+    const dayEnd = new Date(Date.parse(dayStart) + 86400000).toISOString();
+    const used = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN " + activeStatuses).get(customerId, dayStart, dayEnd).count;
+    if (used + requestedForDay > dailyLimit) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows ' + dailyLimit + ' posts per day. ' + used + ' posts are already scheduled or published for ' + dayStart.slice(0,10) + '.' }); return false; }
   }
   return true;
 }
@@ -352,9 +358,12 @@ app.get('/api/usage', requireCustomerSession, async (req, res) => {
     if (!access || !access.allowed) return res.status(403).setHeader('Cache-Control','no-store').json({ error: access?.message || 'No active plan.' });
     if (access.unlimited || access.role === 'developer') return res.setHeader('Cache-Control','no-store').json({ unlimited: true, used: 0, limit: null, remaining: null });
     const start = new Date(); start.setUTCHours(0,0,0,0);
-    const used = db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=?').get(req.customerAccount.id, start.toISOString()).count;
-    const limit = Number(access.limits?.postsPerDay);
-    return res.setHeader('Cache-Control','no-store').json({ unlimited: false, used, limit, remaining: Math.max(0, limit - used), date: start.toISOString().slice(0,10) });
+    const end = new Date(start.getTime()+86400000).toISOString();
+    const used = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN ('scheduled','publishing','published')").get(req.customerAccount.id, start.toISOString(), end).count;
+    const totalStart = access.startsAt ? new Date(access.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
+    const totalUsed = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN ('scheduled','publishing','published')").get(req.customerAccount.id, totalStart).count;
+    const limit = Number(access.limits?.postsPerDay), totalLimit = Number(access.limits?.totalPosts);
+    return res.setHeader('Cache-Control','no-store').json({ unlimited: false, used, limit, remaining: Math.max(0, limit - used), totalUsed, totalLimit, totalRemaining: Math.max(0,totalLimit-totalUsed), date: start.toISOString().slice(0,10) });
   } catch (error) {
     console.error('[post-usage] Status check failed:', String(error?.message || error));
     return res.status(503).setHeader('Cache-Control','no-store').json({ error: 'Could not refresh post usage.' });
@@ -739,6 +748,20 @@ async function publishDueJobs() {
       try { currentAccess = await getPhase5Access(customer.email_normalized); } catch { const retryError = new Error('Plan access service is temporarily unavailable; this scheduled post will retry.'); retryError.code = 'ACCESS_SERVICE_UNAVAILABLE'; throw retryError; }
       if (!currentAccess.allowed) throw new Error('Plan access has expired or was removed; this scheduled post was not published.');
       if (!currentAccess.unlimited && currentAccess.endsAt && Date.parse(job.scheduled_at) > Date.parse(currentAccess.endsAt)) throw new Error('Scheduled time is beyond the active plan expiry; post was not published.');
+      if (!currentAccess.unlimited && currentAccess.role !== 'developer') {
+        const planStart = currentAccess.startsAt ? new Date(currentAccess.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
+        const totalLimit = Number(currentAccess.limits?.totalPosts), dailyLimit = Number(currentAccess.limits?.postsPerDay);
+        if (Number.isFinite(totalLimit)) {
+          const totalPublished = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status='published'").get(job.customer_id, planStart).count;
+          if (totalPublished >= totalLimit) throw new Error('Total post allowance reached; this scheduled post was not published.');
+        }
+        if (Number.isFinite(dailyLimit)) {
+          const dayStart = new Date(job.scheduled_at); dayStart.setUTCHours(0,0,0,0);
+          const dayEnd = new Date(dayStart.getTime()+86400000).toISOString();
+          const dailyPublished = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status='published'").get(job.customer_id, dayStart.toISOString(), dayEnd).count;
+          if (dailyPublished >= dailyLimit) throw new Error('Daily post allowance reached; this scheduled post was not published.');
+        }
+      }
       const encryptedPage = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(job.customer_id, job.user_id, job.page_id);
       if (!encryptedPage?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
       const page = { access_token: decryptToken(encryptedPage.access_token) };
