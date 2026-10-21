@@ -90,7 +90,7 @@ function securityPage(){
 async function securitySearch(){
  const input=$('#securityEmail');if(input)securityEmail=input.value.trim().toLowerCase();
  securityError='';securityNotice='';securityResult=null;
- if(!/^[^\\s@]+@gmail\\.com$/i.test(securityEmail)){securityError='Enter a valid Gmail address exactly as shown in Customers.';render();return;}
+ if(!securityEmail.toLowerCase().endsWith('@gmail.com')||securityEmail.indexOf('@')<=0||securityEmail.includes(' ')){securityError='Enter a valid Gmail address exactly as shown in Customers.';render();return;}
  render();
  try{securityResult=await api('/api/security/customer?email='+encodeURIComponent(securityEmail));}
  catch(e){securityError=e.message;}
