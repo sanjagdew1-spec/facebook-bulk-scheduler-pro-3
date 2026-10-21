@@ -164,7 +164,7 @@ app.use(session({
 const APP_TRUSTED_ORIGINS = new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io', APP_BASE_URL].filter(Boolean));
 registerCustomerAuthRoutes(app, { db, trustedOrigins: APP_TRUSTED_ORIGINS });
 registerOwnerAdminRoutes(app, { db, trustedOrigins: APP_TRUSTED_ORIGINS });
-app.get('/owner-admin', (_req, res) => res.sendFile(path.join(process.cwd(), 'owner-admin.html')));
+// Owner UI is intentionally not served by the customer/API service; Phase 5 will host it separately.
 
 const graph = (path) => `${GRAPH_BASE_URL}/${path}`;
 const now = () => new Date().toISOString();
