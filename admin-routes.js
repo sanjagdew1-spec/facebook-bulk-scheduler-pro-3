@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 
 const PLAN_SEEDS = [
-  { key: 'free_demo', name: 'Free Demo', duration_days: 7, page_limit: null, monthly_post_limit: null, slots_per_batch: null },
-  { key: 'starter', name: 'Starter / Standard', duration_days: 30, page_limit: null, monthly_post_limit: null, slots_per_batch: null },
-  { key: 'pro', name: 'Pro', duration_days: 30, page_limit: null, monthly_post_limit: null, slots_per_batch: null },
-  { key: 'business', name: 'Business', duration_days: 30, page_limit: null, monthly_post_limit: null, slots_per_batch: null }
+  { key: 'free_demo', name: 'Free Demo', duration_days: 7, page_limit: 10, daily_post_limit: 10, schedule_window_days: 0, slots_per_batch: 10, price_inr: 0 },
+  { key: 'starter', name: 'Starter / Standard', duration_days: 30, page_limit: 10, daily_post_limit: 50, schedule_window_days: 1, slots_per_batch: 10, price_inr: 299 },
+  { key: 'pro', name: 'Pro', duration_days: 30, page_limit: 25, daily_post_limit: 100, schedule_window_days: 3, slots_per_batch: 10, price_inr: 699 },
+  { key: 'business', name: 'Business', duration_days: 30, page_limit: 50, daily_post_limit: 200, schedule_window_days: 7, slots_per_batch: 10, price_inr: 1499 }
 ];
 
 const isoNow = () => new Date().toISOString();
@@ -23,7 +23,7 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS plan_catalog (
       plan_key TEXT PRIMARY KEY, name TEXT NOT NULL, duration_days INTEGER NOT NULL DEFAULT 30,
-      page_limit INTEGER, monthly_post_limit INTEGER, slots_per_batch INTEGER,
+      page_limit INTEGER, daily_post_limit INTEGER, schedule_window_days INTEGER, slots_per_batch INTEGER, price_inr INTEGER,
       updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS customer_entitlements (
@@ -51,8 +51,8 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
   try { db.exec('ALTER TABLE customer_accounts ADD COLUMN email_verified_at TEXT'); }
   catch (error) { if (!String(error.message || error).includes('duplicate column name')) throw error; }
 
-  const insertPlan = db.prepare(`INSERT OR IGNORE INTO plan_catalog(plan_key,name,duration_days,page_limit,monthly_post_limit,slots_per_batch,updated_at) VALUES(?,?,?,?,?,?,?)`);
-  for (const plan of PLAN_SEEDS) insertPlan.run(plan.key, plan.name, plan.duration_days, plan.page_limit, plan.monthly_post_limit, plan.slots_per_batch, isoNow());
+  const insertPlan = db.prepare(`INSERT OR IGNORE INTO plan_catalog(plan_key,name,duration_days,page_limit,daily_post_limit,schedule_window_days,slots_per_batch,price_inr,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`);
+  for (const plan of PLAN_SEEDS) insertPlan.run(plan.key, plan.name, plan.duration_days, plan.page_limit, plan.daily_post_limit, plan.schedule_window_days, plan.slots_per_batch, plan.price_inr, isoNow());
 
   const adminEmails = new Set(String(process.env.OWNER_ADMIN_EMAILS || '').split(',').map(cleanEmail).filter(Boolean));
   const adminIds = new Set(String(process.env.OWNER_ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
@@ -82,7 +82,7 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
       .run(crypto.randomUUID(), actor.id, action, String(target || ''), JSON.stringify(details), isoNow());
   }
   function plans() {
-    return db.prepare('SELECT plan_key AS key,name,duration_days,page_limit,monthly_post_limit,slots_per_batch,updated_at FROM plan_catalog ORDER BY CASE plan_key WHEN \'free_demo\' THEN 1 WHEN \'starter\' THEN 2 WHEN \'pro\' THEN 3 WHEN \'business\' THEN 4 ELSE 5 END').all();
+    return db.prepare('SELECT plan_key AS key,name,duration_days,page_limit,daily_post_limit,schedule_window_days,slots_per_batch,price_inr,updated_at FROM plan_catalog ORDER BY CASE plan_key WHEN \'free_demo\' THEN 1 WHEN \'starter\' THEN 2 WHEN \'pro\' THEN 3 WHEN \'business\' THEN 4 ELSE 5 END').all();
   }
   function assignPlan(customerId, planKey, durationDays, actor, source = 'admin') {
     const plan = db.prepare('SELECT * FROM plan_catalog WHERE plan_key=?').get(planKey);
@@ -107,7 +107,8 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
         a.created_at AS createdAt,COALESCE(e.plan_key,'free_demo') AS planKey,e.starts_at AS startsAt,e.ends_at AS endsAt,
         COALESCE(e.status,CASE WHEN a.status='active' THEN 'active' ELSE 'suspended' END) AS planStatus,
         (SELECT COUNT(*) FROM customer_pages p WHERE p.customer_id=a.id) AS connectedPages,
-        (SELECT COUNT(*) FROM jobs j WHERE j.customer_id=a.id AND j.created_at >= strftime('%Y-%m-01T00:00:00Z','now')) AS monthlyJobs
+        (SELECT COUNT(*) FROM jobs j WHERE j.customer_id=a.id AND j.created_at >= strftime('%Y-%m-01T00:00:00Z','now')) AS monthlyJobs,
+        (SELECT COUNT(*) FROM jobs j WHERE j.customer_id=a.id AND j.created_at >= strftime('%Y-%m-%dT00:00:00Z','now')) AS dailyJobs
       FROM customer_accounts a LEFT JOIN customer_entitlements e ON e.customer_id=a.id ${where}
       ORDER BY a.created_at DESC
     `).all(...args).map(row => ({
@@ -137,19 +138,20 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
     const developer = db.prepare("SELECT id FROM developer_entitlements WHERE status='active' AND unlimited=1 AND ((subject_type='customer_id' AND subject_id=?) OR (subject_type='email' AND lower(subject_id)=?))")
       .get(account.id, cleanEmail(account.email_normalized));
     if (developer) return res.json({ unlimited: true, role: 'developer', planKey: 'developer_unlimited', status: 'active', limits: null, usage: null });
-    const entitlement = db.prepare(`SELECT e.plan_key,e.starts_at,e.ends_at,e.status,p.name,p.page_limit,p.monthly_post_limit,p.slots_per_batch
+    const entitlement = db.prepare(`SELECT e.plan_key,e.starts_at,e.ends_at,e.status,p.name,p.page_limit,p.daily_post_limit,p.schedule_window_days,p.slots_per_batch
       FROM customer_entitlements e LEFT JOIN plan_catalog p ON p.plan_key=e.plan_key WHERE e.customer_id=?`).get(account.id);
-    if (!entitlement) return res.json({ unlimited: false, role: 'customer', planKey: 'free_demo', status: 'active', limits: { pages: null, monthlyPosts: null, slotsPerBatch: null }, startsAt: null, endsAt: null, daysRemaining: null, planConfigured: false });
+    if (!entitlement) return res.json({ unlimited: false, role: 'customer', planKey: 'free_demo', status: 'active', limits: { pages: null, postsPerDay: null, scheduleWindowDays: null, slotsPerBatch: null }, startsAt: null, endsAt: null, daysRemaining: null, planConfigured: false });
     const usage = {
       pages: db.prepare('SELECT COUNT(*) AS count FROM customer_pages WHERE customer_id=?').get(account.id).count,
-      monthlyPosts: db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at >= strftime('%Y-%m-01T00:00:00Z','now')").get(account.id).count
+      monthlyPosts: db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at >= strftime('%Y-%m-01T00:00:00Z','now')").get(account.id).count,
+      dailyPosts: db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at >= strftime('%Y-%m-%dT00:00:00Z','now')").get(account.id).count
     };
     const active = entitlement.status === 'active' && Date.parse(entitlement.ends_at) > Date.now();
     return res.json({
       unlimited: false, role: 'customer', planKey: entitlement.plan_key, planName: entitlement.name || entitlement.plan_key,
       status: active ? 'active' : 'expired', startsAt: entitlement.starts_at, endsAt: entitlement.ends_at,
       daysRemaining: Math.max(0, Math.ceil((Date.parse(entitlement.ends_at) - Date.now()) / 86400000)),
-      limits: { pages: entitlement.page_limit, monthlyPosts: entitlement.monthly_post_limit, slotsPerBatch: entitlement.slots_per_batch },
+      limits: { pages: entitlement.page_limit, postsPerDay: entitlement.daily_post_limit, scheduleWindowDays: entitlement.schedule_window_days, slotsPerBatch: entitlement.slots_per_batch },
       usage, planConfigured: true
     });
   });
@@ -179,12 +181,14 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
     if (!current) return res.status(404).json({ error: 'Plan not found.' });
     const duration = positiveInt(req.body?.durationDays, 3650);
     const pageLimit = nullableLimit(req.body?.pageLimit);
-    const postLimit = nullableLimit(req.body?.monthlyPostLimit);
+    const dailyPostLimit = nullableLimit(req.body?.dailyPostLimit);
+    const scheduleWindowDays = nullableLimit(req.body?.scheduleWindowDays);
     const slots = nullableLimit(req.body?.slotsPerBatch);
-    if (!duration || pageLimit === undefined || postLimit === undefined || slots === undefined) return res.status(400).json({ error: 'Enter valid non-negative limits and a duration from 1 to 3650 days.' });
-    db.prepare('UPDATE plan_catalog SET duration_days=?,page_limit=?,monthly_post_limit=?,slots_per_batch=?,updated_at=? WHERE plan_key=?')
-      .run(duration, pageLimit, postLimit, slots, isoNow(), key);
-    audit(req.ownerAdmin, 'plan.updated', key, { duration, pageLimit, postLimit, slots });
+    const priceInr = nullableLimit(req.body?.priceInr);
+    if (!duration || pageLimit === undefined || dailyPostLimit === undefined || scheduleWindowDays === undefined || slots === undefined || priceInr === undefined) return res.status(400).json({ error: 'Enter valid non-negative plan values and a duration from 1 to 3650 days.' });
+    db.prepare('UPDATE plan_catalog SET duration_days=?,page_limit=?,daily_post_limit=?,schedule_window_days=?,slots_per_batch=?,price_inr=?,updated_at=? WHERE plan_key=?')
+      .run(duration, pageLimit, dailyPostLimit, scheduleWindowDays, slots, priceInr, isoNow(), key);
+    audit(req.ownerAdmin, 'plan.updated', key, { duration, pageLimit, dailyPostLimit, scheduleWindowDays, slots, priceInr });
     res.json({ ok: true, plans: plans() });
   });
   app.post('/api/admin/customers/:id/plan', requireSameOrigin, requireAdmin, (req, res) => {
