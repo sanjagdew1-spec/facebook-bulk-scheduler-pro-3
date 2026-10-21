@@ -57,6 +57,7 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
   const adminEmails = new Set(String(process.env.OWNER_ADMIN_EMAILS || '').split(',').map(cleanEmail).filter(Boolean));
   const adminIds = new Set(String(process.env.OWNER_ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
   const ownerIds = new Set(String(process.env.OWNER_USER_IDS || process.env.OWNER_ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean));
+  const ownerEmails = new Set(String(process.env.OWNER_USER_EMAILS || process.env.OWNER_ADMIN_EMAILS || '').split(',').map(cleanEmail).filter(Boolean));
 
   function requireSameOrigin(req, res, next) {
     const origin = req.headers.origin;
@@ -112,7 +113,7 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
     `).all(...args).map(row => ({
       ...row,
       daysRemaining: row.endsAt ? Math.max(0, Math.ceil((Date.parse(row.endsAt) - Date.now()) / 86400000)) : null,
-      isOwner: ownerIds.has(row.id),
+      isOwner: ownerIds.has(row.id) || ownerEmails.has(cleanEmail(row.email)),
       emailStatus: row.emailVerifiedAt ? 'Verified' : 'Pending verification'
     }));
   }
@@ -124,6 +125,33 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
     if (!account || account.status !== 'active') return res.json({ signedIn: false, authorized: false, customer: null });
     const authorized = adminIds.has(account.id) || adminEmails.has(cleanEmail(account.email_normalized));
     return res.json({ signedIn: true, authorized, customer: { id: account.id, email: account.email_normalized, username: account.username } });
+  });
+  app.get('/api/customer/entitlement', (req, res) => {
+    const sessionUser = req.session?.customerAccount;
+    if (!sessionUser?.id) return res.status(401).json({ error: 'Sign in to view account entitlement.' });
+    const account = db.prepare("SELECT id,email_normalized,status FROM customer_accounts WHERE id=?").get(sessionUser.id);
+    if (!account || account.status !== 'active') return res.status(401).json({ error: 'Customer account is not active.' });
+    if (ownerIds.has(account.id) || ownerEmails.has(cleanEmail(account.email_normalized))) {
+      return res.json({ unlimited: true, role: 'owner', planKey: 'owner_unlimited', status: 'active', limits: null, usage: null });
+    }
+    const developer = db.prepare("SELECT id FROM developer_entitlements WHERE status='active' AND unlimited=1 AND ((subject_type='customer_id' AND subject_id=?) OR (subject_type='email' AND lower(subject_id)=?))")
+      .get(account.id, cleanEmail(account.email_normalized));
+    if (developer) return res.json({ unlimited: true, role: 'developer', planKey: 'developer_unlimited', status: 'active', limits: null, usage: null });
+    const entitlement = db.prepare(`SELECT e.plan_key,e.starts_at,e.ends_at,e.status,p.name,p.page_limit,p.monthly_post_limit,p.slots_per_batch
+      FROM customer_entitlements e LEFT JOIN plan_catalog p ON p.plan_key=e.plan_key WHERE e.customer_id=?`).get(account.id);
+    if (!entitlement) return res.json({ unlimited: false, role: 'customer', planKey: 'free_demo', status: 'active', limits: { pages: null, monthlyPosts: null, slotsPerBatch: null }, startsAt: null, endsAt: null, daysRemaining: null, planConfigured: false });
+    const usage = {
+      pages: db.prepare('SELECT COUNT(*) AS count FROM customer_pages WHERE customer_id=?').get(account.id).count,
+      monthlyPosts: db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at >= strftime('%Y-%m-01T00:00:00Z','now')").get(account.id).count
+    };
+    const active = entitlement.status === 'active' && Date.parse(entitlement.ends_at) > Date.now();
+    return res.json({
+      unlimited: false, role: 'customer', planKey: entitlement.plan_key, planName: entitlement.name || entitlement.plan_key,
+      status: active ? 'active' : 'expired', startsAt: entitlement.starts_at, endsAt: entitlement.ends_at,
+      daysRemaining: Math.max(0, Math.ceil((Date.parse(entitlement.ends_at) - Date.now()) / 86400000)),
+      limits: { pages: entitlement.page_limit, monthlyPosts: entitlement.monthly_post_limit, slotsPerBatch: entitlement.slots_per_batch },
+      usage, planConfigured: true
+    });
   });
   app.get('/api/admin/overview', requireAdmin, (_req, res) => {
     const rows = customerRows();
