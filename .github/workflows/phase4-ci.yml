@@ -1,4 +1,4 @@
-name: Phase 4 Owner Admin CI
+name: Phase 4 Customer Website CI
 on:
   push:
     branches:
@@ -19,6 +19,7 @@ jobs:
       - run: node --check admin-routes.js
       - run: node --check customer-auth-routes.js
       - run: node --check test/admin-routes.test.js
+      - run: node --check test/phase4-customer-site.test.js
       # The legacy deployment-config test hardcodes the Phase 2 static-site layout,
       # while this branch intentionally carries the Phase 3 scheduler + Phase 4 landing page.
-      - run: node --test test/admin-routes.test.js test/customer-auth.test.js test/customer-auth-routes.test.js test/frontend-syntax.test.js test/server-integration.test.js test/tenant-isolation-sql.test.js test/tenant-security.test.js test/token-crypto.test.js
+      - run: node --test test/phase4-customer-site.test.js test/admin-routes.test.js test/customer-auth.test.js test/customer-auth-routes.test.js test/frontend-syntax.test.js test/server-integration.test.js test/tenant-isolation-sql.test.js test/tenant-security.test.js test/token-crypto.test.js
