@@ -29,7 +29,7 @@ db.prepare('UPDATE plans SET pages=10,updated_at=? WHERE id=\'free\' AND price=0
 app.set('trust proxy',1);
 app.use((req,res,next)=>{
   const origin=req.headers.origin;
-  if(['https://facebook-bulk-scheduler-pro-3-p5-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p4-preview.onrender.com'].includes(origin)){
+  if(['https://facebook-bulk-scheduler-pro-3-p5-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p4-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p4-plan.onrender.com'].includes(origin)){
     res.setHeader('Access-Control-Allow-Origin',origin);
     res.setHeader('Access-Control-Allow-Credentials','true');
     res.setHeader('Vary','Origin');
