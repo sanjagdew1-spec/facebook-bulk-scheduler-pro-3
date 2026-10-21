@@ -194,6 +194,16 @@ app.get('/auth/facebook', (req, res) => {
   const state = crypto.randomBytes(24).toString('hex');
   req.session.oauthState = state;
   req.session.oauthCustomerId = req.session.customerAccount.id;
+  // Return to the exact trusted frontend that started Facebook login, rather than
+  // sending every Phase 3/4 user to the single global FRONTEND_SUCCESS_URL.
+  let oauthReturnUrl = null;
+  try {
+    const candidate = new URL(String(req.query.return_to || ''));
+    if (candidate.protocol === 'https:' && TRUSTED_APP_ORIGINS.has(candidate.origin)) {
+      oauthReturnUrl = candidate.toString();
+    }
+  } catch {}
+  req.session.oauthReturnUrl = oauthReturnUrl;
   const oauthParams = { client_id: META_APP_ID, redirect_uri: `${APP_BASE_URL}/auth/facebook/callback`, state, response_type: 'code' };
   if (META_LOGIN_CONFIG_ID) {
     // Login for Business configurations define the requested permissions in Meta.
@@ -257,10 +267,12 @@ app.get('/auth/facebook/callback', async (req, res) => {
       .run(crypto.randomUUID(), customerId, facebookUserId, me.name || 'Facebook user', encryptToken(tokenData.access_token), connectedAt, connectedAt);
     req.session.fbUser = { id: facebookUserId, name: me.name || 'Facebook user', customerId };
     await new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
-    // Preserve the configured frontend query (for example ?open=software) instead of appending a second '?'.
-    // Otherwise the workspace route stops matching after Facebook OAuth and users land on the public plans page.
-    const successUrl = new URL(FRONTEND_SUCCESS_URL);
-    if (!successUrl.searchParams.has('open')) successUrl.searchParams.set('open', 'software');
+    // Prefer the trusted frontend URL that initiated login. This keeps Phase 4 users
+    // on the new scheduler instead of redirecting them to the older global Phase 3 URL.
+    const savedReturnUrl = req.session.oauthReturnUrl;
+    delete req.session.oauthReturnUrl;
+    const successUrl = savedReturnUrl ? new URL(savedReturnUrl) : new URL(FRONTEND_SUCCESS_URL);
+    if (!savedReturnUrl && !successUrl.searchParams.has('open')) successUrl.searchParams.set('open', 'software');
     successUrl.searchParams.set('facebook_connected', '1');
     res.redirect(successUrl.toString());
 
