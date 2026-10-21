@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS developers(email TEXT PRIMARY KEY,mode TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,actor TEXT NOT NULL,action TEXT NOT NULL,detail TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS panel_customers(id TEXT PRIMARY KEY,email TEXT NOT NULL,plan_name TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'unknown',starts_at TEXT,ends_at TEXT,usage_json TEXT NOT NULL DEFAULT '{}');
 `);
+const seedPlan=db.prepare('INSERT OR IGNORE INTO plans(id,name,days,posts,pages,price,active,updated_at) VALUES(?,?,?,?,?,?,1,?)');const seededAt=new Date().toISOString();for(const p of [['free','Free Demo',7,10,1,0],['starter','Starter / Standard',30,300,5,499],['pro','Pro Scheduler',30,1500,20,999],['business','Business',30,5000,100,2499]])seedPlan.run(...p,seededAt);
 const iso=()=>new Date().toISOString();
 const allowedEmails=()=>new Set((process.env.OWNER_ADMIN_EMAILS||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean));
 const secureEqual=(a,b)=>{const aa=Buffer.from(String(a));const bb=Buffer.from(String(b));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb)};
