@@ -86,12 +86,12 @@ app.post('/internal/customer-subscription',(req,res)=>{
   const plan=db.prepare('SELECT * FROM plans WHERE id=? AND active=1').get(planId);
   if(!plan)return res.status(400).json({error:'The selected plan is not available for new purchases.'});
   const existing=db.prepare('SELECT * FROM panel_customers WHERE id=? OR lower(email)=? LIMIT 1').get(id,email);
-  if(existing&&existing.ends_at&&new Date(existing.ends_at).getTime()>Date.now())return res.status(409).json({error:'This customer already has an active purchase. Existing terms are locked until the current period ends.'});
+  if(existing&&existing.status==='active'&&existing.ends_at&&new Date(existing.ends_at).getTime()>Date.now())return res.status(409).json({error:'This customer already has an active purchase. Existing terms are locked until the current period ends.'});
   const start=iso(),end=new Date(Date.now()+plan.days*86400000).toISOString(),verified=b.emailVerified===true?1:0;
   if(existing){
     db.prepare('UPDATE panel_customers SET id=?,email=?,display_name=?,email_verified=?,plan_id=?,plan_name=?,status=\'active\',starts_at=?,ends_at=?,purchased_price=?,purchased_days=?,purchased_posts=?,purchased_pages=?,purchased_schedule_window_days=?,purchased_slots_per_batch=?,usage_json=\'{}\' WHERE id=?').run(id,email,displayName,verified,plan.id,plan.name,start,end,price,plan.days,plan.posts,plan.pages,plan.schedule_window_days,plan.slots_per_batch,existing.id);
   }else{
-    db.prepare('INSERT INTO panel_customers(id,email,display_name,email_verified,plan_id,plan_name,status,starts_at,ends_at,purchased_price,purchased_days,purchased_posts,purchased_pages,purchased_schedule_window_days,purchased_slots_per_batch,usage_json) VALUES(?,?,?,?,?,? ,\'active\',?,?,?,?,?,?,?,?,?,\'{}\')').run(id,email,displayName,verified,plan.id,plan.name,start,end,price,plan.days,plan.posts,plan.pages,plan.schedule_window_days,plan.slots_per_batch);
+    db.prepare('INSERT INTO panel_customers(id,email,display_name,email_verified,plan_id,plan_name,status,starts_at,ends_at,purchased_price,purchased_days,purchased_posts,purchased_pages,purchased_schedule_window_days,purchased_slots_per_batch,usage_json) VALUES(?,?,?,?,?,? ,\'active\',?,?,?,?,?,?,?,? ,\'{}\')').run(id,email,displayName,verified,plan.id,plan.name,start,end,price,plan.days,plan.posts,plan.pages,plan.schedule_window_days,plan.slots_per_batch);
   }
   audit('customer-sync','Customer purchase snapshot saved',email+' · '+plan.name+' · '+price);
   res.json({ok:true,customerId:id,planName:plan.name,start,end,purchasedPrice:price,termsLocked:true});
