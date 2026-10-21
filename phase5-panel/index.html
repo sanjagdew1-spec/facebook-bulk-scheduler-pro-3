@@ -45,10 +45,10 @@ main{min-width:0}.topbar{height:74px;background:#fff;border-bottom:1px solid var
 <script>
 const API_BASE='https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com';const api=async(path,options={})=>{const r=await fetch(API_BASE+path,{credentials:'include',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Request failed.');return data};const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaultPlans=[
-{id:'free',name:'Free Demo',days:7,posts:10,pages:1,price:0,active:true},
-{id:'starter',name:'Starter / Standard',days:30,posts:300,pages:5,price:499,active:true},
-{id:'pro',name:'Pro Scheduler',days:30,posts:1500,pages:20,price:999,active:true},
-{id:'business',name:'Business',days:30,posts:5000,pages:100,price:2499,active:true}];
+{id:'free',name:'Free Demo',days:7,posts:10,pages:10,price:0,scheduleWindowDays:0,slotsPerBatch:10,active:true},
+{id:'starter',name:'Starter / Standard',days:30,posts:50,pages:10,price:299,scheduleWindowDays:1,slotsPerBatch:10,active:true},
+{id:'pro',name:'Pro',days:30,posts:100,pages:25,price:699,scheduleWindowDays:3,slotsPerBatch:10,active:true},
+{id:'business',name:'Business',days:30,posts:200,pages:50,price:1499,scheduleWindowDays:7,slotsPerBatch:10,active:true}];
 let plans=defaultPlans.map(x=>({...x})),creators=[],developers=[],customers=[],audit=[],page='overview',mode='demo',editingPlan=null,editingCreator=null;
 const fmt=d=>d?new Date(d).toLocaleDateString():'—';const now=()=>new Date().toISOString();const daysLeft=d=>Math.max(0,Math.ceil((new Date(d)-Date.now())/86400000));
 function log(action,detail){audit.unshift({at:now(),action,detail});}
