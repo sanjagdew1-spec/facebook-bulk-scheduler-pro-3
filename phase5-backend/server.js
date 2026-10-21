@@ -22,10 +22,34 @@ for (const [column, definition] of [['schedule_window_days','INTEGER NOT NULL DE
 const seedPlan=db.prepare('INSERT OR IGNORE INTO plans(id,name,days,posts,pages,price,active,updated_at,schedule_window_days,slots_per_batch) VALUES(?,?,?,?,?,?,1,?,?,?)');const seededAt=new Date().toISOString();const phase4Plans=[['free','Free Demo',7,10,10,0,0,10],['starter','Starter / Standard',30,50,10,299,1,10],['pro','Pro',30,100,25,699,3,10],['business','Business',30,200,50,1499,7,10]];for(const p of phase4Plans)seedPlan.run(p[0],p[1],p[2],p[3],p[4],p[5],seededAt,p[6],p[7]);
 // One-time correction of the previous demo seed values; preserve any custom price/limits already saved by the Owner.
 db.prepare('UPDATE plans SET pages=10,updated_at=? WHERE id=\'free\' AND price=0 AND pages=1').run(seededAt);const legacySeedCorrections=[['starter',499,'Starter / Standard',50,10,299,1],['pro',999,'Pro',100,25,699,3],['business',2499,'Business',200,50,1499,7]];for(const [id,oldPrice,name,posts,pages,price,windowDays] of legacySeedCorrections)db.prepare('UPDATE plans SET name=?,posts=?,pages=?,price=?,schedule_window_days=?,slots_per_batch=10,updated_at=? WHERE id=? AND price=?').run(name,posts,pages,price,windowDays,seededAt,id,oldPrice);
+// Browser panel and API are separate Render subdomains: allow only the Phase 5 panel and send session cookies.
+app.set('trust proxy',1);
+app.use((req,res,next)=>{
+  const origin=req.headers.origin;
+  if(origin==='https://facebook-bulk-scheduler-pro-3-p5-preview.onrender.com'){
+    res.setHeader('Access-Control-Allow-Origin',origin);
+    res.setHeader('Access-Control-Allow-Credentials','true');
+    res.setHeader('Vary','Origin');
+    res.setHeader('Access-Control-Allow-Methods','GET,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers','Content-Type');
+  }
+  if(req.method==='OPTIONS')return res.sendStatus(204);
+  next();
+});
+app.use(express.json({limit:'1mb'}));
+app.use(session({
+  name:'p5_owner_session',
+  secret:process.env.SESSION_SECRET||crypto.randomBytes(32).toString('hex'),
+  resave:false,
+  saveUninitialized:false,
+  cookie:{httpOnly:true,secure:true,sameSite:'none',maxAge:30*24*60*60*1000}
+}));
 const iso=()=>new Date().toISOString();
 const secureEqual=(a,b)=>{const aa=Buffer.from(String(a));const bb=Buffer.from(String(b));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb)};
 const passwordForSlot=slot=>{const s=String(slot||'').toUpperCase();return ['A','B','C','D'].includes(s)?String(process.env['OWNER_PASSWORD_'+s]||''):''};
 const ownerConfigured=()=>['A','B','C','D'].some(s=>/^\d{10}$/.test(passwordForSlot(s)));
+const validGmail=email=>/^[^\s@]+@gmail\.com$/i.test(String(email||'').trim());
+function audit(actor,action,detail){db.prepare('INSERT INTO audit(at,actor,action,detail) VALUES(?,?,?,?)').run(iso(),String(actor||'system'),String(action||''),String(detail||''));}
 app.get('/health',(_req,res)=>res.json({ok:true,service:'Phase 5 Owner Admin API',ownerPasswordSlotsConfigured:['A','B','C','D'].filter(s=>/^\d{10}$/.test(passwordForSlot(s))).length,dbPathIsAbsolute:path.isAbsolute(DB_PATH)}));
 function ownerOnly(req,res,next){const slot=String(req.session.ownerSlot||'').toUpperCase();if(!['A','B','C','D'].includes(slot)||!/^\d{10}$/.test(passwordForSlot(slot)))return res.status(401).json({error:'Owner verification required. Sign in again.'});next();}
 app.post('/api/auth/login',(req,res)=>{const slot=String(req.body?.slot||'').toUpperCase(),password=String(req.body?.password||''),ip=String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown').split(',')[0].trim().slice(0,80);if(!['A','B','C','D'].includes(slot))return res.status(400).json({error:'Choose password slot A, B, C or D.'});const key=slot+':'+ip;let row=db.prepare('SELECT * FROM owner_login_attempts WHERE slot=? AND ip=?').get(slot,ip);if(row&&row.locked_until>Date.now())return res.status(429).json({error:'Too many failed attempts. Try again after 15 minutes.'});if(!row||Date.now()-row.window_started>15*60_000){db.prepare('INSERT INTO owner_login_attempts(slot,ip,window_started,attempts,locked_until) VALUES(?,?,?,0,0) ON CONFLICT(slot,ip) DO UPDATE SET window_started=excluded.window_started,attempts=0,locked_until=0').run(slot,ip,Date.now());row=db.prepare('SELECT * FROM owner_login_attempts WHERE slot=? AND ip=?').get(slot,ip);}const expected=passwordForSlot(slot);const valid=/^\d{10}$/.test(password)&&/^\d{10}$/.test(expected)&&secureEqual(password,expected);if(!valid){const attempts=(row?.attempts||0)+1,locked=attempts>=5?Date.now()+15*60_000:0;db.prepare('INSERT INTO owner_login_attempts(slot,ip,window_started,attempts,locked_until) VALUES(?,?,?,?,?) ON CONFLICT(slot,ip) DO UPDATE SET attempts=excluded.attempts,locked_until=excluded.locked_until').run(slot,ip,row?.window_started||Date.now(),attempts,locked);return res.status(401).json({error:locked?'Too many failed attempts. Try again after 15 minutes.':'That password does not match slot '+slot+'.'});}db.prepare('DELETE FROM owner_login_attempts WHERE slot=? AND ip=?').run(slot,ip);req.session.regenerate(err=>{if(err)return res.status(500).json({error:'Could not start secure session.'});req.session.ownerSlot=slot;req.session.save(err2=>{if(err2)return res.status(500).json({error:'Could not save secure session.'});audit('Owner slot '+slot,'Owner signed in','Password verified');res.json({ok:true,slot});});});});
