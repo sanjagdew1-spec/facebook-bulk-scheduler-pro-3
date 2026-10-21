@@ -827,3 +827,5 @@ cron.schedule(schedulerExpression, () => publishDueJobs().catch(err => console.e
 
 app.get('/', (_req, res) => res.type('text').send('Facebook Bulk Scheduler Pro 3 backend is running.'));
 app.listen(PORT, () => console.log(`Facebook Bulk Scheduler Pro 3 listening on ${PORT}`));
+
+// Deployment checkpoint: daily and total plan limits are enforced server-side.
