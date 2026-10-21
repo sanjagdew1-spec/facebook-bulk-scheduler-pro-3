@@ -100,6 +100,43 @@ app.post('/internal/customer-subscription',(req,res)=>{
   audit('customer-sync','Customer purchase snapshot saved',email+' · '+plan.name+' · '+price);
   res.json({ok:true,customerId:id,planName:plan.name,start,end,purchasedPrice:price,termsLocked:true});
 });
+
+const PHASE3_API_URL=(process.env.PHASE3_API_URL||'https://facebook-bulk-scheduler-pro-3-p3-api.onrender.com').replace(/\\/$/,'');
+async function phase3SecurityRequest(path, options={}) {
+  const secret=String(process.env.PHASE5_ACCESS_SYNC_SECRET||'').trim();
+  if(!secret) throw new Error('Security bridge is not configured on the server yet.');
+  const response=await fetch(PHASE3_API_URL+path,{...options,headers:{'Content-Type':'application/json','x-phase5-access-secret':secret,...(options.headers||{})},signal:AbortSignal.timeout(20000)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok){const error=new Error(data.error||'The scheduler security service could not complete the request.');error.status=response.status;throw error;}
+  return data;
+}
+app.get('/api/security/customer',ownerOnly,async(req,res)=>{
+  const email=String(req.query.email||'').trim().toLowerCase();
+  if(!validGmail(email))return res.status(400).json({error:'Enter the same Gmail address shown in Customers.'});
+  try {
+    const data=await phase3SecurityRequest('/internal/security/customer?email='+encodeURIComponent(email));
+    const customer=data.customer||{};
+    const planCustomer=db.prepare('SELECT plan_name,status,starts_at,ends_at,purchased_price FROM panel_customers WHERE lower(email)=? ORDER BY ends_at DESC LIMIT 1').get(email);
+    const creator=db.prepare('SELECT plan_name,ends_at FROM creators WHERE lower(email)=? AND revoked=0 ORDER BY updated_at DESC LIMIT 1').get(email);
+    const developer=db.prepare('SELECT email FROM developers WHERE lower(email)=? AND active=1').get(email);
+    res.setHeader('Cache-Control','no-store');
+    res.json({...data,access:{type:developer?'Developer':creator?'Creator':planCustomer?'Customer':'Scheduler account',planName:developer?'Developer Unlimited':creator?.plan_name||planCustomer?.plan_name||'No active plan',status:developer?'active':creator?'active':planCustomer?.status||'unknown',endsAt:creator?.ends_at||planCustomer?.ends_at||null,price:planCustomer?.purchased_price??null}});
+  } catch(error) { res.status(error.status||502).json({error:error.message||'Could not load scheduled content.'}); }
+});
+app.post('/api/security/remove-customer',ownerOnly,async(req,res)=>{
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  if(!validGmail(email))return res.status(400).json({error:'Enter the same Gmail address shown in Customers.'});
+  if(db.prepare('SELECT email FROM developers WHERE lower(email)=? AND active=1').get(email))return res.status(409).json({error:'This Gmail has Developer Unlimited access. It cannot be removed through Customer Security Review.'});
+  try {
+    const removed=await phase3SecurityRequest('/internal/security/remove-customer',{method:'POST',body:JSON.stringify({email})});
+    const timestamp=iso();
+    const customerUpdate=db.prepare("UPDATE panel_customers SET status='removed',ends_at=?,plan_name=CASE WHEN plan_name='' THEN 'Removed' ELSE plan_name||' (Removed)' END WHERE lower(email)=? AND status<>'removed'").run(timestamp,email);
+    const creatorUpdate=db.prepare('UPDATE creators SET revoked=1,ends_at=?,updated_at=? WHERE lower(email)=? AND revoked=0').run(timestamp,timestamp,email);
+    audit('Owner slot '+req.session.ownerSlot,'Security: customer removed',email+' · '+removed.deletedScheduledPosts+' scheduled posts deleted · plan terminated without refund');
+    res.setHeader('Cache-Control','no-store');
+    res.json({ok:true,email,deletedScheduledPosts:removed.deletedScheduledPosts,accountRemoved:true,planTerminated:true,refund:false,customerRecordsUpdated:customerUpdate.changes,creatorRecordsUpdated:creatorUpdate.changes});
+  } catch(error) { res.status(error.status||502).json({error:error.message||'Could not remove this scheduler account.'}); }
+});
 app.get('/api/customers',ownerOnly,(_req,res)=>res.json(db.prepare('SELECT * FROM panel_customers ORDER BY email').all()));
 app.get('/api/audit',ownerOnly,(_req,res)=>res.json(db.prepare('SELECT * FROM audit ORDER BY id DESC LIMIT 500').all()));app.delete('/api/audit',ownerOnly,(_req,res)=>{const result=db.prepare('DELETE FROM audit').run();audit('Owner slot '+_req.session.ownerSlot,'Audit log cleared',String(result.changes)+' records deleted');res.json({ok:true,deleted:result.changes});});
 app.get('/',(_req,res)=>res.type('text').send('Phase 5 Owner Admin API is running.'));
