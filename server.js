@@ -24,6 +24,8 @@ const GRAPH_BASE_URL = process.env.NODE_ENV === 'test' && process.env.META_GRAPH
   ? process.env.META_GRAPH_BASE_URL.replace(/\/$/, '')
   : `https://graph.facebook.com/${GRAPH_VERSION}`;
 const DB_PATH = process.env.DB_PATH || './scheduler.sqlite';
+const PHASE5_API_URL = (process.env.PHASE5_API_URL || 'https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com').replace(/\/$/, '');
+const PHASE5_ACCESS_SYNC_SECRET = String(process.env.PHASE5_ACCESS_SYNC_SECRET || '').trim();
 
 // Safe startup diagnostics: report configuration presence only; never print secrets or tokens.
 console.log('[config-check]', JSON.stringify({
@@ -275,6 +277,69 @@ app.get('/auth/status', (req, res) => {
 });
 app.post('/auth/logout', requireTrustedOrigin, (req, res) => req.session.destroy(err => err ? res.status(500).json({ error: 'Could not log out.' }) : res.json({ ok: true })));
 
+function requireCustomerSession(req, res, next) {
+  const customerId = req.session.customerAccount?.id;
+  if (!customerId) return res.status(401).json({ error: 'Sign in to your customer account first.' });
+  const customer = db.prepare('SELECT id,email_normalized,status FROM customer_accounts WHERE id=?').get(customerId);
+  if (!customer || customer.status !== 'active') {
+    req.session.destroy(() => {});
+    return res.status(401).json({ error: 'This customer account is not active. Sign in again or contact support.' });
+  }
+  req.customerAccount = customer;
+  next();
+}
+async function getPhase5Access(email) {
+  if (!PHASE5_ACCESS_SYNC_SECRET) throw new Error('Plan access integration is not configured.');
+  const response = await fetch(PHASE5_API_URL + '/internal/access-check', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-phase5-access-secret': PHASE5_ACCESS_SYNC_SECRET }, body: JSON.stringify({ email }) });
+  if (!response.ok) throw new Error('Plan access service is unavailable.');
+  const data = await response.json();
+  if (!data || !data.access) throw new Error('Plan access service returned an invalid response.');
+  return data.access;
+}
+async function requirePlanAccess(req, res, next) {
+  try {
+    const email = req.customerAccount?.email_normalized || db.prepare('SELECT email_normalized FROM customer_accounts WHERE id=?').get(req.session.customerAccount.id)?.email_normalized;
+    if (!email) return res.status(401).json({ error: 'Customer account was not found. Sign in again.' });
+    const access = await getPhase5Access(email);
+    if (!access.allowed) return res.status(403).json({ error: access.message || 'No active plan is assigned to this account.' });
+    req.planAccess = access;
+    next();
+  } catch (error) {
+    console.error('[plan-access] Check failed:', String(error?.message || error));
+    return res.status(503).json({ error: 'Could not verify your plan right now. Please retry in a moment.' });
+  }
+}
+function enforcePlanLimits(req, res, { batchCount = 1, targetCount = 0, pageIds = [], scheduledDates = [] } = {}) {
+  const access = req.planAccess;
+  if (!access || access.unlimited) return true;
+  const limits = access.limits || {};
+  const uniquePages = [...new Set(pageIds.map(String))];
+  if (Number.isFinite(Number(limits.pages)) && uniquePages.length > Number(limits.pages)) {
+    res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.pages + ' Pages in one workflow.' }); return false;
+  }
+  if (Number.isFinite(Number(limits.slotsPerBatch)) && batchCount > Number(limits.slotsPerBatch)) {
+    res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.slotsPerBatch + ' separate posts per batch.' }); return false;
+  }
+  if (Number.isFinite(Number(limits.postsPerDay))) {
+    const start = new Date(); start.setUTCHours(0,0,0,0);
+    const used = db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=?').get(req.session.customerAccount.id, start.toISOString()).count;
+    if (used + targetCount > Number(limits.postsPerDay)) {
+      res.status(403).json({ error: 'Your ' + access.planName + ' plan allows ' + limits.postsPerDay + ' posts per day; ' + used + ' have already been used today.' }); return false;
+    }
+  }
+  const windowDays = Number(limits.scheduleWindowDays || 0), expiry = access.endsAt ? Date.parse(access.endsAt) : Infinity;
+  for (const value of scheduledDates) {
+    const time = value instanceof Date ? value.getTime() : Date.parse(value);
+    if (!Number.isFinite(time) || windowDays <= 0 || time > Date.now() + windowDays * 86400000 || time > expiry) {
+      res.status(403).json({ error: 'Your ' + access.planName + ' plan does not allow scheduling that far ahead or beyond its expiry date.' }); return false;
+    }
+  }
+  return true;
+}
+app.get('/api/access', requireCustomerSession, async (req, res) => {
+  try { return res.setHeader('Cache-Control','no-store').json(await getPhase5Access(req.customerAccount.email_normalized)); }
+  catch (error) { console.error('[plan-access] Status check failed:', String(error?.message || error)); return res.status(503).json({ error: 'Could not refresh plan status. Please retry.' }); }
+});
 function requireAuth(req, res, next) {
   const customerId = req.session.customerAccount?.id;
   if (!customerId) return res.status(401).json({ error: 'Sign in to your customer account first.' });
@@ -287,7 +352,7 @@ function requireAuth(req, res, next) {
   next();
 }
 
-app.get('/api/pages', requireAuth, async (req, res) => {
+app.get('/api/pages', requireAuth, requirePlanAccess, async (req, res) => {
   try {
     const u = req.session.fbUser;
     const connection = db.prepare('SELECT access_token FROM customer_facebook_connections WHERE customer_id=? AND facebook_user_id=?').get(req.session.customerAccount.id, u.id);
@@ -376,10 +441,13 @@ app.post('/api/history/clear', requireTrustedOrigin, requireAuth, (req, res) => 
   res.json({ ok: true, cleared: result.changes, note: 'Only published/failed app history records were cleared. Facebook posts were not deleted.' });
 });
 
-app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res) => {
+app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
   const { pageId: defaultPageId, posts, mode = 'now' } = req.body || {};
-  if (!Array.isArray(posts) || posts.length < 1 || posts.length > 10) return res.status(400).json({ error: 'A photo batch must contain between 1 and 10 separate posts.' });
+  if (!Array.isArray(posts) || posts.length < 1 || posts.length > 100) return res.status(400).json({ error: 'A photo batch must contain between 1 and 100 separate posts.' });
   if (!['now','schedule'].includes(mode)) return res.status(400).json({ error: 'Choose publish now or schedule.' });
+  const batchPageIds=[], scheduledBatchDates=[]; let batchTargetCount=0;
+  for (const item of posts) { const ids=Array.isArray(item?.pageSchedules)&&item.pageSchedules.length?item.pageSchedules.map(t=>t?.pageId):Array.isArray(item?.pageIds)&&item.pageIds.length?item.pageIds:(item?.pageId!=null?[item.pageId]:(defaultPageId!=null?[defaultPageId]:[])); batchPageIds.push(...ids.filter(x=>x!=null)); batchTargetCount+=ids.filter(x=>x!=null).length; if(mode==='schedule'){if(Array.isArray(item?.pageSchedules)&&item.pageSchedules.length)scheduledBatchDates.push(...item.pageSchedules.map(t=>t?.scheduledAt||item.scheduledAt).filter(Boolean));else if(item?.scheduledAt)scheduledBatchDates.push(item.scheduledAt);} }
+  if (!enforcePlanLimits(req,res,{batchCount:posts.length,targetCount:batchTargetCount,pageIds:batchPageIds,scheduledDates:scheduledBatchDates})) return;
   const prepared = [];
   for (let index = 0; index < posts.length; index++) {
     const item = posts[index] || {};
@@ -462,7 +530,7 @@ app.get('/api/jobs', requireAuth, (req, res) => {
   res.json({ jobs: rows });
 });
 
-app.post('/api/schedule', requireTrustedOrigin, requireAuth, (req, res) => {
+app.post('/api/schedule', requireTrustedOrigin, requireAuth, requirePlanAccess, (req, res) => {
   const { pageIds, pageSchedules, imageUrl = '', imageData = '', imageMimeType = '', images: incomingImages = [], message = '', scheduledAt, isAiContent = false } = req.body || {};
   const requestedSchedules = Array.isArray(pageSchedules) && pageSchedules.length
     ? pageSchedules.map(item => ({ pageId: item?.pageId, scheduledAt: item?.scheduledAt }))
@@ -474,6 +542,7 @@ app.post('/api/schedule', requireTrustedOrigin, requireAuth, (req, res) => {
   if (validatedSchedules.some(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000)) {
     return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
   }
+  if (!enforcePlanLimits(req,res,{targetCount:validatedSchedules.length,pageIds:validatedSchedules.map(item=>item.pageId),scheduledDates:validatedSchedules.map(item=>item.date)})) return;
   if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
   const photos = [];
   const inputs = incomingImages.length ? incomingImages : (imageData ? [{ imageData, imageMimeType }] : []);
@@ -511,11 +580,12 @@ app.post('/api/schedule', requireTrustedOrigin, requireAuth, (req, res) => {
   try { tx(); res.status(201).json({ jobs: created, requestedCount: validatedSchedules.length, createdCount: created.length }); } catch (e) { res.status(400).json({ error: String(e.message || e) }); }
 });
 
-app.post('/api/publish-now', requireTrustedOrigin, requireAuth, async (req, res) => {
+app.post('/api/publish-now', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
   const { pageIds, imageUrl = '', images: incomingImages = [], message = '', isAiContent = false } = req.body || {};
   if (!Array.isArray(pageIds) || !pageIds.length) return res.status(400).json({ error: 'Select at least one Page.' });
   const ids = pageIds.map(String);
   if (new Set(ids).size !== ids.length) return res.status(400).json({ error: 'A Page was selected more than once. Refresh the Page list and try again.' });
+  if (!enforcePlanLimits(req,res,{targetCount:ids.length,pageIds:ids})) return;
   if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
 
   const photos = [];
@@ -589,8 +659,12 @@ async function publishDueJobs() {
     const claimed = db.prepare("UPDATE jobs SET status='publishing',updated_at=? WHERE id=? AND status='scheduled'").run(now(), job.id);
     if (!claimed.changes) continue;
     try {
-      const customer = db.prepare('SELECT status FROM customer_accounts WHERE id=?').get(job.customer_id);
+      const customer = db.prepare('SELECT status,email_normalized FROM customer_accounts WHERE id=?').get(job.customer_id);
       if (!customer || customer.status !== 'active') throw new Error('Customer account is inactive; scheduled post was not published.');
+      let currentAccess;
+      try { currentAccess = await getPhase5Access(customer.email_normalized); } catch { const retryError = new Error('Plan access service is temporarily unavailable; this scheduled post will retry.'); retryError.code = 'ACCESS_SERVICE_UNAVAILABLE'; throw retryError; }
+      if (!currentAccess.allowed) throw new Error('Plan access has expired or was removed; this scheduled post was not published.');
+      if (!currentAccess.unlimited && currentAccess.endsAt && Date.parse(job.scheduled_at) > Date.parse(currentAccess.endsAt)) throw new Error('Scheduled time is beyond the active plan expiry; post was not published.');
       const encryptedPage = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(job.customer_id, job.user_id, job.page_id);
       if (!encryptedPage?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
       const page = { access_token: decryptToken(encryptedPage.access_token) };
@@ -637,6 +711,11 @@ async function publishDueJobs() {
       db.prepare("UPDATE jobs SET status='published',post_id=?,error=NULL,updated_at=? WHERE id=?").run(String(data.post_id || data.id || ''), now(), job.id);
     } catch (e) {
       const message = String(e.message || e).slice(0, 1500);
+      if (e?.code === 'ACCESS_SERVICE_UNAVAILABLE') {
+        db.prepare("UPDATE jobs SET status='scheduled',error=?,updated_at=? WHERE id=?").run(message, now(), job.id);
+        console.warn('Scheduled publish deferred', job.id, message);
+        continue;
+      }
       db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=?").run(message, now(), job.id);
       console.error('Scheduled publish failed', job.id, message);
     }
