@@ -69,9 +69,8 @@
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-const API_KEY='fbsp3_phase3_api_url';
 const DEFAULT_API='https://facebook-bulk-scheduler-pro-3-p3-api.onrender.com';
-let apiBase=localStorage.getItem(API_KEY)||DEFAULT_API;
+const apiBase=DEFAULT_API;
 let pages=[],selectedBulk=new Set(),bulkFiles=[],slots=[],bulkImageSlots=[{files:[],caption:'',pageIds:[],time:'',pageTimes:{},manualPageTimes:{},gapMinutes:0,manualTime:false,isAiContent:false}],jobs=[],notes=[];
 const titles={dashboard:'Dashboard',notes:'Notes','bulk-pages':'Bulk Pages','bulk-photos':'Bulk Photos',history:'History',settings:'Settings'};
 function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),4200)}
