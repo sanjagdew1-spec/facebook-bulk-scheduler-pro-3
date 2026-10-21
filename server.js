@@ -578,7 +578,7 @@ app.get('/internal/security/customer', (req, res) => {
 app.post('/internal/security/remove-customer', (req, res) => {
   if (!securityBridgeAuthorized(req)) return res.status(401).json({ error: 'Owner security bridge not authorized.' });
   const email = String(req.body?.email || '').trim().toLowerCase();
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid customer Gmail.' });
+  if (!email.endsWith('@gmail.com') || email.indexOf('@') <= 0 || email.includes(' ')) return res.status(400).json({ error: 'Enter a valid customer Gmail.' });
   const customer = db.prepare('SELECT id,email_normalized FROM customer_accounts WHERE email_normalized=?').get(email);
   if (!customer) return res.status(404).json({ error: 'No scheduler account was found for this email.' });
   const removeAccount = db.transaction(() => {
