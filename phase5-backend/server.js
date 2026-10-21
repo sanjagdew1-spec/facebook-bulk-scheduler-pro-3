@@ -12,6 +12,8 @@ db.pragma('journal_mode = WAL');
 db.exec(`
 CREATE TABLE IF NOT EXISTS owner_otps(email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, requested_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS owner_login_attempts(slot TEXT NOT NULL, ip TEXT NOT NULL, window_started INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, locked_until INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(slot,ip));
+CREATE TABLE IF NOT EXISTS owner_sessions(sid TEXT PRIMARY KEY,sess TEXT NOT NULL,expires_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_owner_sessions_expiry ON owner_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS plans(id TEXT PRIMARY KEY,name TEXT NOT NULL,days INTEGER NOT NULL,posts INTEGER NOT NULL,pages INTEGER NOT NULL,price INTEGER NOT NULL DEFAULT 0,active INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,schedule_window_days INTEGER NOT NULL DEFAULT 0,slots_per_batch INTEGER NOT NULL DEFAULT 10);
 CREATE TABLE IF NOT EXISTS creators(id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,plan_id TEXT NOT NULL,plan_name TEXT NOT NULL,starts_at TEXT NOT NULL,ends_at TEXT NOT NULL,posts INTEGER NOT NULL,pages INTEGER NOT NULL,revoked INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS developers(email TEXT PRIMARY KEY,mode TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,added_at TEXT NOT NULL);
@@ -38,7 +40,15 @@ app.use((req,res,next)=>{
   next();
 });
 app.use(express.json({limit:'1mb'}));
+class SQLiteSessionStore extends session.Store {
+  constructor(){super();this.read=db.prepare('SELECT sess,expires_at FROM owner_sessions WHERE sid=?');this.write=db.prepare('INSERT INTO owner_sessions(sid,sess,expires_at) VALUES(?,?,?) ON CONFLICT(sid) DO UPDATE SET sess=excluded.sess,expires_at=excluded.expires_at');this.remove=db.prepare('DELETE FROM owner_sessions WHERE sid=?');this.expire=db.prepare('DELETE FROM owner_sessions WHERE expires_at<=?');}
+  get(sid,cb){try{const row=this.read.get(sid);if(!row){cb(null,null);return;}if(row.expires_at<=Date.now()){this.remove.run(sid);cb(null,null);return;}cb(null,JSON.parse(row.sess));}catch(e){cb(e);}}
+  set(sid,sess,cb){try{const exp=sess.cookie?.expires?new Date(sess.cookie.expires).getTime():Date.now()+Number(sess.cookie?.maxAge||30*24*60*60*1000);this.write.run(sid,JSON.stringify(sess),exp);this.expire.run(Date.now());if(cb)cb(null);}catch(e){if(cb)cb(e);}}
+  destroy(sid,cb){try{this.remove.run(sid);if(cb)cb(null);}catch(e){if(cb)cb(e);}}
+  touch(sid,sess,cb){try{const exp=sess.cookie?.expires?new Date(sess.cookie.expires).getTime():Date.now()+Number(sess.cookie?.maxAge||30*24*60*60*1000);this.write.run(sid,JSON.stringify(sess),exp);if(cb)cb(null);}catch(e){if(cb)cb(e);}}
+}
 app.use(session({
+  store:new SQLiteSessionStore(),
   name:'p5_owner_session',
   secret:process.env.SESSION_SECRET||crypto.randomBytes(32).toString('hex'),
   resave:false,
