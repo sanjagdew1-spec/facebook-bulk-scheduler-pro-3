@@ -372,12 +372,9 @@ app.post('/api/history/clear', requireTrustedOrigin, requireAuth, (req, res) => 
 });
 
 app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res) => {
-  const { pageId, posts, mode = 'now' } = req.body || {};
-  if (typeof pageId !== 'string' && typeof pageId !== 'number') return res.status(400).json({ error: 'Choose one Facebook Page.' });
+  const { pageId: defaultPageId, posts, mode = 'now' } = req.body || {};
   if (!Array.isArray(posts) || posts.length < 1 || posts.length > 10) return res.status(400).json({ error: 'A photo batch must contain between 1 and 10 separate posts.' });
   if (!['now','schedule'].includes(mode)) return res.status(400).json({ error: 'Choose publish now or schedule.' });
-  const page = db.prepare('SELECT page_id,name FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(req.session.customerAccount.id, req.session.fbUser.id, String(pageId));
-  if (!page) return res.status(400).json({ error: 'Selected Page was not found for this Facebook account. Refresh Pages and try again.' });
   const prepared = [];
   for (let index = 0; index < posts.length; index++) {
     const item = posts[index] || {};
@@ -394,13 +391,36 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res)
       photos.push({ buffer, mime: match[1] });
     }
     if (bytes > 30 * 1024 * 1024) return res.status(400).json({ error: 'Images in each post must total 30 MB or less.' });
-    let scheduledAt = now();
-    if (mode === 'schedule') {
-      const date = new Date(item.scheduledAt);
-      if (!item.scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 15000) return res.status(400).json({ error: 'Set a valid future time for every post (at least 15 seconds ahead).' });
-      scheduledAt = date.toISOString();
+
+    let requestedTargets = [];
+    if (Array.isArray(item.pageSchedules) && item.pageSchedules.length) {
+      requestedTargets = item.pageSchedules.map(target => ({ pageId: target?.pageId, scheduledAt: target?.scheduledAt || item.scheduledAt }));
+    } else {
+      const ids = Array.isArray(item.pageIds) && item.pageIds.length ? item.pageIds : (item.pageId != null ? [item.pageId] : (defaultPageId != null ? [defaultPageId] : []));
+      requestedTargets = ids.map(pageId => ({ pageId, scheduledAt: item.scheduledAt }));
     }
-    prepared.push({ message: String(item.message || ''), photos, scheduledAt, isAiContent: Boolean(item.isAiContent) });
+    if (!requestedTargets.length || requestedTargets.some(target => (typeof target.pageId !== 'string' && typeof target.pageId !== 'number'))) {
+      return res.status(400).json({ error: 'Post ' + (index + 1) + ' must have at least one selected Page.' });
+    }
+    const seen = new Set();
+    const targets = [];
+    for (const target of requestedTargets) {
+      const id = String(target.pageId);
+      if (seen.has(id)) return res.status(400).json({ error: 'Post ' + (index + 1) + ' selects the same Page more than once.' });
+      seen.add(id);
+      const page = db.prepare('SELECT page_id,name FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(req.session.customerAccount.id, req.session.fbUser.id, id);
+      if (!page) return res.status(400).json({ error: 'A selected Page for post ' + (index + 1) + ' was not found for this Facebook account. Refresh Pages and try again.' });
+      let scheduledAt = now();
+      if (mode === 'schedule') {
+        const date = new Date(target.scheduledAt);
+        if (!target.scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 15000) {
+          return res.status(400).json({ error: 'Set a valid future time for every selected Page on post ' + (index + 1) + ' (at least 15 seconds ahead).' });
+        }
+        scheduledAt = date.toISOString();
+      }
+      targets.push({ pageId: String(page.page_id), pageName: page.name, scheduledAt });
+    }
+    prepared.push({ message: String(item.message || ''), photos, targets, isAiContent: Boolean(item.isAiContent) });
   }
   const insert = db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,is_ai_content,created_at,updated_at,customer_id) VALUES(?,?,?,?,?,'',?,?,?,'scheduled',?,?,?,?)");
   const insertPhoto = db.prepare('INSERT INTO job_images(job_id,position,image_data,image_mime_type) VALUES(?,?,?,?)');
@@ -408,11 +428,13 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res)
   try {
     const tx = db.transaction(() => {
       for (const item of prepared) {
-        const id = crypto.randomUUID();
-        const first = item.photos[0];
-        insert.run(id, req.session.fbUser.id, String(page.page_id), page.name, item.message, first.buffer, first.mime, item.scheduledAt, item.isAiContent ? 1 : 0, now(), now(), req.session.customerAccount.id);
-        item.photos.forEach((photo, position) => insertPhoto.run(id, position, photo.buffer, photo.mime));
-        created.push(id);
+        for (const target of item.targets) {
+          const id = crypto.randomUUID();
+          const first = item.photos[0];
+          insert.run(id, req.session.fbUser.id, target.pageId, target.pageName, item.message, first.buffer, first.mime, target.scheduledAt, item.isAiContent ? 1 : 0, now(), now(), req.session.customerAccount.id);
+          item.photos.forEach((photo, position) => insertPhoto.run(id, position, photo.buffer, photo.mime));
+          created.push(id);
+        }
       }
     });
     tx();
@@ -423,8 +445,8 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, async (req, res)
         if (!remaining) break;
       }
     }
-    const rows = db.prepare("SELECT id,page_id,page_name,message,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE id IN (" + created.map(() => '?').join(',') + ") ORDER BY created_at").all(...created);
-    res.status(201).json({ jobs: rows, requestedCount: prepared.length, createdCount: rows.length });
+    const rows = db.prepare("SELECT id,page_id,page_name,message,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE id IN (" + created.map(() => '?').join(',') + ") ORDER BY scheduled_at,created_at").all(...created);
+    res.status(201).json({ jobs: rows, requestedCount: prepared.reduce((sum, item) => sum + item.targets.length, 0), createdCount: rows.length });
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });
   }
