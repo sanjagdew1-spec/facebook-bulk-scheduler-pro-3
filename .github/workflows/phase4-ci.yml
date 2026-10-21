@@ -18,6 +18,7 @@ jobs:
       - run: node --check server.js
       - run: node --check admin-routes.js
       - run: node --check customer-auth-routes.js
+      - run: node --check test/admin-routes.test.js
       # The legacy deployment-config test hardcodes the Phase 2 static-site layout,
       # while this branch intentionally carries the Phase 3 scheduler + Phase 4 landing page.
-      - run: node --test test/customer-auth.test.js test/customer-auth-routes.test.js test/frontend-syntax.test.js test/server-integration.test.js test/tenant-isolation-sql.test.js test/tenant-security.test.js test/token-crypto.test.js
+      - run: node --test test/admin-routes.test.js test/customer-auth.test.js test/customer-auth-routes.test.js test/frontend-syntax.test.js test/server-integration.test.js test/tenant-isolation-sql.test.js test/tenant-security.test.js test/token-crypto.test.js
