@@ -222,6 +222,13 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
     audit(req.ownerAdmin, 'creator.created', id, { email, planKey, durationDays });
     res.status(201).json({ ok: true, creator: { id,email,name,planKey,durationDays,status:'draft' } });
   });
+  app.delete('/api/admin/creators/:id', requireSameOrigin, requireAdmin, (req, res) => {
+    const creator = db.prepare('SELECT id,creator_email,status FROM creator_sponsorships WHERE id=?').get(req.params.id);
+    if (!creator) return res.status(404).json({ error: 'Creator sponsorship not found.' });
+    db.prepare('DELETE FROM creator_sponsorships WHERE id=?').run(creator.id);
+    audit(req.ownerAdmin, 'creator.removed', creator.id, { email: creator.creator_email, previousStatus: creator.status, accessRemoved: true });
+    res.json({ ok: true, removed: true });
+  });
   app.post('/api/admin/creators/:id/live', requireSameOrigin, requireAdmin, (req, res) => {
     const creator = db.prepare('SELECT * FROM creator_sponsorships WHERE id=?').get(req.params.id);
     if (!creator) return res.status(404).json({ error: 'Creator sponsorship not found.' });
@@ -262,5 +269,10 @@ export function registerOwnerAdminRoutes(app, { db, trustedOrigins }) {
   });
   app.get('/api/admin/audit', requireAdmin, (_req, res) => {
     res.json({ entries: db.prepare('SELECT id,actor_id AS actorId,action,target_id AS targetId,details_json AS details,created_at AS createdAt FROM admin_audit_log ORDER BY created_at DESC LIMIT 100').all() });
+  });
+  app.delete('/api/admin/audit', requireSameOrigin, requireAdmin, (req, res) => {
+    const deleted = db.prepare('DELETE FROM admin_audit_log').run().changes;
+    audit(req.ownerAdmin, 'audit.cleared', '', { deleted });
+    res.json({ ok: true, deleted });
   });
 }
