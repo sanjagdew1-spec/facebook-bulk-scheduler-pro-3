@@ -334,6 +334,21 @@ function enforcePlanLimits(req, res, { batchCount = 1, targetCount = 0, pageIds 
   }
   return true;
 }
+app.get('/api/usage', requireCustomerSession, async (req, res) => {
+  try {
+    const access = await getPhase5Access(req.customerAccount.email_normalized);
+    if (!access || !access.allowed) return res.status(403).setHeader('Cache-Control','no-store').json({ error: access?.message || 'No active plan.' });
+    if (access.unlimited || access.role === 'developer') return res.setHeader('Cache-Control','no-store').json({ unlimited: true, used: 0, limit: null, remaining: null });
+    const start = new Date(); start.setUTCHours(0,0,0,0);
+    const used = db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=?').get(req.customerAccount.id, start.toISOString()).count;
+    const limit = Number(access.limits?.postsPerDay);
+    return res.setHeader('Cache-Control','no-store').json({ unlimited: false, used, limit, remaining: Math.max(0, limit - used), date: start.toISOString().slice(0,10) });
+  } catch (error) {
+    console.error('[post-usage] Status check failed:', String(error?.message || error));
+    return res.status(503).setHeader('Cache-Control','no-store').json({ error: 'Could not refresh post usage.' });
+  }
+});
+
 app.get('/api/access', requireCustomerSession, async (req, res) => {
   try { return res.setHeader('Cache-Control','no-store').json(await getPhase5Access(req.customerAccount.email_normalized)); }
   catch (error) { console.error('[plan-access] Status check failed:', String(error?.message || error)); return res.status(503).json({ error: 'Could not refresh plan status. Please retry.' }); }
