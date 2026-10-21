@@ -101,7 +101,7 @@ app.post('/internal/customer-subscription',(req,res)=>{
   res.json({ok:true,customerId:id,planName:plan.name,start,end,purchasedPrice:price,termsLocked:true});
 });
 
-const PHASE3_API_URL=(process.env.PHASE3_API_URL||'https://facebook-bulk-scheduler-pro-3-p3-api.onrender.com').replace(/\\/$/,'');
+const PHASE3_API_URL=String(process.env.PHASE3_API_URL||'https://facebook-bulk-scheduler-pro-3-p3-api.onrender.com');
 async function phase3SecurityRequest(path, options={}) {
   const secret=String(process.env.PHASE5_ACCESS_SYNC_SECRET||'').trim();
   if(!secret) throw new Error('Security bridge is not configured on the server yet.');
