@@ -32,8 +32,8 @@ The UI currently schedules images by public HTTPS image URL; local image upload 
 Phase 4 is isolated on branch `phase-4/owner-admin-control-panel`. The customer-facing Phase 3 deployment is not changed by this branch.
 
 - Private admin interface: `/owner-admin` on the Phase 4 API service.
-- Plans: Free Demo, Starter/Standard, Pro, Business; configure duration and optional Page, monthly-post, and batch-slot limits.
-- Customers: filter by plan, inspect account ID/email verification status, dates, remaining days, connected Page usage and monthly jobs, then assign/renew a plan.
+- Plans: Free Demo, Starter/Standard, Pro, Business; configure duration, price, Page limits, daily post limits, schedule windows, and batch-slot limits.
+- Customers: filter by plan, inspect account ID/email verification status, dates, remaining days, connected Page usage, today's and this month's job counts, then assign/renew a plan.
 - Creators: save a sponsorship and activate Live for an existing customer account, with the selected plan duration and limits.
 - Developer: grant/revoke unlimited app entitlement for a customer ID or email.
 - Admin audit log: records plan, creator and developer entitlement changes.
