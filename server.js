@@ -6,6 +6,7 @@ import cron from 'node-cron';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
+import { registerOwnerAdminRoutes } from './admin-routes.js';
 import { encryptToken, decryptToken, isTokenEncryptionConfigured } from './token-crypto.js';
 
 const app = express();
@@ -160,7 +161,10 @@ app.use(session({
   cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
 
-registerCustomerAuthRoutes(app, { db, trustedOrigins: new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io']) });
+const APP_TRUSTED_ORIGINS = new Set([FRONTEND_ORIGIN, 'https://sanjagdew1-spec.github.io', APP_BASE_URL].filter(Boolean));
+registerCustomerAuthRoutes(app, { db, trustedOrigins: APP_TRUSTED_ORIGINS });
+registerOwnerAdminRoutes(app, { db, trustedOrigins: APP_TRUSTED_ORIGINS });
+app.get('/owner-admin', (_req, res) => res.sendFile(path.join(process.cwd(), 'owner-admin.html')));
 
 const graph = (path) => `${GRAPH_BASE_URL}/${path}`;
 const now = () => new Date().toISOString();
