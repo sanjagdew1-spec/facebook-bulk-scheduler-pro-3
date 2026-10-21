@@ -562,7 +562,7 @@ function securityBridgeAuthorized(req) {
 app.get('/internal/security/customer', (req, res) => {
   if (!securityBridgeAuthorized(req)) return res.status(401).json({ error: 'Owner security bridge not authorized.' });
   const email = String(req.query.email || '').trim().toLowerCase();
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid customer Gmail.' });
+  if (!email.endsWith('@gmail.com') || email.indexOf('@') <= 0 || email.includes(' ')) return res.status(400).json({ error: 'Enter a valid customer Gmail.' });
   const customer = db.prepare('SELECT id,email_normalized,username,status,created_at FROM customer_accounts WHERE email_normalized=?').get(email);
   if (!customer) return res.status(404).json({ error: 'No scheduler account was found for this email.' });
   const jobs = db.prepare("SELECT id,page_name,message,scheduled_at,status,created_at,image_data,image_mime_type FROM jobs WHERE customer_id=? AND status='scheduled' ORDER BY scheduled_at ASC").all(customer.id);
