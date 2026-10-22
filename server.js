@@ -822,8 +822,18 @@ async function publishDueJobs() {
 }
 const schedulerExpression = process.env.NODE_ENV === 'test' && process.env.TEST_SCHEDULER_CRON
   ? process.env.TEST_SCHEDULER_CRON
-  : '* * * * *';
-cron.schedule(schedulerExpression, () => publishDueJobs().catch(err => console.error('Scheduler loop failed:', err)));
+  : '*/15 * * * * *';
+// Run a bounded queue pass every 15 seconds, but never overlap scheduler passes.
+// Each pass still processes at most 10 jobs sequentially to protect the 512 MiB instance.
+let schedulerPassRunning = false;
+async function runScheduledPass() {
+  if (schedulerPassRunning) return;
+  schedulerPassRunning = true;
+  try { await publishDueJobs(); }
+  catch (err) { console.error('Scheduler loop failed:', err); }
+  finally { schedulerPassRunning = false; }
+}
+cron.schedule(schedulerExpression, () => { void runScheduledPass(); });
 
 app.get('/', (_req, res) => res.type('text').send('Facebook Bulk Scheduler Pro 3 backend is running.'));
 app.listen(PORT, () => console.log(`Facebook Bulk Scheduler Pro 3 listening on ${PORT}`));
