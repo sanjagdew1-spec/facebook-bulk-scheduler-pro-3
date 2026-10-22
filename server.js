@@ -325,7 +325,15 @@ function enforcePlanLimits(req, res, { batchCount = 1, targetCount = 0, pageIds 
   const limits = access.limits || {}, customerId = req.session.customerAccount.id;
   const uniquePages = [...new Set(pageIds.map(String))];
   if (Number.isFinite(Number(limits.pages)) && uniquePages.length > Number(limits.pages)) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.pages + ' Pages in one workflow.' }); return false; }
-  if (Number.isFinite(Number(limits.slotsPerBatch)) && batchCount > Number(limits.slotsPerBatch)) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + limits.slotsPerBatch + ' separate posts per batch.' }); return false; }
+  // Accept the canonical API field and legacy snake_case aliases, but never silently
+  // skip batch enforcement for a paid/limited plan when the field is missing.
+  const batchLimitValue = limits.slotsPerBatch ?? limits.slots_per_batch ?? limits.batchLimit ?? limits.postsPerBatch;
+  const batchLimit = Number(batchLimitValue);
+  if (!Number.isFinite(batchLimit) || batchLimit < 1) {
+    res.status(503).json({ error: 'Your plan batch limit could not be verified. Please retry shortly or contact support.' });
+    return false;
+  }
+  if (batchCount > batchLimit) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows up to ' + batchLimit + ' separate posts per batch. Reduce this batch and try again.' }); return false; }
   const startsAt = access.startsAt ? new Date(access.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
   const activeStatuses = "('scheduled','publishing','published')";
   const totalLimit = Number(limits.totalPosts);
