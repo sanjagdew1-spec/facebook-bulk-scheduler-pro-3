@@ -131,6 +131,7 @@ function renderBulkImageSlots(){
  $('bulkPublishNow').disabled=n!==1;
  $('bulkPublishNow').title=n===1?'Publish this one photo now to its selected Pages':'Publish Now is only available when exactly one photo is selected';
  $('bulkBatchNotice').textContent=n===1?'One photo selected: Publish Now or Schedule.':' '+n+' separate photos selected: use Schedule all selected photos. Publish Now is disabled for multi-photo batches.';
+ updateBulkPhotoDropStatus();
 }
 function renderPageList(){const opts=pages.map(p=>'<option value="'+safe(p.id)+'">'+safe(p.name||p.page_name||p.id)+'</option>').join('');const photoPage=$('photoPage');if(photoPage)photoPage.innerHTML='<option value="">Choose a Page</option>'+opts;renderBulkImageSlots()}
 async function loadPages(){try{const data=await api('/api/pages');pages=data.pages||[];renderPageList();$('statPages').textContent=pages.length;$('statPagesNote').textContent='Pages available to this account';setConnection(true);toast('Loaded '+pages.length+' Page(s).')}catch(e){toast(e.message);if(!apiBase)$('apiNotice').textContent='Configure the dedicated Phase 3 API in Settings to enable Facebook Page access.'}}
