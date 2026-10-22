@@ -685,7 +685,9 @@ app.post('/api/publish-now', requireTrustedOrigin, requireAuth, requirePlanAcces
   if (!Array.isArray(pageIds) || !pageIds.length) return res.status(400).json({ error: 'Select at least one Page.' });
   const ids = pageIds.map(String);
   if (new Set(ids).size !== ids.length) return res.status(400).json({ error: 'A Page was selected more than once. Refresh the Page list and try again.' });
-  if (!enforcePlanLimits(req,res,{targetCount:ids.length,pageIds:ids})) return;
+  const publishNowBatchLimit = req.planAccess?.limits?.slotsPerBatch ?? req.planAccess?.limits?.slots_per_batch ?? req.planAccess?.limits?.batchLimit ?? req.planAccess?.limits?.postsPerBatch;
+  console.info('[publish-now-batch-limit-check]', JSON.stringify({ role: req.planAccess?.role || null, planName: req.planAccess?.planName || null, separatePostsInRequest: ids.length, configuredBatchLimit: Number.isFinite(Number(publishNowBatchLimit)) ? Number(publishNowBatchLimit) : null, unlimited: Boolean(req.planAccess?.unlimited) }));
+  if (!enforcePlanLimits(req,res,{batchCount:ids.length,targetCount:ids.length,pageIds:ids})) return;
   if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
 
   const photos = [];
