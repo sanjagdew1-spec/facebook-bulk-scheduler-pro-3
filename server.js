@@ -642,7 +642,9 @@ app.post('/api/schedule', requireTrustedOrigin, requireAuth, requirePlanAccess, 
   if (validatedSchedules.some(item => !item.date || Number.isNaN(item.date.getTime()) || item.date.getTime() < Date.now() + 15_000)) {
     return res.status(400).json({ error: 'Every selected Page must have a valid future schedule time at least 15 seconds from now.' });
   }
-  if (!enforcePlanLimits(req,res,{targetCount:validatedSchedules.length,pageIds:validatedSchedules.map(item=>item.pageId),scheduledDates:validatedSchedules.map(item=>item.date)})) return;
+  const scheduleBatchLimit = req.planAccess?.limits?.slotsPerBatch ?? req.planAccess?.limits?.slots_per_batch ?? req.planAccess?.limits?.batchLimit ?? req.planAccess?.limits?.postsPerBatch;
+  console.info('[schedule-batch-limit-check]', JSON.stringify({ role: req.planAccess?.role || null, planName: req.planAccess?.planName || null, separatePostsInRequest: validatedSchedules.length, configuredBatchLimit: Number.isFinite(Number(scheduleBatchLimit)) ? Number(scheduleBatchLimit) : null, unlimited: Boolean(req.planAccess?.unlimited) }));
+  if (!enforcePlanLimits(req,res,{batchCount:validatedSchedules.length,targetCount:validatedSchedules.length,pageIds:validatedSchedules.map(item=>item.pageId),scheduledDates:validatedSchedules.map(item=>item.date)})) return;
   if (!Array.isArray(incomingImages) || incomingImages.length > 10) return res.status(400).json({ error: 'Choose no more than 10 photos per post.' });
   const photos = [];
   const inputs = incomingImages.length ? incomingImages : (imageData ? [{ imageData, imageMimeType }] : []);
