@@ -488,17 +488,15 @@ app.post('/api/history/clear', requireTrustedOrigin, requireAuth, (req, res) => 
 app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
   const { pageId: defaultPageId, posts, mode = 'now' } = req.body || {};
   if (!Array.isArray(posts) || posts.length < 1 || posts.length > 100) return res.status(400).json({ error: 'A photo batch must contain between 1 and 100 separate posts.' });
-  const accessLimits = req.planAccess?.limits || {};
-  const configuredBatchLimit = Number(accessLimits.slotsPerBatch ?? accessLimits.slots_per_batch ?? accessLimits.batchLimit ?? accessLimits.postsPerBatch);
-  console.info('[batch-limit-check]', JSON.stringify({ role: req.planAccess?.role || null, planName: req.planAccess?.planName || null, postsInRequest: posts.length, configuredBatchLimit: Number.isFinite(configuredBatchLimit) ? configuredBatchLimit : null, unlimited: Boolean(req.planAccess?.unlimited) }));
-  if (req.planAccess && !req.planAccess.unlimited && req.planAccess.role !== 'developer') {
-    if (!Number.isInteger(configuredBatchLimit) || configuredBatchLimit < 1) return res.status(503).json({ error: 'Your plan batch limit could not be verified. Please retry shortly or contact support.' });
-    if (posts.length > configuredBatchLimit) return res.status(403).json({ error: 'Your ' + (req.planAccess.planName || 'current') + ' plan allows up to ' + configuredBatchLimit + ' separate posts per batch. You selected ' + posts.length + '. Split this into smaller batches and try again.' });
-  }
+  // The composer can create several Page-specific jobs from one image/post slot.
+  // Apply the plan batch limit to actual post jobs (Page targets), not just image slots.
   if (!['now','schedule'].includes(mode)) return res.status(400).json({ error: 'Choose publish now or schedule.' });
   const batchPageIds=[], scheduledBatchDates=[]; let batchTargetCount=0;
   for (const item of posts) { const ids=Array.isArray(item?.pageSchedules)&&item.pageSchedules.length?item.pageSchedules.map(t=>t?.pageId):Array.isArray(item?.pageIds)&&item.pageIds.length?item.pageIds:(item?.pageId!=null?[item.pageId]:(defaultPageId!=null?[defaultPageId]:[])); batchPageIds.push(...ids.filter(x=>x!=null)); batchTargetCount+=ids.filter(x=>x!=null).length; if(mode==='schedule'){if(Array.isArray(item?.pageSchedules)&&item.pageSchedules.length)scheduledBatchDates.push(...item.pageSchedules.map(t=>t?.scheduledAt||item.scheduledAt).filter(Boolean));else if(item?.scheduledAt)scheduledBatchDates.push(item.scheduledAt);} }
-  if (!enforcePlanLimits(req,res,{batchCount:posts.length,targetCount:batchTargetCount,pageIds:batchPageIds,scheduledDates:scheduledBatchDates})) return;
+  const accessLimits = req.planAccess?.limits || {};
+  const configuredBatchLimit = Number(accessLimits.slotsPerBatch ?? accessLimits.slots_per_batch ?? accessLimits.batchLimit ?? accessLimits.postsPerBatch);
+  console.info('[batch-limit-check]', JSON.stringify({ role: req.planAccess?.role || null, planName: req.planAccess?.planName || null, postSlotsInRequest: posts.length, actualPagePostJobs: batchTargetCount, configuredBatchLimit: Number.isFinite(configuredBatchLimit) ? configuredBatchLimit : null, unlimited: Boolean(req.planAccess?.unlimited) }));
+  if (!enforcePlanLimits(req,res,{batchCount:batchTargetCount,targetCount:batchTargetCount,pageIds:batchPageIds,scheduledDates:scheduledBatchDates})) return;
   const prepared = [];
   for (let index = 0; index < posts.length; index++) {
     const item = posts[index] || {};
