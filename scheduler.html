@@ -21,7 +21,7 @@
 .advanced-inline-control{display:flex;align-items:end;gap:10px}
 .advanced-inline-control select{flex:1;min-width:0;background:#0b1323;border:1px solid #34435f;border-radius:9px;color:var(--text);padding:11px}
 .advanced-inline-control .field{flex:1;margin-bottom:0}
-.advanced-toggle{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;border:1px solid #36517b;background:#14243c;border-radius:9px;padding:9px 11px;white-space:nowrap}
+.advanced-caption-status{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.advanced-toggle{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;border:1px solid #36517b;background:#14243c;border-radius:9px;padding:9px 11px;white-space:nowrap}
 .advanced-toggle input{accent-color:var(--blue);width:16px;height:16px}
 .advanced-number-row{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 8px}
 .advanced-number-btn{width:36px;height:34px;border:1px solid #3565b6;background:#1b3d70;color:#d9e8ff;border-radius:7px;font-size:12px;font-weight:850;padding:0;display:grid;place-items:center}
@@ -233,7 +233,7 @@
     <div class="notice" id="advancedDropNotice">Tip: select Page Slot 2 to send files only to Page Slot 2. Select 1 and 2 to distribute only between those two Page Slots. All includes every currently selected Page.</div>
   </div>
   <div class="card" id="advancedCaptionCard">
-    <div class="card-head"><h3>3 · Captions by Page Slot</h3><span class="tag" id="advancedCaptionTargetLabel">Page Slot 1</span></div>
+    <div class="card-head"><h3>3 · Captions by Page Slot</h3><div class="advanced-caption-status"><span class="tag" id="advancedCaptionTargetLabel">Page Slot 1</span><span class="tag" id="allCaptionCount">0 images · 0 Pages</span></div></div>
     <p class="muted">Choose one Page Slot, set the number of captions, then paste one caption per block separated by a blank line. Only that Page Slot's Post Slots are updated.</p>
     <div class="advanced-number-row advanced-caption-buttons" id="advancedCaptionTargets" role="group" aria-label="Select Page Slot for captions">
       <button type="button" class="advanced-number-btn is-selected" data-caption-target="0" aria-pressed="true">1</button><button type="button" class="advanced-number-btn" data-caption-target="1" aria-pressed="false">2</button><button type="button" class="advanced-number-btn" data-caption-target="2" aria-pressed="false">3</button><button type="button" class="advanced-number-btn" data-caption-target="3" aria-pressed="false">4</button><button type="button" class="advanced-number-btn" data-caption-target="4" aria-pressed="false">5</button><button type="button" class="advanced-number-btn" data-caption-target="5" aria-pressed="false">6</button><button type="button" class="advanced-number-btn" data-caption-target="6" aria-pressed="false">7</button><button type="button" class="advanced-number-btn" data-caption-target="7" aria-pressed="false">8</button><button type="button" class="advanced-number-btn" data-caption-target="8" aria-pressed="false">9</button><button type="button" class="advanced-number-btn" data-caption-target="9" aria-pressed="false">10</button>
@@ -333,10 +333,8 @@ function setupPhotoSlotDropBox(){
 }
 function updateAIAllButtons(){
  const pagesAll=bulkImageSlots.length>0&&bulkImageSlots.every(slot=>slot.isAiContent);
- const photosAll=slots.length>0&&slots.every(slot=>slot.isAiContent);
- const a=$('bulkPagesAiAll'),b=$('bulkPhotosAiAll');
+ const a=$('bulkPagesAiAll');
  if(a){a.textContent=pagesAll?'AI: Clear All':'AI: Select All';a.setAttribute('aria-pressed',String(pagesAll));}
- if(b){b.textContent=photosAll?'AI: Clear All':'AI: Select All';b.setAttribute('aria-pressed',String(photosAll));}
 }
 function shiftedScheduleTime(value,minutes){if(!value)return '';const d=new Date(value);if(Number.isNaN(d.getTime()))return '';d.setMinutes(d.getMinutes()+(Number(minutes)||0));return getLocalInputValue(d)}
 function renderGlobalTimerControls(){
