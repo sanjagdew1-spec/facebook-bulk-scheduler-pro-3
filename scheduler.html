@@ -404,7 +404,7 @@ function distributePhotoSlotDropFiles(fileList){
   for(const pi of targets){
    const id=advancedSelectedPageIds[pi];if(!id)continue;
    const data=ensureAdvancedPageData(id);
-   for(const post of data.posts.slice(0,data.postCount))post.images=Array(Math.max(1,Number(post.imageCount)||1)).fill(null);
+   for(const post of data.posts.slice(0,data.postCount)){post.images=Array(Math.max(1,Number(post.imageCount)||1)).fill(null);post.manualImages=[];}
   }
  }
  let assigned=0,unassigned=0;
@@ -569,23 +569,24 @@ $('bulkPagesAiAll').addEventListener('click',()=>{const makeAi=!(bulkImageSlots.
 $('bulkScheduleAll').addEventListener('click',submitBulkSchedule);
 renderBulkImageSlots();renderGlobalTimerControls();
 let advancedSelectedPageIds=['__demo__'],advancedPageData={'__demo__':{postCount:1,posts:[newAdvancedPost()]}},advancedDropSelected=new Set(),advancedDropAll=true,advancedCaptionTarget=0,advancedPageSlots=[],advancedTimerApplied=false,advancedActiveSlotIndex=0;
-function newAdvancedPost(){return {images:[],caption:'',time:'',isAiContent:false,imageCount:1};}
-function filledImages(post){return (post.images||[]).filter(Boolean);}
+function newAdvancedPost(){return {images:[],manualImages:[],caption:'',time:'',isAiContent:false,imageCount:1};}
+function filledImages(post){return [...(post.images||[]).filter(Boolean),...(post.manualImages||[]).filter(Boolean)];}
 function firstEmptyImageSlot(post){for(let i=0;i<post.imageCount;i++)if(!post.images[i])return i;return -1;}
 function addManualImagesToPost(post,incoming,pageIndex,postIndex){
  const files=Array.from(incoming||[]),valid=files.filter(isAllowedPhoto);
  if(valid.length!==files.length)toast('Only JPG/PNG images up to 6 MB each are allowed. Invalid files were skipped.');
- // Bulk Photos manual additions follow Bulk Pages: Image count is fixed by the user's setting.
+ // Manual photos are separate from configured Image Slots. They never change the
+ // slot controller, and can be attached even when every configured slot is full.
  post.imageCount=Math.max(1,Math.min(10,Number(post.imageCount)||1));
  post.images=Array.from({length:post.imageCount},(_,i)=>post.images?.[i]||null);
+ post.manualImages=Array.isArray(post.manualImages)?post.manualImages.filter(Boolean):[];
  let added=0,full=0;
  for(const file of valid){
-  const target=firstEmptyImageSlot(post);
-  if(target<0){full++;continue}
-  post.images[target]=file;added++;
+  if(filledImages(post).length>=10){full++;continue}
+  post.manualImages.push(file);added++;
  }
- if(full)toast('Added '+added+' image(s). Post '+(postIndex+1)+' has no empty Image Slots; '+full+' extra file(s) were skipped. Increase Image count manually if you need more slots.');
- else if(added)toast('Added '+added+' image(s) to Post '+(postIndex+1)+'. Image Slot count stayed unchanged.');
+ if(full)toast('Added '+added+' image(s). Post '+(postIndex+1)+' reached Facebook’s 10-image maximum; '+full+' extra file(s) were skipped. Configured Image Slot count did not change.');
+ else if(added)toast('Added '+added+' manual image(s) to Post '+(postIndex+1)+'. Configured Image Slot count stayed unchanged.');
  renderAdvancedWorkspaces();
  renderBulkPhotosTimerControls();
  updatePhotoSlotDropStatus();
@@ -641,10 +642,17 @@ function renderAdvancedWorkspaces(){
   const pageId=advancedSelectedPageIds[pageIndex],post=pageId?ensureAdvancedPageData(pageId).posts[postIndex]:null;
   if(!post||!Number.isInteger(imageIndex)||imageIndex<0||imageIndex>=post.imageCount||!post.images[imageIndex])return;
   post.images[imageIndex]=null;
-  renderAdvancedWorkspaces();
-  renderBulkPhotosTimerControls();
-  updatePhotoSlotDropStatus();
+  renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();
   toast('Image removed from Page Slot '+(pageIndex+1)+', Post Slot '+(postIndex+1)+'.');
+ }));
+ root.querySelectorAll('[data-advanced-manual-image-remove]').forEach(button=>button.addEventListener('click',event=>{
+  event.preventDefault();event.stopPropagation();
+  const pageIndex=Number(button.dataset.pageIndex),postIndex=Number(button.dataset.postIndex),manualIndex=Number(button.dataset.manualImageIndex);
+  const pageId=advancedSelectedPageIds[pageIndex],post=pageId?ensureAdvancedPageData(pageId).posts[postIndex]:null;
+  if(!post||!Array.isArray(post.manualImages)||!Number.isInteger(manualIndex)||manualIndex<0||manualIndex>=post.manualImages.length)return;
+  post.manualImages.splice(manualIndex,1);
+  renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();
+  toast('Manual image removed. Configured Image Slot count stayed unchanged.');
  }));
  root.querySelectorAll('[data-advanced-manual-files]').forEach(input=>input.addEventListener('change',()=>{const pageIndex=Number(input.dataset.pageIndex),postIndex=Number(input.dataset.postIndex),id=advancedSelectedPageIds[pageIndex],post=id?ensureAdvancedPageData(id).posts[postIndex]:null;if(!post)return;addManualImagesToPost(post,Array.from(input.files||[]),pageIndex,postIndex);input.value='';}));
  root.querySelectorAll('[data-post-drop-zone]').forEach(zone=>{const pageIndex=Number(zone.dataset.pageIndex),postIndex=Number(zone.dataset.postIndex);zone.addEventListener('click',event=>{if(event.target.closest('[data-advanced-manual-files]'))return;if(event.target.closest('.advanced-image-thumb button'))return;zone.querySelector('[data-advanced-manual-files]')?.click()});['dragenter','dragover'].forEach(type=>zone.addEventListener(type,event=>{event.preventDefault();zone.classList.add('is-dragover')}));zone.addEventListener('dragleave',event=>{event.preventDefault();if(!zone.contains(event.relatedTarget))zone.classList.remove('is-dragover')});zone.addEventListener('drop',event=>{event.preventDefault();zone.classList.remove('is-dragover');const id=advancedSelectedPageIds[pageIndex],post=id?ensureAdvancedPageData(id).posts[postIndex]:null;if(!post)return;addManualImagesToPost(post,Array.from(event.dataTransfer?.files||[]),pageIndex,postIndex)});zone.addEventListener('keydown',event=>{if(event.target===zone&&(event.key==='Enter'||event.key===' ')){event.preventDefault();zone.querySelector('[data-advanced-manual-files]')?.click()}})});
@@ -652,7 +660,8 @@ function renderAdvancedWorkspaces(){
 function renderAdvancedPost(pageIndex,pageId,post,postIndex){
  const filled=filledImages(post).length;
  const imageSlots=Array.from({length:post.imageCount},(_,ii)=>{const file=post.images[ii];if(file)return '<div class="advanced-image-thumb"><img alt="'+safe(file.name)+'" src="'+URL.createObjectURL(file)+'"><button type="button" class="slot-image-remove" data-advanced-image-remove data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" data-image-index="'+ii+'" aria-label="Remove image '+(ii+1)+'">×</button><small>Image '+(ii+1)+' · '+safe(file.name)+'</small></div>';return '<div class="advanced-image-thumb advanced-empty-image-slot"><span>Image '+(ii+1)+'</span><small>Empty</small></div>'}).join('');
- return '<article class="advanced-post-card"><div class="advanced-post-head"><strong>SLOT '+(pageIndex+1)+' · POST '+(postIndex+1)+'</strong><span class="advanced-image-count-pill">'+filled+'/'+post.imageCount+' images</span></div><div class="bulk-drop-zone advanced-upload-pane" data-post-drop-zone data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" tabindex="0" role="button" aria-label="Drop images for Slot '+(pageIndex+1)+' Post '+(postIndex+1)+'"><div class="upicon">⇧</div><b>Drag and drop photos here</b><p>Add images for Slot '+(pageIndex+1)+' · Post '+(postIndex+1)+' · JPG / PNG · max 10 images · 6 MB each.</p><input class="file-picker" id="advancedFiles-'+pageIndex+'-'+postIndex+'" type="file" accept="image/jpeg,image/png" multiple data-advanced-manual-files data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" aria-label="Choose photos for Slot '+(pageIndex+1)+' Post '+(postIndex+1)+'"><div class="bulk-drop-status" data-advanced-file-status="'+pageIndex+'-'+postIndex+'">No photos selected yet.</div><div class="advanced-image-grid">'+imageSlots+'</div></div><div class="advanced-post-fields"><div class="field"><label for="advancedCaption-'+pageIndex+'-'+postIndex+'">Caption for post '+(postIndex+1)+'</label><textarea id="advancedCaption-'+pageIndex+'-'+postIndex+'" data-advanced-caption data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" placeholder="Write a unique caption…">'+safe(post.caption)+'</textarea></div><label class="slot-ai"><input type="checkbox" data-advanced-ai data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" '+(post.isAiContent?'checked':'')+'> This post contains AI-generated images</label><div class="field"><label for="advancedTime-'+pageIndex+'-'+postIndex+'">Schedule date &amp; time</label><input id="advancedTime-'+pageIndex+'-'+postIndex+'" type="datetime-local" data-advanced-time data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" value="'+safe(post.time)+'"></div></div></article>';
+ const manualImages=(post.manualImages||[]).map((file,mi)=>'<div class="advanced-image-thumb"><img alt="'+safe(file.name)+'" src="'+URL.createObjectURL(file)+'"><button type="button" class="slot-image-remove" data-advanced-manual-image-remove data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" data-manual-image-index="'+mi+'" aria-label="Remove manual image '+(mi+1)+'">×</button><small>Manual image '+(mi+1)+' · '+safe(file.name)+'</small></div>').join('');
+ return '<article class="advanced-post-card"><div class="advanced-post-head"><strong>SLOT '+(pageIndex+1)+' · POST '+(postIndex+1)+'</strong><span class="advanced-image-count-pill">'+post.imageCount+' configured Image Slot(s) · '+filled+' photo(s) attached</span></div><div class="bulk-drop-zone advanced-upload-pane" data-post-drop-zone data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" tabindex="0" role="button" aria-label="Drop images for Slot '+(pageIndex+1)+' Post '+(postIndex+1)+'"><div class="upicon">⇧</div><b>Drag and drop photos here</b><p>Add images for Slot '+(pageIndex+1)+' · Post '+(postIndex+1)+' · JPG / PNG · max 10 images total · 6 MB each. Manual photos do not change configured Image Slots.</p><input class="file-picker" id="advancedFiles-'+pageIndex+'-'+postIndex+'" type="file" accept="image/jpeg,image/png" multiple data-advanced-manual-files data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" aria-label="Choose photos for Slot '+(pageIndex+1)+' Post '+(postIndex+1)+'"><div class="bulk-drop-status" data-advanced-file-status="'+pageIndex+'-'+postIndex+'">No photos selected yet.</div><div class="advanced-image-grid">'+imageSlots+manualImages+'</div></div><div class="advanced-post-fields"><div class="field"><label for="advancedCaption-'+pageIndex+'-'+postIndex+'">Caption for post '+(postIndex+1)+'</label><textarea id="advancedCaption-'+pageIndex+'-'+postIndex+'" data-advanced-caption data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" placeholder="Write a unique caption…">'+safe(post.caption)+'</textarea></div><label class="slot-ai"><input type="checkbox" data-advanced-ai data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" '+(post.isAiContent?'checked':'')+'> This post contains AI-generated images</label><div class="field"><label for="advancedTime-'+pageIndex+'-'+postIndex+'">Schedule date &amp; time</label><input id="advancedTime-'+pageIndex+'-'+postIndex+'" type="datetime-local" data-advanced-time data-page-index="'+pageIndex+'" data-post-index="'+postIndex+'" value="'+safe(post.time)+'"></div></div></article>';
 }
 function isAllowedPhoto(file){return ['image/jpeg','image/png'].includes(file.type)&&file.size<=6*1024*1024;}
 function renderPhotoSlotDistribution(){renderAdvancedDropTargets();renderAdvancedCaptionTargets();}
