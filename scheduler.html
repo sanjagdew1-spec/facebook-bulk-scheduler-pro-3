@@ -182,9 +182,9 @@
 #view-bulk-photos.advanced-mode-off .advanced-only-panel{display:none!important}
 #view-bulk-photos.advanced-mode-off .advanced-layout{display:block}
 #view-bulk-photos.advanced-mode-off #advancedCaptionCard{width:100%;max-width:none}
-#view-bulk-photos.advanced-mode-off #allPhotosCaption{min-height:300px;height:34vh;max-height:600px;font-size:14px;line-height:1.6}
+#view-bulk-photos.advanced-mode-off #allPhotosCaption{min-height:150px;height:17vh;max-height:300px;font-size:14px;line-height:1.6}
 #view-bulk-photos.advanced-mode-off #advancedCaptionCard .muted{max-width:900px}
-@media(max-width:700px){.advanced-mode-switch-card{align-items:flex-start;flex-direction:column}.advanced-toggle-standalone{align-self:flex-start}#view-bulk-photos.advanced-mode-off #allPhotosCaption{height:300px}}
+@media(max-width:700px){.advanced-mode-switch-card{align-items:flex-start;flex-direction:column}.advanced-toggle-standalone{align-self:flex-start}#view-bulk-photos.advanced-mode-off #allPhotosCaption{height:150px}}
 /* Bulk Photos gets its own compact base-time + repeat-gap timer below its caption card. */
 #photoSlotDropCard{grid-column:1;grid-row:1 / span 2;align-self:stretch}
 #allCaptionCard{grid-column:2;grid-row:1;align-self:start}
@@ -199,6 +199,10 @@
 #bulkPhotosTimerPanel .actions{margin-top:6px}
 #bulkPhotosTimerPanel .actions .btn{width:100%;padding:8px;font-size:11px}
 @media(max-width:760px){#photoSlotDropCard,#allCaptionCard,#bulkPhotosTimerPanel{grid-column:1;grid-row:auto;align-self:start}.bulk-photos-timer-fields{grid-template-columns:minmax(0,1fr) minmax(90px,.7fr)}}
+
+/* Advanced Mode ON: stretch both side-by-side cards to the same grid-row height. OFF keeps its separate compact caption sizing. */
+#view-bulk-photos:not(.advanced-mode-off) .advanced-layout{align-items:stretch}
+#view-bulk-photos:not(.advanced-mode-off) #advancedDropCard,#view-bulk-photos:not(.advanced-mode-off) #advancedCaptionCard{align-self:stretch}
 
 /* Keep inactive Page Slot buttons truly hidden even when button styles set display. */
 .advanced-number-row button[hidden]{display:none!important;}
