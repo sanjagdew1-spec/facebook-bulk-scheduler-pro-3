@@ -62,6 +62,7 @@
 .advanced-post-card .slot-ai{font-size:10px;margin:8px 0}
 /* Separate Post / Schedule / Image controls from the familiar manual photo workspace. */
 /* A fully separate controls panel: Post on the left, Page Slot centered, ten Image selectors on the right. */
+.advanced-slot-controls-panel{margin:14px 0 16px;padding:12px;border:1px solid #344663;background:linear-gradient(145deg,#111b2e,#0b1423)}
 .advanced-slot-control-row{display:grid;grid-template-columns:minmax(78px,.55fr) minmax(110px,.7fr) minmax(0,4fr);gap:12px;align-items:center;padding:10px 12px;margin:8px 0;border:1px solid #344663;border-radius:10px;background:linear-gradient(145deg,#111b2e,#0b1423)}
 .slot-control-post,.slot-control-slot,.slot-control-images{display:grid;gap:5px;min-width:0}
 .slot-control-post label,.slot-control-slot>span{font-size:10px;color:#b7c6df;font-weight:800;letter-spacing:.2px}
@@ -238,7 +239,6 @@
   <p class="muted">Select the Facebook Pages you want to work on. Each selected Page opens its own workspace with one manual post slot ready for an image and schedule time. Unselected Pages do not create empty workspaces.</p>
   <select id="photoPage" hidden aria-hidden="true"><option value="">Choose a Page</option></select>
   <div id="advancedPageChoices" class="advanced-page-choices"><div class="empty">Connect Facebook and refresh Pages first.</div></div>
-  <div class="field"><label for="advancedPostCountAll">Set Post Slots for all selected Pages</label><div class="advanced-inline-control"><select id="advancedPostCountAll"><option value="1">1 post per Page</option><option value="2">2 posts per Page</option><option value="3">3 posts per Page</option><option value="4">4 posts per Page</option><option value="5">5 posts per Page</option><option value="6">6 posts per Page</option><option value="7">7 posts per Page</option><option value="8">8 posts per Page</option><option value="9">9 posts per Page</option><option value="10">10 posts per Page</option></select><button class="btn secondary" id="applyAdvancedPostCountAll" type="button">Apply to All Pages</button></div><small>After applying, you can change the Post Slots count for each Page separately.</small></div>
 </div>
 <div class="advanced-layout">
   <div class="card" id="advancedDropCard">
@@ -255,7 +255,6 @@
       <input id="photoSlotDropInput" class="file-picker" type="file" accept="image/jpeg,image/png" multiple aria-label="Choose photos for selected Page Slots">
       <div class="bulk-drop-status" id="photoSlotDropStatus" aria-live="polite">No photos distributed yet.</div>
     </div>
-    <div class="advanced-inline-control advanced-image-all"><div class="field"><label for="advancedImageCountAll">Image Slots · apply to every Post Slot</label><select id="advancedImageCountAll"><option value="1">1 image per post</option><option value="2">2 images per post</option><option value="3">3 images per post</option><option value="4">4 images per post</option><option value="5">5 images per post</option><option value="6">6 images per post</option><option value="7">7 images per post</option><option value="8">8 images per post</option><option value="9">9 images per post</option><option value="10">10 images per post</option></select></div><button class="btn secondary" id="applyAdvancedImageCountAll" type="button">Apply to All Posts</button></div>
     <div class="notice" id="advancedDropNotice">Tip: select Page Slot 2 to send files only to Page Slot 2. Select 1 and 2 to distribute only between those two Page Slots. All includes every currently selected Page.</div>
   </div>
   <div class="card" id="advancedCaptionCard">
@@ -279,7 +278,8 @@
   </div>
   <div class="actions"><button class="btn" id="applyBulkPhotosTimer" type="button">Apply All Timer Settings</button></div>
 </section>
-<div class="section-title"><div><h2>5 · Selected Page Workspaces</h2><p>One manual post slot appears for each selected Facebook Page. Add more Post Slots only when you need them.</p></div><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div>
+<section class="card advanced-slot-controls-panel"><div class="card-head"><h3>Post · Slot · Image Controls</h3><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div><p class="muted">Each row is one selected Page Slot. Change Post count on the left and Image count for each post on the right. These controls are separate from the manual post editor below.</p><div id="advancedSlotControlsWorkspace"></div></section>
+<div class="section-title"><div><h2>Manual Post Workspaces</h2><p>Compact editor for each Slot and Post: images, caption, and schedule time.</p></div></div>
 <div id="advancedPageSlotWorkspaces"></div>
 <div class="card"><div class="actions"><button class="btn secondary" id="batchScheduleBtn" type="button">Schedule All Posts</button><button class="btn secondary" id="bulkPhotosAiAll" type="button" aria-pressed="false">AI: Select All</button><button class="btn ghost" id="clearBatch" type="button">Clear Bulk Photos</button></div><p class="footer-note">Each Page is submitted separately to the scheduling API. Successful and failed results are reported; the composer is cleared only after every requested post is accepted.</p></div>
 </section>
@@ -500,8 +500,8 @@ function renderAdvancedWorkspaces(){
   const isDemo=slot.pageId==='__demo__',p=pages.find(x=>String(x.id)===slot.pageId),data=slot.data;
   return '<section class="advanced-page-workspace'+(isDemo?' demo-workspace':'')+'"><div class="advanced-post-list">'+data.posts.slice(0,data.postCount).map((post,pi)=>renderAdvancedPost(slot.index,slot.pageId,post,pi)).join('')+'</div></section>';
  }).join('');
- root.querySelectorAll('[data-advanced-post-count]').forEach(el=>el.addEventListener('change',()=>{const pageIndex=Number(el.dataset.advancedPostCount),id=advancedSelectedPageIds[pageIndex],data=ensureAdvancedPageData(id),n=Number(el.value)||1;data.postCount=n;renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();updateAllCaptionCount();}));
- root.querySelectorAll('[data-advanced-image-count]').forEach(el=>el.addEventListener('change',()=>{const pi=Number(el.dataset.pageIndex),postIndex=Number(el.dataset.postIndex),id=advancedSelectedPageIds[pi],post=ensureAdvancedPageData(id).posts[postIndex],n=Number(el.value)||1;if(post.images.slice(n).some(Boolean)){toast('This post has images in Image controls above '+n+'. Remove those images before lowering the Image count.');el.value=String(post.imageCount);return}post.imageCount=n;post.images.length=n;renderAdvancedWorkspaces();updatePhotoSlotDropStatus();}));
+ controlsRoot?.querySelectorAll('[data-advanced-post-count]').forEach(el=>el.addEventListener('change',()=>{const pageIndex=Number(el.dataset.advancedPostCount),id=advancedSelectedPageIds[pageIndex],data=ensureAdvancedPageData(id),n=Number(el.value)||1;data.postCount=n;renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();updateAllCaptionCount();}));
+ controlsRoot?.querySelectorAll('[data-advanced-image-count]').forEach(el=>el.addEventListener('change',()=>{const pi=Number(el.dataset.pageIndex),postIndex=Number(el.dataset.postIndex),id=advancedSelectedPageIds[pi],post=ensureAdvancedPageData(id).posts[postIndex],n=Number(el.value)||1;if(post.images.slice(n).some(Boolean)){toast('This post has images in Image controls above '+n+'. Remove those images before lowering the Image count.');el.value=String(post.imageCount);return}post.imageCount=n;post.images.length=n;renderAdvancedWorkspaces();updatePhotoSlotDropStatus();}));
  root.querySelectorAll('[data-focus-bulk-schedule]').forEach(el=>el.addEventListener('click',()=>{const target=$('bulkPhotosAllTimerBase');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.focus({preventScroll:true});}}));
 }
 function renderAdvancedPost(pageIndex,pageId,post,postIndex){
@@ -527,7 +527,7 @@ function distributePhotoSlotDropFiles(fileList){
  const files=sortAdvancedFiles(valid);let assigned=0,unassigned=0;
  for(const file of files){
   let placed=false;
-  for(const pi of targets){const id=advancedSelectedPageIds[pi],data=ensureAdvancedPageData(id);for(const post of data.posts){const free=firstEmptyImageSlot(post);if(free>=0){post.images[free]=file;assigned++;placed=true;break}}if(placed)break}
+  for(const pi of targets){const id=advancedSelectedPageIds[pi],data=ensureAdvancedPageData(id);for(const post of data.posts.slice(0,data.postCount)){const free=firstEmptyImageSlot(post);if(free>=0){post.images[free]=file;assigned++;placed=true;break}}if(placed)break}
   if(!placed)unassigned++;
  }
  renderAdvancedWorkspaces();updatePhotoSlotDropStatus(assigned+' photo(s) assigned in Page Slot → Post Slot order. '+(unassigned?unassigned+' file(s) refused because selected targets are full; nothing spilled into other Page Slots.':''),rejected?'Invalid files skipped: '+rejected+'.':'');
@@ -547,13 +547,11 @@ function setupPhotoSlotDropBox(){
  $('advancedCaptionTargets').querySelectorAll('[data-caption-target]').forEach(btn=>btn.addEventListener('click',()=>{const i=Number(btn.dataset.captionTarget);if(i>=advancedSelectedPageIds.length)return;advancedCaptionTarget=i;renderAdvancedCaptionTargets()}));
 }
 function splitAllCaptions(text){return String(text||'').trim().split(/\n\s*\n+/).map(x=>x.trim()).filter(Boolean)}
-function updateAllCaptionCount(){const posts=advancedSelectedPageIds.reduce((sum,id)=>sum+ensureAdvancedPageData(id).posts.length,0),images=advancedSelectedPageIds.reduce((sum,id)=>sum+ensureAdvancedPageData(id).posts.reduce((a,p)=>a+filledImages(p).length,0),0);$('allCaptionCount').textContent=posts+' post slot(s) · '+images+' images · '+advancedSelectedPageIds.length+' Page(s)';}
-$('allCaptionPhotoCount').addEventListener('change',()=>{const n=Number($('allCaptionPhotoCount').value);if(!Number.isFinite(n)||n<1)return;const id=advancedSelectedPageIds[advancedCaptionTarget],posts=id?ensureAdvancedPageData(id).posts:[];const parts=splitAllCaptions($('allPhotosCaption').value);if(parts.length!==n)toast('You selected '+n+' captions, but the text currently contains '+parts.length+' caption block(s).');});
+function updateAllCaptionCount(){const posts=advancedSelectedPageIds.reduce((sum,id)=>sum+ensureAdvancedPageData(id).postCount,0),images=advancedSelectedPageIds.reduce((sum,id)=>sum+ensureAdvancedPageData(id).posts.slice(0,ensureAdvancedPageData(id).postCount).reduce((a,p)=>a+filledImages(p).length,0),0);$('allCaptionCount').textContent=posts+' post slot(s) · '+images+' images · '+advancedSelectedPageIds.length+' Page(s)';}
+$('allCaptionPhotoCount').addEventListener('change',()=>{const n=Number($('allCaptionPhotoCount').value);if(!Number.isFinite(n)||n<1)return;const id=advancedSelectedPageIds[advancedCaptionTarget],posts=id?ensureAdvancedPageData(id).posts.slice(0,ensureAdvancedPageData(id).postCount):[];const parts=splitAllCaptions($('allPhotosCaption').value);if(parts.length!==n)toast('You selected '+n+' captions, but the text currently contains '+parts.length+' caption block(s).');});
 $('clearAllCaptions').addEventListener('click',()=>{$('allPhotosCaption').value='';toast('Caption editor cleared. Existing Post Slot captions were not changed.');});
-$('applyAllCaptions').addEventListener('click',()=>{const id=advancedSelectedPageIds[advancedCaptionTarget];if(!id){toast('Select a Page for Page Slot '+(advancedCaptionTarget+1)+' first.');return}const posts=ensureAdvancedPageData(id).posts,parts=splitAllCaptions($('allPhotosCaption').value),choice=$('allCaptionPhotoCount').value,target=choice==='auto'?posts.length:Number(choice);if(parts.length!==target){toast('Caption count mismatch: selected '+target+' but found '+parts.length+' caption block(s). Nothing was applied.');return}if(target>posts.length){toast('Page Slot '+(advancedCaptionTarget+1)+' has only '+posts.length+' Post Slot(s). Increase Post Slots first.');return}parts.forEach((caption,i)=>posts[i].caption=caption);renderAdvancedWorkspaces();toast('Applied '+target+' caption(s) to Page Slot '+(advancedCaptionTarget+1)+' only.');});
+$('applyAllCaptions').addEventListener('click',()=>{const id=advancedSelectedPageIds[advancedCaptionTarget];if(!id){toast('Select a Page for Page Slot '+(advancedCaptionTarget+1)+' first.');return}const pageData=ensureAdvancedPageData(id),posts=pageData.posts.slice(0,pageData.postCount),parts=splitAllCaptions($('allPhotosCaption').value),choice=$('allCaptionPhotoCount').value,target=choice==='auto'?posts.length:Number(choice);if(parts.length!==target){toast('Caption count mismatch: selected '+target+' but found '+parts.length+' caption block(s). Nothing was applied.');return}if(target>posts.length){toast('Page Slot '+(advancedCaptionTarget+1)+' has only '+posts.length+' Post Slot(s). Increase Post Slots first.');return}parts.forEach((caption,i)=>posts[i].caption=caption);renderAdvancedWorkspaces();toast('Applied '+target+' caption(s) to Page Slot '+(advancedCaptionTarget+1)+' only.');});
 
-$('applyAdvancedPostCountAll').addEventListener('click',()=>{if(!advancedSelectedPageIds.length){toast('Select Facebook Pages first.');return}const n=Number($('advancedPostCountAll').value)||1;for(const id of advancedSelectedPageIds){const data=ensureAdvancedPageData(id);if(n<data.posts.length&&data.posts.slice(n).some(p=>filledImages(p).length)){toast('Cannot remove Post Slots that still contain images. Remove those images first.');return}data.postCount=n;data.posts=Array.from({length:n},(_,i)=>data.posts[i]||newAdvancedPost())}renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();toast('Set '+n+' Post Slot(s) for all '+advancedSelectedPageIds.length+' selected Pages.');});
-$('applyAdvancedImageCountAll').addEventListener('click',()=>{if(!advancedSelectedPageIds.length){toast('Select Facebook Pages first.');return}const n=Number($('advancedImageCountAll').value)||1;for(const id of advancedSelectedPageIds){const data=ensureAdvancedPageData(id);for(const post of data.posts){if(post.images.slice(n).some(Boolean)){toast('Some posts have images in Image Slots above '+n+'. Remove those images first; no Image Slot counts were changed.');return}}}for(const id of advancedSelectedPageIds)for(const post of ensureAdvancedPageData(id).posts){post.imageCount=n;post.images.length=n;}renderAdvancedWorkspaces();updatePhotoSlotDropStatus();toast('Set Image Slots to '+n+' for every active Post Slot.');});
 function withAiDisclosure(caption,isAi){const text=String(caption||'').trim(),disclosure='This image was generated using AI.';if(!isAi)return text;const withoutExisting=text.replace(/(?:\n\s*)*(?:This image was generated using AI\.|This image is AI-generated\.|This image was generated with AI\.)\s*$/i,'').trim();return (withoutExisting?withoutExisting+'\n\n':'')+disclosure;}
 async function submitBatch(){
  try{
@@ -561,7 +559,7 @@ async function submitBatch(){
   const preparedByPage=[];
   for(let pi=0;pi<advancedSelectedPageIds.length;pi++){
    const id=advancedSelectedPageIds[pi],data=ensureAdvancedPageData(id),page=pages.find(p=>String(p.id)===id),posts=[];
-   for(let si=0;si<data.posts.length;si++){
+   for(let si=0;si<data.postCount;si++){
     const post=data.posts[si],label='Page Slot '+(pi+1)+' · Post Slot '+(si+1);
     const postImages=filledImages(post);if(!postImages.length)throw Error(label+' needs at least one image.');
     if(postImages.length>10)throw Error(label+' cannot contain more than 10 images.');
@@ -582,7 +580,7 @@ async function submitBatch(){
 }
 function renderBulkPhotosTimerControls(){
  const slotsRoot=$('bulkPhotosAllSlotsOffsets'),pagesRoot=$('bulkPhotosAllPagesOffsets');if(!slotsRoot||!pagesRoot)return;
- slotsRoot.innerHTML=Array.from({length:10},(_,i)=>'<div class="timer-offset-cell'+(i>=Math.max(1,...advancedSelectedPageIds.map(id=>ensureAdvancedPageData(id).posts.length))?' is-inactive':'')+'"><label for="bulkPhotosSlotOffset'+(i+1)+'">Post Slot '+(i+1)+' · + min</label><input id="bulkPhotosSlotOffset'+(i+1)+'" data-bulk-photos-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosSlotOffsets[i]+'"></div>').join('');
+ slotsRoot.innerHTML=Array.from({length:10},(_,i)=>'<div class="timer-offset-cell'+(i>=Math.max(1,...advancedSelectedPageIds.map(id=>ensureAdvancedPageData(id).postCount))?' is-inactive':'')+'"><label for="bulkPhotosSlotOffset'+(i+1)+'">Post Slot '+(i+1)+' · + min</label><input id="bulkPhotosSlotOffset'+(i+1)+'" data-bulk-photos-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosSlotOffsets[i]+'"></div>').join('');
  pagesRoot.innerHTML=Array.from({length:10},(_,i)=>'<div class="timer-offset-cell'+(i>=advancedSelectedPageIds.length?' is-inactive':'')+'"><label for="bulkPhotosPageOffset'+(i+1)+'">Page Slot '+(i+1)+' · + min</label><input id="bulkPhotosPageOffset'+(i+1)+'" data-bulk-photos-page-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosPageOffsets[i]+'"></div>').join('');
  slotsRoot.querySelectorAll('[data-bulk-photos-slot-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.bulkPhotosSlotOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Post Slot offset must be 0–1440 minutes.');el.value=bulkPhotosSlotOffsets[i];return}bulkPhotosSlotOffsets[i]=v;applyBulkPhotosTimer(false)}));
  pagesRoot.querySelectorAll('[data-bulk-photos-page-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.bulkPhotosPageOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Page Slot offset must be 0–1440 minutes.');el.value=bulkPhotosPageOffsets[i];return}bulkPhotosPageOffsets[i]=v;applyBulkPhotosTimer(false)}));
@@ -592,7 +590,7 @@ function applyBulkPhotosTimer(showToast=true){
  if(!base){if(showToast)toast('Set the Main Timer date and time first.');return false}
  if(Number.isNaN(new Date(base).getTime())){if(showToast)toast('Choose a valid Main Timer date and time.');return false}
  if(!advancedSelectedPageIds.length){if(showToast)toast('Select Facebook Pages before applying the timer.');return false}
- for(let pi=0;pi<advancedSelectedPageIds.length;pi++){const data=ensureAdvancedPageData(advancedSelectedPageIds[pi]);for(let si=0;si<data.posts.length;si++)data.posts[si].time=shiftedScheduleTime(base,bulkPhotosSlotOffsets[si]+bulkPhotosPageOffsets[pi])}
+ for(let pi=0;pi<advancedSelectedPageIds.length;pi++){const data=ensureAdvancedPageData(advancedSelectedPageIds[pi]);for(let si=0;si<data.postCount;si++)data.posts[si].time=shiftedScheduleTime(base,bulkPhotosSlotOffsets[si]+bulkPhotosPageOffsets[pi])}
  advancedTimerApplied=true;renderAdvancedWorkspaces();if(showToast)toast('All Timer applied to '+advancedSelectedPageIds.length+' Page Slot(s) and their Post Slots.');return true;
 }
 $('bulkPhotosAllTimerBase').addEventListener('change',()=>applyBulkPhotosTimer(false));
@@ -601,7 +599,7 @@ $('applyBulkPhotosAllSlotsOffset').addEventListener('click',()=>{const v=Number(
 $('applyBulkPhotosAllPagesOffset').addEventListener('click',()=>{const v=Number($('bulkPhotosAllPagesValue').value);if(!Number.isInteger(v)||v<0||v>1440){toast('Minutes must be 0–1440.');return}bulkPhotosPageOffsets=Array(10).fill(v);renderBulkPhotosTimerControls();applyBulkPhotosTimer(true)});
 $('batchScheduleBtn').addEventListener('click',()=>submitBatch());
 $('clearBatch').addEventListener('click',()=>{advancedPageData={};advancedSelectedPageIds=[];advancedDropSelected.clear();advancedDropAll=true;advancedCaptionTarget=0;$('allPhotosCaption').value='';$('allCaptionPhotoCount').value='auto';$('bulkPhotosAllTimerBase').value='';buildSlots();toast('Bulk Photos composer cleared.');});
-$('bulkPhotosAiAll').addEventListener('click',()=>{const all=advancedSelectedPageIds.length&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.every(p=>p.isAiContent));for(const id of advancedSelectedPageIds)for(const post of ensureAdvancedPageData(id).posts)post.isAiContent=!all;renderAdvancedWorkspaces();updateAdvancedAIAllButton();toast(all?'AI disclosure unchecked for all active posts.':'AI disclosure checked for all active posts.');});
+$('bulkPhotosAiAll').addEventListener('click',()=>{const all=advancedSelectedPageIds.length&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.slice(0,ensureAdvancedPageData(id).postCount).every(p=>p.isAiContent));for(const id of advancedSelectedPageIds){const data=ensureAdvancedPageData(id);for(const post of data.posts.slice(0,data.postCount))post.isAiContent=!all;}renderAdvancedWorkspaces();updateAdvancedAIAllButton();toast(all?'AI disclosure unchecked for all active posts.':'AI disclosure checked for all active posts.');});
 setupPhotoSlotDropBox();
 renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedDropTargets();renderAdvancedCaptionTargets();renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updateAllCaptionCount();
 function statusOf(j){const s=String(j.status||'draft').toLowerCase();return ['published','scheduled','failed'].includes(s)?s:'draft'}
