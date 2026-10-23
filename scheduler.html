@@ -274,11 +274,11 @@
 <div class="card bulk-slot-selector-card" id="bulkPagesSlotSelectorCard"><div class="bulk-slot-selector-row"><div class="field"><label for="bulkImageCount">Number of Post Slots</label><select id="bulkImageCount"><option value="1">1 Post Slot</option><option value="2">2 Post Slots</option><option value="3">3 Post Slots</option><option value="4">4 Post Slots</option><option value="5">5 Post Slots</option><option value="6">6 Post Slots</option><option value="7">7 Post Slots</option><option value="8">8 Post Slots</option><option value="9">9 Post Slots</option><option value="10">10 Post Slots</option></select><small>Choose 1–10 independent Post Slots. Each Post Slot represents one post.</small></div><button class="btn secondary all-groups-selector" id="allGroupsSelector" type="button">All Groups Selector</button></div></div><div class="card advanced-mode-switch-card" id="bulkPagesAdvancedModeSwitchCard"><div><h3>Advanced Mode</h3><p class="muted">Turn on the Images per Post Slot controls, Bulk Photo Drop Box, and All Timer in the advanced workspace. Turn it off for a larger caption editor and manual slot workflow.</p></div><label class="advanced-toggle advanced-toggle-standalone"><input id="bulkPagesAdvancedModeToggle" type="checkbox" aria-expanded="false"><span>Advanced Mode</span></label></div><div class="card bulk-post-image-count-card" id="bulkPostImageCountCard"><div class="card-head"><h3>Images per Post Slot</h3><button class="btn secondary" id="bulkPostCountAll" type="button">All Posts · 1 image each</button></div><p class="muted">Each Post Slot is one post. Set how many images that post should contain. Only the active Post Slots are shown; you can set 1–10 images for each post.</p><div class="bulk-photo-distribution" id="bulkPhotoDistribution"><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount1">Post One</label><label class="image-count-label" for="bulkPhotoCount1">Images</label><input id="bulkPhotoCount1" data-bulk-photo-count="0" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post One"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount2">Post Two</label><label class="image-count-label" for="bulkPhotoCount2">Images</label><input id="bulkPhotoCount2" data-bulk-photo-count="1" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Two"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount3">Post Three</label><label class="image-count-label" for="bulkPhotoCount3">Images</label><input id="bulkPhotoCount3" data-bulk-photo-count="2" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Three"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount4">Post Four</label><label class="image-count-label" for="bulkPhotoCount4">Images</label><input id="bulkPhotoCount4" data-bulk-photo-count="3" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Four"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount5">Post Five</label><label class="image-count-label" for="bulkPhotoCount5">Images</label><input id="bulkPhotoCount5" data-bulk-photo-count="4" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Five"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount6">Post Six</label><label class="image-count-label" for="bulkPhotoCount6">Images</label><input id="bulkPhotoCount6" data-bulk-photo-count="5" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Six"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount7">Post Seven</label><label class="image-count-label" for="bulkPhotoCount7">Images</label><input id="bulkPhotoCount7" data-bulk-photo-count="6" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Seven"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount8">Post Eight</label><label class="image-count-label" for="bulkPhotoCount8">Images</label><input id="bulkPhotoCount8" data-bulk-photo-count="7" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Eight"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount9">Post Nine</label><label class="image-count-label" for="bulkPhotoCount9">Images</label><input id="bulkPhotoCount9" data-bulk-photo-count="8" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Nine"></div><div class="bulk-photo-count-cell bulk-post-image-cell"><label for="bulkPhotoCount10">Post Ten</label><label class="image-count-label" for="bulkPhotoCount10">Images</label><input id="bulkPhotoCount10" data-bulk-photo-count="9" type="number" min="1" max="10" step="1" value="1" inputmode="numeric" aria-label="Number of images for Post Ten"></div></div></div><div class="bulk-tools-pair" id="bulkPagesToolsPair"><div class="card" id="bulkPhotoDropCard"><div class="card-head"><h3>Bulk Photo Drop Box</h3></div><p class="muted">Drop photos here to distribute them among the active Post Slots in order. Each post receives exactly the image count set in the numbered controls below or in Images per Post Slot above.</p><div class="bulk-drop-zone" id="bulkPhotoDropZone" tabindex="0" role="button" aria-label="Drop photos here to distribute them among Bulk Pages slots"><div class="upicon">⇧</div><b>Drag and drop photos here</b><p>Drop multiple JPG or PNG photos at once, or add photos one by one. The system fills each Post Slot according to its image count settings.</p><input id="bulkPhotoDropInput" class="file-picker" type="file" accept="image/jpeg,image/png" multiple aria-label="Choose photos to distribute"><div class="bulk-drop-status" id="bulkPhotoDropStatus" aria-live="polite">No photos distributed yet.</div></div></div><div class="card" id="bulkPagesCaptionCard"><div class="card-head"><h3>Apply captions to all photos</h3><span class="tag" id="bulkPagesCaptionCount">1 photo slot</span></div><p class="muted">Paste one caption per active Photo Slot, separated by a blank line. Each caption is applied to that Photo Slot’s selected Pages.</p><div class="caption-slot-selector" id="bulkPagesCaptionSlotSelector" role="group" aria-label="Caption Page Slot"><button type="button" class="btn secondary small caption-slot-button is-selected" data-caption-page-slot="0" aria-pressed="true">1</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="1" aria-pressed="false">2</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="2" aria-pressed="false">3</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="3" aria-pressed="false">4</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="4" aria-pressed="false">5</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="5" aria-pressed="false">6</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="6" aria-pressed="false">7</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="7" aria-pressed="false">8</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="8" aria-pressed="false">9</button><button type="button" class="btn secondary small caption-slot-button" data-caption-page-slot="9" aria-pressed="false">10</button></div><div class="field"><label for="bulkPagesCaptionPhotoCount">Number of Photo Captions</label><select id="bulkPagesCaptionPhotoCount"><option value="auto">Match active Photo Slots automatically</option><option value="1">1 photo caption</option><option value="2">2 photo captions</option><option value="3">3 photo captions</option><option value="4">4 photo captions</option><option value="5">5 photo captions</option><option value="6">6 photo captions</option><option value="7">7 photo captions</option><option value="8">8 photo captions</option><option value="9">9 photo captions</option><option value="10">10 photo captions</option></select><small>Choose Auto to match the active Photo Slots, or choose the exact caption count.</small></div><div class="field"><label for="bulkPagesAllCaptions">Captions (one blank line between each caption)</label><textarea id="bulkPagesAllCaptions" rows="7" placeholder="Caption for photo 1&#10;&#10;Caption for photo 2&#10;&#10;Caption for photo 3…"></textarea></div><div class="actions"><button class="btn secondary" id="applyBulkPagesCaptions" type="button">Apply captions to all photos</button><button class="btn ghost" id="clearBulkPagesCaptions" type="button">Clear captions</button></div><p class="footer-note">A count mismatch shows an alert and does not apply captions. Individual caption fields remain editable for every photo.</p></div>
 <div class="card all-timer-card" id="allTimerPanel">
   <div class="card-head"><h3>All Timer</h3><span class="tag">Bulk Pages</span></div>
-  <div class="all-timer-main"><label for="allTimerBase">Main Timer · date &amp; time</label><input type="datetime-local" id="allTimerBase"><small>Slot time = main time + slot offset + Page offset.</small></div>
+  <div class="all-timer-main"><label for="allTimerBase">Main Timer · date &amp; time</label><input type="datetime-local" id="allTimerBase"><small>Post time = main time + post offset + Page offset.</small></div>
   <div class="all-timer-grid">
-    <section class="all-timer-group" aria-label="All Photo Slots timer offsets">
-      <div class="card-head"><h4>All Photo Slots</h4></div>
-      <div class="all-timer-apply"><input aria-label="Minutes for all Photo Slots" id="allSlotsValue" type="number" min="0" max="1440" step="1" value="0"><button class="btn secondary small" id="applyAllSlotsOffset" type="button">Apply to All Photos</button></div>
+    <section class="all-timer-group" aria-label="All Post Slots timer offsets">
+      <div class="card-head"><h4>All Post Slots</h4></div>
+      <div class="all-timer-apply"><input aria-label="Minutes for all Post Slots" id="allSlotsValue" type="number" min="0" max="1440" step="1" value="0"><button class="btn secondary small" id="applyAllSlotsOffset" type="button">Apply to All Posts</button></div>
       <div class="timer-offset-list" id="allSlotsOffsets"></div>
     </section>
     <section class="all-timer-group" aria-label="All Pages timer offsets">
@@ -360,7 +360,7 @@
 const $=id=>document.getElementById(id);
 const DEFAULT_API='https://facebook-bulk-scheduler-pro-3-p3-api.onrender.com';
 const apiBase=DEFAULT_API;
-let pages=[],selectedBulk=new Set(),bulkFiles=[],slots=[],bulkImageSlots=[{files:[],caption:'',pageCaptions:{},pageIds:[],time:'',pageTimes:{},manualPageTimes:{},gapMinutes:0,manualTime:false,isAiContent:false}],bulkPhotoSlotCounts=Array(10).fill(1),photoSlotCounts=Array(10).fill(1),allTimerBase='',allSlotOffsets=Array(10).fill(0),allPageOffsets=Array(10).fill(0),bulkPhotosAllTimerBase='',bulkPhotosSlotOffsets=Array(10).fill(0),bulkPhotosPageOffsets=Array(10).fill(0),selectedCaptionPageSlot=0,jobs=[],notes=[];
+let pages=[],selectedBulk=new Set(),bulkFiles=[],slots=[],bulkImageSlots=[{files:[],caption:'',pageCaptions:{},pageIds:[],time:'',pageTimes:{},manualPageTimes:{},gapMinutes:0,manualTime:false,isAiContent:false}],bulkPhotoSlotCounts=Array(10).fill(1),photoSlotCounts=Array(10).fill(1),allTimerBase='',allSlotOffsets=Array(10).fill(0),allPageOffsets=Array(10).fill(0),selectedAllTimerSlot=0,bulkPhotosAllTimerBase='',bulkPhotosSlotOffsets=Array(10).fill(0),bulkPhotosPageOffsets=Array(10).fill(0),selectedCaptionPageSlot=0,jobs=[],notes=[];
 const titles={dashboard:'Dashboard',notes:'Notes','bulk-pages':'Bulk Pages','bulk-photos':'Bulk Photos',history:'History',settings:'Settings'};
 function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),4200)}
 function safe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -452,27 +452,64 @@ function updateAIAllButtons(){
  if(a){a.textContent=pagesAll?'AI: Clear All':'AI: Select All';a.setAttribute('aria-pressed',String(pagesAll));}
 }
 function shiftedScheduleTime(value,minutes){if(!value)return '';const d=new Date(value);if(Number.isNaN(d.getTime()))return '';d.setMinutes(d.getMinutes()+(Number(minutes)||0));return getLocalInputValue(d)}
+function renderAllPagesTimerOffsets(){
+ const pagesRoot=$('allPagesOffsets');if(!pagesRoot)return;
+ const active=Math.max(1,Math.min(10,Number($('bulkImageCount')?.value)||1));
+ const slot=bulkImageSlots[Math.min(selectedAllTimerSlot,active-1)]||{pageIds:[]};
+ const ids=Array.isArray(slot.pageIds)?slot.pageIds:[];
+ if(!ids.length){
+  pagesRoot.innerHTML='<div class="timer-offset-cell"><label for="allPageOffset1">Page 1 · + minutes</label><small class="timer-offset-detail">Select Pages in Post '+(selectedAllTimerSlot+1)+' to show their timer boxes.</small><input id="allPageOffset1" data-all-page-offset="0" type="number" min="0" max="1440" step="1" value="'+allPageOffsets[0]+'" disabled></div>';
+  return;
+ }
+ pagesRoot.innerHTML=ids.map((id,i)=>{
+  const page=pages.find(p=>String(p.id)===String(id)),name=page?.name||page?.page_name||id;
+  return '<div class="timer-offset-cell"><label for="allPageOffset'+(i+1)+'">Page '+(i+1)+' · '+safe(name)+' · + minutes</label><input id="allPageOffset'+(i+1)+'" data-all-page-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+allPageOffsets[i]+'"></div>';
+ }).join('');
+ pagesRoot.querySelectorAll('[data-all-page-offset]:not(:disabled)').forEach(el=>el.addEventListener('change',()=>{
+  const i=Number(el.dataset.allPageOffset),v=Number(el.value);
+  if(!Number.isInteger(v)||v<0||v>1440){toast('Page offset must be 0–1440 minutes.');el.value=allPageOffsets[i];return}
+  allPageOffsets[i]=v;applyAllTimerSettings(false);
+ }));
+}
+function selectAllTimerSlot(index){
+ const active=Math.max(1,Math.min(10,Number($('bulkImageCount')?.value)||1));
+ if(!Number.isInteger(index)||index<0||index>=active)return;
+ selectedAllTimerSlot=index;
+ document.querySelectorAll('#allSlotsOffsets [data-all-slot-select]').forEach(cell=>{
+  const selected=Number(cell.dataset.allSlotSelect)===selectedAllTimerSlot;
+  cell.classList.toggle('is-selected',selected);cell.setAttribute('aria-pressed',String(selected));
+ });
+ renderAllPagesTimerOffsets();
+}
 function renderGlobalTimerControls(){
  const slotsRoot=$('allSlotsOffsets'),pagesRoot=$('allPagesOffsets');if(!slotsRoot||!pagesRoot)return;
  const active=Math.max(1,Math.min(10,Number($('bulkImageCount')?.value)||1));
- const activeSlots=bulkImageSlots.slice(0,active);
- const pageCount=Math.max(1,...activeSlots.map(slot=>slot.pageIds.length));
- slotsRoot.innerHTML=allSlotOffsets.slice(0,active).map((n,i)=>'<div class="timer-offset-cell"><label for="allSlotOffset'+(i+1)+'">Photo '+(i+1)+' · + minutes</label><input id="allSlotOffset'+(i+1)+'" data-all-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+n+'"></div>').join('');
- pagesRoot.innerHTML=allPageOffsets.slice(0,pageCount).map((n,i)=>'<div class="timer-offset-cell"><label for="allPageOffset'+(i+1)+'">Page '+(i+1)+' · + minutes</label><input id="allPageOffset'+(i+1)+'" data-all-page-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+n+'"></div>').join('');
- slotsRoot.querySelectorAll('[data-all-slot-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.allSlotOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Photo offset must be 0–1440 minutes.');el.value=allSlotOffsets[i];return}allSlotOffsets[i]=v;applyAllTimerSettings(false)}));
- pagesRoot.querySelectorAll('[data-all-page-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.allPageOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Page offset must be 0–1440 minutes.');el.value=allPageOffsets[i];return}allPageOffsets[i]=v;applyAllTimerSettings(false)}));
+ selectedAllTimerSlot=Math.min(Math.max(0,selectedAllTimerSlot),active-1);
+ slotsRoot.innerHTML=allSlotOffsets.slice(0,active).map((n,i)=>'<div class="timer-offset-cell '+(i===selectedAllTimerSlot?'is-selected':'')+'" data-all-slot-select="'+i+'" role="button" tabindex="0" aria-pressed="'+String(i===selectedAllTimerSlot)+'"><label for="allSlotOffset'+(i+1)+'">Post '+(i+1)+' · + minutes</label><input id="allSlotOffset'+(i+1)+'" data-all-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+n+'"></div>').join('');
+ slotsRoot.querySelectorAll('[data-all-slot-select]').forEach(cell=>{
+  cell.addEventListener('click',()=>selectAllTimerSlot(Number(cell.dataset.allSlotSelect)));
+  cell.addEventListener('keydown',event=>{if((event.key==='Enter'||event.key===' ')&&event.target===cell){event.preventDefault();selectAllTimerSlot(Number(cell.dataset.allSlotSelect));}});
+ });
+ slotsRoot.querySelectorAll('[data-all-slot-offset]').forEach(el=>{
+  el.addEventListener('focus',()=>selectAllTimerSlot(Number(el.dataset.allSlotOffset)));
+  el.addEventListener('change',()=>{
+   const i=Number(el.dataset.allSlotOffset),v=Number(el.value);
+   if(!Number.isInteger(v)||v<0||v>1440){toast('Post offset must be 0–1440 minutes.');el.value=allSlotOffsets[i];return}
+   allSlotOffsets[i]=v;applyAllTimerSettings(false);
+  });
+ });
+ renderAllPagesTimerOffsets();
 }
 function applyAllTimerSettings(showToast=true){
  const base=$('allTimerBase')?.value||'';allTimerBase=base;
  if(!base){if(showToast)toast('Set the Main Timer date and time first.');return false}
  const dt=new Date(base);if(Number.isNaN(dt.getTime())){if(showToast)toast('Choose a valid Main Timer date and time.');return false}
  bulkImageSlots.forEach((slot,i)=>{
-  slot.time=shiftedScheduleTime(base,allSlotOffsets[i]);
-  slot.manualTime=true;
+  slot.time=shiftedScheduleTime(base,allSlotOffsets[i]);slot.manualTime=true;
   slot.pageIds.forEach((id,index)=>{slot.pageTimes[id]=shiftedScheduleTime(slot.time,allPageOffsets[Math.min(index,9)]);slot.manualPageTimes[id]=true});
  });
  renderBulkImageSlots();
- if(showToast)toast('Main Timer, Slot offsets, and Page offsets applied to all active Bulk Pages slots.');
+ if(showToast)toast('Main Timer, Post Slot offsets, and Page offsets applied to all active Bulk Pages slots.');
  return true;
 }
 $('allTimerBase').addEventListener('change',()=>applyAllTimerSettings(false));
