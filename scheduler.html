@@ -140,14 +140,16 @@
 /* Align the drop box beside the caption tool and use the caption card's empty lower area for All Timer. */
 .bulk-tools-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto minmax(0,1fr);gap:12px 16px;align-items:stretch;margin:14px 0}
 .bulk-tools-pair>.card{min-width:0;margin:0;height:auto}
-#bulkPhotoDropCard{grid-column:1;grid-row:1;align-self:start}
-#bulkPagesCaptionCard{grid-column:2;grid-row:1;align-self:start}
+#bulkPhotoDropCard{grid-column:1;grid-row:1;align-self:stretch}
+#bulkPagesCaptionCard{grid-column:2;grid-row:1;align-self:stretch}
+#bulkPostImageCountCard{grid-column:1;grid-row:2;align-self:stretch;margin:0}
+#allTimerPanel{grid-column:2;grid-row:2;align-self:stretch;margin:0;min-height:0}
 .bulk-tools-pair .bulk-photo-distribution{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .bulk-tools-pair .bulk-photo-count-cell{padding:8px}
 .bulk-tools-pair .bulk-drop-zone{height:auto;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 12px}
 .bulk-tools-pair .bulk-drop-zone p{max-width:420px}
 .bulk-tools-pair textarea{width:100%;box-sizing:border-box}
-@media(max-width:760px){.bulk-tools-pair{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:12px}.bulk-tools-pair>.card{height:auto}#bulkPhotoDropCard,#bulkPagesCaptionCard{grid-column:1;grid-row:auto}.bulk-tools-pair .bulk-drop-zone{min-height:120px}}
+@media(max-width:760px){.bulk-tools-pair{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:12px}.bulk-tools-pair>.card{height:auto}#bulkPhotoDropCard,#bulkPagesCaptionCard,#bulkPostImageCountCard,#allTimerPanel{grid-column:1;grid-row:auto}#bulkPostImageCountCard{order:2}#bulkPagesCaptionCard{order:3}#allTimerPanel{order:4}.bulk-tools-pair .bulk-drop-zone{min-height:120px}}
 /* All Timer fills the unused space under Apply captions, beside the tall photo drop box. */
 
 /* Restore original Bulk Pages layout: preserve existing card sizes and keep captions beside the drop box. */
@@ -720,4 +722,19 @@ setInterval(async()=>{try{const status=await api('/api/customer/status');await r
 init();
 if(new URLSearchParams(window.location.search).get('view')==='bulk-photos')showView('bulk-photos');
 })();
-</script></body></html>
+</script><script>
+/* Keep the existing Bulk Pages cards; only reposition Images per Post Slot below the drop box. */
+(function(){
+  const placeBulkCards = () => {
+    const pair = document.getElementById('bulkPagesToolsPair');
+    const imageCount = document.getElementById('bulkPostImageCountCard');
+    const timer = document.getElementById('allTimerPanel');
+    if (!pair || !imageCount || !timer) return;
+    if (imageCount.parentElement !== pair) pair.appendChild(imageCount);
+    if (timer.parentElement !== pair) pair.appendChild(timer);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', placeBulkCards, {once:true});
+  else placeBulkCards();
+})();
+</script>
+</body></html>
