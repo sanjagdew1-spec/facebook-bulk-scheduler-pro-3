@@ -150,20 +150,7 @@
 @media(max-width:760px){.bulk-tools-pair{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:12px}.bulk-tools-pair>.card{height:auto}#bulkPhotoDropCard,#bulkPagesCaptionCard{grid-column:1;grid-row:auto}.bulk-tools-pair .bulk-drop-zone{min-height:120px}}
 /* All Timer fills the unused space under Apply captions, beside the tall photo drop box. */
 
-/* Bulk Pages compact two-column layout: slot controls align at the top; drop box sits left of All Timer. */
-@media(min-width:761px){
-#view-bulk-pages{display:none}
-#view-bulk-pages.active{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-flow:row;align-items:start;column-gap:16px;row-gap:0}
-#view-bulk-pages>.hero,#view-bulk-pages>#bulkBatchNotice{grid-column:1/-1}
-#view-bulk-pages>#bulkPagesSlotSelectorCard{grid-column:1;grid-row:3;align-self:stretch;margin:0 0 14px}
-#view-bulk-pages>#bulkPostImageCountCard{grid-column:2;grid-row:3;align-self:stretch;margin:0 0 14px}
-#view-bulk-pages>#bulkPagesToolsPair{display:contents}
-#view-bulk-pages #bulkPhotoDropCard{grid-column:1;grid-row:4;align-self:stretch;margin:0 0 14px}
-#view-bulk-pages #bulkPagesCaptionCard{grid-column:1;grid-row:5;align-self:start;margin:0 0 14px}
-#view-bulk-pages>#allTimerPanel{grid-column:2;grid-row:4;align-self:stretch;margin:0 0 14px;min-height:0}
-#view-bulk-pages>#bulkImageSlots,#view-bulk-pages> .card:has(#bulkPublishNow){grid-column:1/-1}
-}
-@media(max-width:760px){#view-bulk-pages.active{display:block}}
+/* Restore original Bulk Pages layout: preserve existing card sizes and keep captions beside the drop box. */
 /* Bulk Pages compact controls: show only active photo counters and remove the redundant numbered caption picker/title. */
 #view-bulk-pages #bulkPagesCaptionSlotSelector{display:none!important}
 #view-bulk-pages #bulkPagesCaptionCard>.card-head{display:none!important}
