@@ -630,7 +630,7 @@ function syncAdvancedModeVisibility(){
  toggle.setAttribute('aria-expanded',String(toggle.checked));
 }
 $('advancedModeToggle')?.addEventListener('change',syncAdvancedModeVisibility);
-function sortAdvancedFiles(files){const list=Array.from(files);if(!$('advancedModeToggle')?.checked)return list;return list.map((file,index)=>({file,index,match:file.name.match(/^(\d+)\.(?:jpe?g|png)$/i)})).sort((a,b)=>{if(a.match&&b.match)return Number(a.match[1])-Number(b.match[1]);if(a.match)return -1;if(b.match)return 1;return a.index-b.index}).map(x=>x.file);}
+function sortAdvancedFiles(files){const list=Array.from(files);if(!$('advancedModeToggle')?.checked)return list;return list.map((file,index)=>({file,index,match:file.name.match(/(?:^|[^0-9])(\d+)(?=[^0-9]|$)/)})).sort((a,b)=>{if(a.match&&b.match){const delta=Number(a.match[1])-Number(b.match[1]);return delta||a.index-b.index}if(a.match)return -1;if(b.match)return 1;return a.index-b.index}).map(x=>x.file);}
 function distributePhotoSlotDropFiles(fileList){
  const incoming=Array.from(fileList||[]);if(!incoming.length)return;
  const valid=incoming.filter(isAllowedPhoto),rejected=incoming.length-valid.length;if(rejected)toast('Skipped '+rejected+' file(s). Only JPG/PNG images up to 6 MB each are allowed.');
