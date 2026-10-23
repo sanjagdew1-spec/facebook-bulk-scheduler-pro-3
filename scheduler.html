@@ -263,9 +263,9 @@
   <div class="card-head"><h3>All Timer</h3><span class="tag">Bulk Pages</span></div>
   <div class="all-timer-main"><label for="allTimerBase">Main Timer · date &amp; time</label><input type="datetime-local" id="allTimerBase"><small>Slot time = main time + slot offset + Page offset.</small></div>
   <div class="all-timer-grid">
-    <section class="all-timer-group" aria-label="All Slots timer offsets">
+    <section class="all-timer-group" aria-label="All Photo Slots timer offsets">
       <div class="card-head"><h4>All Photo Slots</h4></div>
-      <div class="all-timer-apply"><input aria-label="Minutes for all slots" id="allSlotsValue" type="number" min="0" max="1440" step="1" value="0"><button class="btn secondary small" id="applyAllSlotsOffset" type="button">Apply to All Photos</button></div>
+      <div class="all-timer-apply"><input aria-label="Minutes for all Photo Slots" id="allSlotsValue" type="number" min="0" max="1440" step="1" value="0"><button class="btn secondary small" id="applyAllSlotsOffset" type="button">Apply to All Photos</button></div>
       <div class="timer-offset-list" id="allSlotsOffsets"></div>
     </section>
     <section class="all-timer-group" aria-label="All Pages timer offsets">
@@ -417,7 +417,7 @@ function shiftedScheduleTime(value,minutes){if(!value)return '';const d=new Date
 function renderGlobalTimerControls(){
  const slotsRoot=$('allSlotsOffsets'),pagesRoot=$('allPagesOffsets');if(!slotsRoot||!pagesRoot)return;
  const active=Number($('bulkImageCount')?.value)||1;
- slotsRoot.innerHTML=allSlotOffsets.map((n,i)=>'<div class="timer-offset-cell'+(i>=active?' is-inactive':'')+'"><label for="allSlotOffset'+(i+1)+'">Slot '+(i+1)+' · + minutes</label><input id="allSlotOffset'+(i+1)+'" data-all-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+n+'"></div>').join('');
+ slotsRoot.innerHTML=allSlotOffsets.map((n,i)=>'<div class="timer-offset-cell'+(i>=active?' is-inactive':'')+'"><label for="allSlotOffset'+(i+1)+'">Photo '+(i+1)+' · + minutes</label><input id="allSlotOffset'+(i+1)+'" data-all-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+n+'"></div>').join('');
  pagesRoot.innerHTML=allPageOffsets.map((n,i)=>'<div class="timer-offset-cell"><label for="allPageOffset'+(i+1)+'">Page '+(i+1)+' · + minutes</label><input id="allPageOffset'+(i+1)+'" data-all-page-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+n+'"></div>').join('');
  slotsRoot.querySelectorAll('[data-all-slot-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.allSlotOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Slot offset must be 0–1440 minutes.');el.value=allSlotOffsets[i];return}allSlotOffsets[i]=v;applyAllTimerSettings(false)}));
  pagesRoot.querySelectorAll('[data-all-page-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.allPageOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Page offset must be 0–1440 minutes.');el.value=allPageOffsets[i];return}allPageOffsets[i]=v;applyAllTimerSettings(false)}));
