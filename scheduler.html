@@ -181,7 +181,9 @@
 .all-timer-apply button{width:100%;justify-self:stretch;padding:6px 5px;font-size:10px;white-space:normal}
 .timer-offset-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
 .timer-offset-cell{border:1px solid #293752;border-radius:6px;padding:4px 3px;min-width:0}
-.timer-offset-cell label{display:block;font-size:9px;line-height:1.15;margin-bottom:3px;white-space:nowrap}
+.timer-offset-cell label{display:block;font-size:9px;line-height:1.25;margin-bottom:3px;white-space:normal;overflow-wrap:anywhere}
+.timer-offset-cell.is-selected{border-color:#6e9cff;background:#14243c;box-shadow:inset 0 0 0 1px #2a4773}
+.timer-offset-detail{display:block;font-size:8px;line-height:1.25;color:#9fb3d3;overflow-wrap:anywhere;margin:2px 0 4px;max-height:42px;overflow:hidden}
 .timer-offset-cell input{padding:5px 2px;background:#0b1323;border:1px solid #34435f;border-radius:5px;color:#f4f7ff;font-size:10px;text-align:center}
 .timer-offset-cell.is-inactive{opacity:.45}
 #allTimerPanel .actions{margin-top:8px}
@@ -718,9 +720,19 @@ function renderBulkPhotosTimerControls(){
  const slotsRoot=$('bulkPhotosAllSlotsOffsets'),postsRoot=$('bulkPhotosAllPagesOffsets');if(!slotsRoot||!postsRoot)return;
  const pageCount=Math.max(1,advancedSelectedPageIds.length);
  const activeId=advancedSelectedPageIds[advancedActiveSlotIndex]||'__demo__';
- const postCount=ensureAdvancedPageData(activeId).postCount;
- slotsRoot.innerHTML=Array.from({length:pageCount},(_,i)=>'<div class="timer-offset-cell"><label for="bulkPhotosSlotOffset'+(i+1)+'">Page Slot '+(i+1)+' · + min</label><input id="bulkPhotosSlotOffset'+(i+1)+'" data-bulk-photos-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosSlotOffsets[i]+'"></div>').join('');
- postsRoot.innerHTML=Array.from({length:postCount},(_,i)=>'<div class="timer-offset-cell"><label for="bulkPhotosPostOffset'+(i+1)+'">Post Slot '+(i+1)+' · + min</label><input id="bulkPhotosPostOffset'+(i+1)+'" data-bulk-photos-post-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosPageOffsets[i]+'"></div>').join('');
+ const activeData=ensureAdvancedPageData(activeId);
+ const postCount=activeData.postCount;
+ slotsRoot.innerHTML=Array.from({length:pageCount},(_,i)=>{
+  const id=advancedSelectedPageIds[i]||'__demo__',data=ensureAdvancedPageData(id),page=pages.find(p=>String(p.id)===String(id));
+  const pageName=id==='__demo__'?'Demo Page':(page?.name||id);
+  const activePosts=data.posts.slice(0,data.postCount),imageCapacity=activePosts.reduce((sum,post)=>sum+(Number(post.imageCount)||1),0),filled=activePosts.reduce((sum,post)=>sum+filledImages(post).length,0);
+  return '<div class="timer-offset-cell '+(i===advancedActiveSlotIndex?'is-selected':'')+'"><label for="bulkPhotosSlotOffset'+(i+1)+'">Page Slot '+(i+1)+' · '+safe(pageName)+'</label><small class="timer-offset-detail">'+data.postCount+' post(s) · '+filled+'/'+imageCapacity+' images added</small><input id="bulkPhotosSlotOffset'+(i+1)+'" data-bulk-photos-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosSlotOffsets[i]+'"></div>';
+ }).join('');
+ postsRoot.innerHTML=Array.from({length:postCount},(_,i)=>{
+  const post=activeData.posts[i],files=filledImages(post),imageNames=files.map(file=>file.name).join(', ');
+  const detail=files.length?files.length+' added'+(imageNames?' · '+imageNames:''):'No images added yet';
+  return '<div class="timer-offset-cell"><label for="bulkPhotosPostOffset'+(i+1)+'">Post Slot '+(i+1)+' · '+(Number(post.imageCount)||1)+' image slot(s)</label><small class="timer-offset-detail">'+safe(detail)+'</small><input id="bulkPhotosPostOffset'+(i+1)+'" data-bulk-photos-post-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosPageOffsets[i]+'"></div>';
+ }).join('');
  slotsRoot.querySelectorAll('[data-bulk-photos-slot-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.bulkPhotosSlotOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Page Slot offset must be 0–1440 minutes.');el.value=bulkPhotosSlotOffsets[i];return}bulkPhotosSlotOffsets[i]=v;applyBulkPhotosTimer(false)}));
  postsRoot.querySelectorAll('[data-bulk-photos-post-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.bulkPhotosPostOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Post Slot offset must be 0–1440 minutes.');el.value=bulkPhotosPageOffsets[i];return}bulkPhotosPageOffsets[i]=v;applyBulkPhotosTimer(false)}));
 }
