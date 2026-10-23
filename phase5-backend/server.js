@@ -36,7 +36,7 @@ if(!db.prepare("SELECT value FROM app_settings WHERE key='advanced_mode_defaults
 app.set('trust proxy',1);
 app.use((req,res,next)=>{
   const origin=req.headers.origin;
-  if(['https://facebook-bulk-scheduler-pro-3-p5-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p4-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p4-plan.onrender.com','https://facebook-bulk-scheduler-pro-3-bulk-photo.onrender.com'].includes(origin)){
+  if(['https://facebook-bulk-scheduler-pro-3-p5-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p4-preview.onrender.com','https://facebook-bulk-scheduler-pro-3-p4-plan.onrender.com','https://facebook-bulk-scheduler-pro-3-bulk-photo.onrender.com','https://facebook-bulk-scheduler-pro-3-all-timer.onrender.com'].includes(origin)){
     res.setHeader('Access-Control-Allow-Origin',origin);
     res.setHeader('Access-Control-Allow-Credentials','true');
     res.setHeader('Vary','Origin');
