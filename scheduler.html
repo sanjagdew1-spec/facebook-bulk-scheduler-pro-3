@@ -407,7 +407,7 @@ function distributePhotoSlotDropFiles(fileList){
    for(const post of data.posts.slice(0,data.postCount))post.images=Array(Math.max(1,Number(post.imageCount)||1)).fill(null);
   }
  }
- let assigned=0,unassigned=0,expanded=0;
+ let assigned=0,unassigned=0;
  for(const file of files){
   let placed=false;
   for(const pi of targets){
@@ -419,27 +419,14 @@ function distributePhotoSlotDropFiles(fileList){
    }
    if(placed)break;
   }
-  // If the numbered batch exceeds the configured image counts, extend the final
-  // active Post Slot automatically (up to 10 images) instead of silently dropping
-  // image 11, 12, etc. This keeps serial order and makes the added count visible.
-  if(!placed){
-   for(let ti=targets.length-1;ti>=0&&!placed;ti--){
-    const id=advancedSelectedPageIds[targets[ti]];if(!id)continue;
-    const data=ensureAdvancedPageData(id),post=data.posts[data.postCount-1];
-    if(post&&post.imageCount<10){
-     post.imageCount++;
-     post.images=Array.from({length:post.imageCount},(_,i)=>post.images?.[i]||null);
-     post.images[post.imageCount-1]=file;
-     assigned++;expanded++;placed=true;
-    }
-   }
-  }
+  // Never auto-change the configured Image Slot count. Files beyond the
+  // selected posts' fixed capacity are reported as skipped.
   if(!placed)unassigned++;
  }
  renderAdvancedWorkspaces();renderBulkPhotosTimerControls();
- updatePhotoSlotDropStatus((isBatch?'Fresh serial batch: ':'')+assigned+' photo(s) assigned in Page Slot → Post Slot → Image Slot order. '+(expanded?expanded+' extra image slot(s) automatically added to the final available Post Slot. ':'')+(unassigned?unassigned+' file(s) refused because every selected Post Slot reached 10 images.':''),rejected?'Invalid files skipped: '+rejected+'.':'');
+ updatePhotoSlotDropStatus((isBatch?'Fresh serial batch: ':'')+assigned+' photo(s) assigned in Page Slot → Post Slot → Image Slot order. '+''+(unassigned?unassigned+' file(s) refused because every selected Post Slot reached 10 images.':''),rejected?'Invalid files skipped: '+rejected+'.':'');
  if(unassigned)toast(assigned+' photo(s) assigned; '+unassigned+' skipped because every selected Post Slot reached 10 images.');
- else if(assigned)toast(isBatch?'Serial batch redistributed from image 1. Previous images in selected Page Slots were replaced.':'Photo added to the next available Image Slot.');
+ else if(assigned)toast(isBatch?'Serial batch redistributed from image 1. Previous images in selected Page Slots were replaced; Image Slot counts stayed unchanged.':'Photo added to the next available Image Slot; Image Slot count stayed unchanged.');
 }
 function setupPhotoSlotDropBox(){
  const zone=$('photoSlotDropZone'),picker=$('photoSlotDropInput');if(!zone||!picker)return;
@@ -588,23 +575,17 @@ function firstEmptyImageSlot(post){for(let i=0;i<post.imageCount;i++)if(!post.im
 function addManualImagesToPost(post,incoming,pageIndex,postIndex){
  const files=Array.from(incoming||[]),valid=files.filter(isAllowedPhoto);
  if(valid.length!==files.length)toast('Only JPG/PNG images up to 6 MB each are allowed. Invalid files were skipped.');
+ // Bulk Photos manual additions follow Bulk Pages: Image count is fixed by the user's setting.
  post.imageCount=Math.max(1,Math.min(10,Number(post.imageCount)||1));
  post.images=Array.from({length:post.imageCount},(_,i)=>post.images?.[i]||null);
  let added=0,full=0;
  for(const file of valid){
-  let target=-1;
-  for(let i=0;i<post.imageCount;i++){if(!post.images[i]){target=i;break}}
-  if(target<0){
-   if(post.imageCount>=10){full++;continue}
-   target=post.imageCount;
-   post.imageCount++;
-   post.images.length=post.imageCount;
-   post.images[target]=null;
-  }
+  const target=firstEmptyImageSlot(post);
+  if(target<0){full++;continue}
   post.images[target]=file;added++;
  }
- if(full)toast('Added '+added+' image(s). Post '+(postIndex+1)+' is at the 10-image maximum; '+full+' extra file(s) were skipped.');
- else if(added)toast('Added '+added+' image(s) to Post '+(postIndex+1)+'. Image count increased automatically where needed.');
+ if(full)toast('Added '+added+' image(s). Post '+(postIndex+1)+' has no empty Image Slots; '+full+' extra file(s) were skipped. Increase Image count manually if you need more slots.');
+ else if(added)toast('Added '+added+' image(s) to Post '+(postIndex+1)+'. Image Slot count stayed unchanged.');
  renderAdvancedWorkspaces();
  renderBulkPhotosTimerControls();
  updatePhotoSlotDropStatus();
