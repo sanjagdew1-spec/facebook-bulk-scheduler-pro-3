@@ -474,27 +474,31 @@ function distributeBulkDropFiles(fileList){
  const valid=incoming.filter(file=>['image/jpeg','image/png'].includes(file.type)&&file.size<=6*1024*1024);
  const rejected=incoming.length-valid.length;
  if(rejected)toast('Skipped '+rejected+' file(s). Only JPG/PNG images up to 6 MB each are allowed.');
- const active=Number($('bulkImageCount').value)||1;
- let assigned=0,skipped=0,unnumbered=0,overLimit=0,inactive=0;
- for(const file of valid){
-  const match=file.name.match(/(?:^|[^0-9])(10|[1-9])(?:[^0-9]|$)/);
-  if(!match){unnumbered++;skipped++;continue;}
-  const target=Number(match[1])-1;
-  if(target>=active){inactive++;skipped++;continue;}
-  const slot=bulkImageSlots[target];
-  const limit=Math.max(1,Math.min(10,Number(bulkPhotoSlotCounts[target])||1));
-  if(!slot||slot.files.length>=limit||slot.files.length>=10){overLimit++;skipped++;continue;}
-  slot.files.push(file);assigned++;
+ const active=Math.max(1,Math.min(10,Number($('bulkImageCount').value)||1));
+ // Sort a numbered batch by filename, then fill each Post Slot to its configured image capacity.
+ // Filename numbers identify the serial order of the photos, not the destination Post Slot.
+ const sorted=valid.map((file,index)=>({file,index,match:file.name.match(/(?:^|[^0-9])(10|[1-9])(?:[^0-9]|$)/)}))
+  .sort((a,b)=>{if(a.match&&b.match){const d=Number(a.match[1])-Number(b.match[1]);return d||a.index-b.index}if(a.match)return -1;if(b.match)return 1;return a.index-b.index})
+  .map(item=>item.file);
+ const isBatch=sorted.length>1;
+ if(isBatch){for(let i=0;i<active;i++)if(bulkImageSlots[i])bulkImageSlots[i].files=[];}
+ let assigned=0,skipped=0,overLimit=0;
+ for(const file of sorted){
+  let placed=false;
+  for(let i=0;i<active;i++){
+   const slot=bulkImageSlots[i];
+   const limit=Math.max(1,Math.min(10,Number(bulkPhotoSlotCounts[i])||1));
+   if(slot&&slot.files.length<limit&&slot.files.length<10){slot.files.push(file);assigned++;placed=true;break;}
+  }
+  if(!placed){overLimit++;skipped++;}
  }
  renderBulkImageSlots();
  const total=bulkImageSlots.reduce((sum,slot)=>sum+(slot.files?.length||0),0);
  const details=[];
- if(unnumbered)details.push(unnumbered+' file(s) skipped: filename must contain a slot number 1–10');
- if(inactive)details.push(inactive+' file(s) skipped: their numbered Post Slot is not active');
- if(overLimit)details.push(overLimit+' file(s) skipped: that numbered Post Slot reached its configured image count');
- const summary=assigned+' numbered image(s) placed into matching Post Slots. '+total+' image(s) now assigned.'+(details.length?' '+details.join('; ')+'.':'');
+ if(overLimit)details.push(overLimit+' photo(s) could not fit because the combined configured Post Slot image capacity was reached');
+ const summary=(isBatch?'Numbered batch replaced and distributed: ':'Photos distributed: ')+assigned+' photo(s) placed across Post Slots in order, respecting each Post Slot image count. '+total+' image(s) now assigned.'+(details.length?' '+details.join('; ')+'.':'');
  updateBulkPhotoDropStatus(summary);
- if(assigned)toast(summary);else if(valid.length)toast(summary);
+ if(assigned||valid.length)toast(summary);
 }
 function setupBulkPhotoDropBox(){const zone=$('bulkPhotoDropZone'),picker=$('bulkPhotoDropInput');if(!zone||!picker)return;picker.addEventListener('change',()=>{distributeBulkDropFiles(picker.files);picker.value='';});zone.addEventListener('click',event=>{if(event.target!==picker)picker.click();});zone.addEventListener('keydown',event=>{if(event.target===zone&&(event.key==='Enter'||event.key===' ')){event.preventDefault();picker.click();}});zone.addEventListener('dragenter',event=>{event.preventDefault();zone.classList.add('is-dragover');});zone.addEventListener('dragover',event=>{event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy';zone.classList.add('is-dragover');});zone.addEventListener('dragleave',event=>{if(!zone.contains(event.relatedTarget))zone.classList.remove('is-dragover');});zone.addEventListener('drop',event=>{event.preventDefault();zone.classList.remove('is-dragover');distributeBulkDropFiles(event.dataTransfer&&event.dataTransfer.files);});document.querySelectorAll('#bulkPhotoDistribution [data-bulk-photo-count]').forEach(input=>input.addEventListener('change',()=>{const i=Number(input.dataset.bulkPhotoCount),slot=bulkImageSlots[i],typed=Number(input.value);let value=Number.isInteger(typed)?Math.max(1,Math.min(10,typed)):1;if(slot&&slot.files.length>value){value=Math.min(10,slot.files.length);toast('Post '+(i+1)+' already contains '+slot.files.length+' image(s). Remove extra images before setting a lower count.');}bulkPhotoSlotCounts[i]=value;renderBulkPhotoDistribution();updateBulkPhotoDropStatus();}));}
 function renderBulkImageSlots(){
