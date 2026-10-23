@@ -459,7 +459,7 @@ function newAdvancedPost(){return {images:[],caption:'',time:'',isAiContent:fals
 function filledImages(post){return (post.images||[]).filter(Boolean);}
 function firstEmptyImageSlot(post){for(let i=0;i<post.imageCount;i++)if(!post.images[i])return i;return -1;}
 function ensureAdvancedPageData(pageId){const id=String(pageId);if(!advancedPageData[id])advancedPageData[id]={postCount:1,posts:Array.from({length:10},()=>newAdvancedPost())};const data=advancedPageData[id];data.postCount=Math.max(1,Math.min(10,Number(data.postCount)||1));data.posts=Array.from({length:10},(_,i)=>data.posts[i]||newAdvancedPost());return data;}
-function buildSlots(){renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedWorkspaces();renderPhotoSlotDistribution();updatePhotoSlotDropStatus();renderBulkPhotosTimerControls();updateAllCaptionCount();}
+function buildSlots(){if(!advancedSelectedPageIds.length)advancedSelectedPageIds=['__demo__'];renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedWorkspaces();renderPhotoSlotDistribution();updatePhotoSlotDropStatus();renderBulkPhotosTimerControls();updateAllCaptionCount();}
 function renderAdvancedPageChoices(){
  const root=$('advancedPageChoices');if(!root)return;
  root.innerHTML=pages.length?pages.map(p=>{const id=String(p.id),checked=advancedSelectedPageIds.includes(id);return '<label class="advanced-page-choice"><input type="checkbox" data-advanced-page="'+safe(id)+'" '+(checked?'checked':'')+'><span class="advanced-page-name">'+safe(p.name||p.page_name||id)+'</span><small>Page Slot '+(advancedSelectedPageIds.filter(x=>x!=='__demo__').indexOf(id)+1||'—')+'</small></label>'}).join(''):'<div class="empty">Demo mode: the Post Slot below is visible without Facebook. Connect Facebook later to load and select real Pages.</div>';
@@ -482,7 +482,7 @@ function renderAdvancedCaptionTargets(){
  if(data){const parts=data.posts.slice(0,data.postCount).map(p=>p.caption||'');$('allPhotosCaption').value=parts.filter((x,i)=>x||i<parts.length).join('\n\n');$('allCaptionPhotoCount').value='auto';}
  else {$('allPhotosCaption').value='';$('allCaptionPhotoCount').value='auto';}
 }
-function updateAdvancedAIAllButton(){const all=advancedSelectedPageIds.length>0&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.every(post=>post.isAiContent));const button=$('bulkPhotosAiAll');if(button){button.textContent=all?'AI: Clear All':'AI: Select All';button.setAttribute('aria-pressed',String(all));}}
+function updateAdvancedAIAllButton(){const all=advancedSelectedPageIds.length>0&&advancedSelectedPageIds.every(id=>{const data=ensureAdvancedPageData(id);return data.posts.slice(0,data.postCount).every(post=>post.isAiContent)});const button=$('bulkPhotosAiAll');if(button){button.textContent=all?'AI: Clear All':'AI: Select All';button.setAttribute('aria-pressed',String(all));}}
 function renderAdvancedWorkspaces(){
  const root=$('advancedPageSlotWorkspaces');if(!root)return;
  const controlsRoot=$('advancedSlotControlsWorkspace');
@@ -502,7 +502,7 @@ function renderAdvancedWorkspaces(){
  }).join('');
  controlsRoot?.querySelectorAll('[data-advanced-post-count]').forEach(el=>el.addEventListener('change',()=>{const pageIndex=Number(el.dataset.advancedPostCount),id=advancedSelectedPageIds[pageIndex],data=ensureAdvancedPageData(id),n=Number(el.value)||1;data.postCount=n;renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();updateAllCaptionCount();}));
  controlsRoot?.querySelectorAll('[data-advanced-image-count]').forEach(el=>el.addEventListener('change',()=>{const pi=Number(el.dataset.pageIndex),postIndex=Number(el.dataset.postIndex),id=advancedSelectedPageIds[pi],post=ensureAdvancedPageData(id).posts[postIndex],n=Number(el.value)||1;if(post.images.slice(n).some(Boolean)){toast('This post has images in Image controls above '+n+'. Remove those images before lowering the Image count.');el.value=String(post.imageCount);return}post.imageCount=n;post.images.length=n;renderAdvancedWorkspaces();updatePhotoSlotDropStatus();}));
- root.querySelectorAll('[data-focus-bulk-schedule]').forEach(el=>el.addEventListener('click',()=>{const target=$('bulkPhotosAllTimerBase');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.focus({preventScroll:true});}}));
+ controlsRoot?.querySelectorAll('[data-focus-bulk-schedule]').forEach(el=>el.addEventListener('click',()=>{const target=$('bulkPhotosAllTimerBase');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.focus({preventScroll:true});}}));
 }
 function renderAdvancedPost(pageIndex,pageId,post,postIndex){
  const filled=filledImages(post).length;
