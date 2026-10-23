@@ -254,6 +254,7 @@
   <select id="photoPage" hidden aria-hidden="true"><option value="">Choose a Page</option></select>
   <div id="advancedPageChoices" class="advanced-page-choices"><div class="empty">Connect Facebook and refresh Pages first.</div></div>
 </div>
+<section class="card advanced-slot-controls-panel"><div class="card-head"><h3>Post · Slot · Image Controls</h3><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div><p class="muted">Each row is one selected Page Slot. Change Post count on the left and Image count for each post on the right. These controls are separate from the manual post editor below.</p><div id="advancedSlotControlsWorkspace"></div></section>
 <div class="advanced-layout">
   <div class="card" id="advancedDropCard">
     <div class="card-head"><h3>2 · Bulk Photo Drop Box</h3><label class="advanced-toggle"><input id="advancedModeToggle" type="checkbox" checked><span>Advanced Mode</span></label></div>
@@ -292,7 +293,6 @@
   </div>
   <div class="actions"><button class="btn" id="applyBulkPhotosTimer" type="button">Apply All Timer Settings</button></div>
 </section>
-<section class="card advanced-slot-controls-panel"><div class="card-head"><h3>Post · Slot · Image Controls</h3><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div><p class="muted">Each row is one selected Page Slot. Change Post count on the left and Image count for each post on the right. These controls are separate from the manual post editor below.</p><div id="advancedSlotControlsWorkspace"></div></section>
 <div class="section-title"><div><h2>Manual Post Workspaces</h2><p>Compact editor for each Slot and Post: images, caption, and schedule time.</p></div></div>
 <div id="advancedPageSlotWorkspaces"></div>
 <div class="card"><div class="actions"><button class="btn secondary" id="batchScheduleBtn" type="button">Schedule All Posts</button><button class="btn secondary" id="bulkPhotosAiAll" type="button" aria-pressed="false">AI: Select All</button><button class="btn ghost" id="clearBatch" type="button">Clear Bulk Photos</button></div><p class="footer-note">Each Page is submitted separately to the scheduling API. Successful and failed results are reported; the composer is cleared only after every requested post is accepted.</p></div>
