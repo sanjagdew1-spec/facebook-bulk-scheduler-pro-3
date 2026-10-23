@@ -187,6 +187,9 @@
 #bulkPhotosTimerPanel .actions{margin-top:6px}
 #bulkPhotosTimerPanel .actions .btn{width:100%;padding:8px;font-size:11px}
 @media(max-width:760px){#photoSlotDropCard,#allCaptionCard,#bulkPhotosTimerPanel{grid-column:1;grid-row:auto;align-self:start}.bulk-photos-timer-fields{grid-template-columns:minmax(0,1fr) minmax(90px,.7fr)}}
+
+/* Keep inactive Page Slot buttons truly hidden even when button styles set display. */
+.advanced-number-row button[hidden]{display:none!important;}
 </style></head>
 <body>
 <div class="shell">
