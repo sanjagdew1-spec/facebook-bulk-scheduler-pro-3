@@ -569,6 +569,30 @@ let advancedSelectedPageIds=['__demo__'],advancedPageData={'__demo__':{postCount
 function newAdvancedPost(){return {images:[],caption:'',time:'',isAiContent:false,imageCount:1};}
 function filledImages(post){return (post.images||[]).filter(Boolean);}
 function firstEmptyImageSlot(post){for(let i=0;i<post.imageCount;i++)if(!post.images[i])return i;return -1;}
+function addManualImagesToPost(post,incoming,pageIndex,postIndex){
+ const files=Array.from(incoming||[]),valid=files.filter(isAllowedPhoto);
+ if(valid.length!==files.length)toast('Only JPG/PNG images up to 6 MB each are allowed. Invalid files were skipped.');
+ post.imageCount=Math.max(1,Math.min(10,Number(post.imageCount)||1));
+ post.images=Array.from({length:post.imageCount},(_,i)=>post.images?.[i]||null);
+ let added=0,full=0;
+ for(const file of valid){
+  let target=-1;
+  for(let i=0;i<post.imageCount;i++){if(!post.images[i]){target=i;break}}
+  if(target<0){
+   if(post.imageCount>=10){full++;continue}
+   target=post.imageCount;
+   post.imageCount++;
+   post.images.length=post.imageCount;
+   post.images[target]=null;
+  }
+  post.images[target]=file;added++;
+ }
+ if(full)toast('Added '+added+' image(s). Post '+(postIndex+1)+' is at the 10-image maximum; '+full+' extra file(s) were skipped.');
+ else if(added)toast('Added '+added+' image(s) to Post '+(postIndex+1)+'. Image count increased automatically where needed.');
+ renderAdvancedWorkspaces();
+ renderBulkPhotosTimerControls();
+ updatePhotoSlotDropStatus();
+}
 function ensureAdvancedPageData(pageId){const id=String(pageId);if(!advancedPageData[id])advancedPageData[id]={postCount:1,posts:Array.from({length:10},()=>newAdvancedPost())};const data=advancedPageData[id];data.postCount=Math.max(1,Math.min(10,Number(data.postCount)||1));data.posts=Array.from({length:10},(_,i)=>data.posts[i]||newAdvancedPost());return data;}
 function buildSlots(){if(!advancedSelectedPageIds.length)advancedSelectedPageIds=['__demo__'];renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedWorkspaces();renderPhotoSlotDistribution();updatePhotoSlotDropStatus();renderBulkPhotosTimerControls();updateAllCaptionCount();}
 function renderAdvancedPageChoices(){
@@ -625,8 +649,8 @@ function renderAdvancedWorkspaces(){
   updatePhotoSlotDropStatus();
   toast('Image removed from Page Slot '+(pageIndex+1)+', Post Slot '+(postIndex+1)+'.');
  }));
- root.querySelectorAll('[data-advanced-manual-files]').forEach(input=>input.addEventListener('change',()=>{const pageIndex=Number(input.dataset.pageIndex),postIndex=Number(input.dataset.postIndex),id=advancedSelectedPageIds[pageIndex],post=id?ensureAdvancedPageData(id).posts[postIndex]:null;if(!post)return;const incoming=Array.from(input.files||[]),valid=incoming.filter(isAllowedPhoto);if(valid.length!==incoming.length)toast('Only JPG/PNG images up to 6 MB each are allowed. Invalid files were skipped.');const free=[];for(let i=0;i<post.imageCount;i++)if(!post.images[i])free.push(i);if(valid.length>free.length)toast('This Post has '+free.length+' empty Image slot(s). Increase Image count or remove an image before adding more.');valid.slice(0,free.length).forEach((file,i)=>post.images[free[i]]=file);input.value='';renderAdvancedWorkspaces();updatePhotoSlotDropStatus();}));
- root.querySelectorAll('[data-post-drop-zone]').forEach(zone=>{const pageIndex=Number(zone.dataset.pageIndex),postIndex=Number(zone.dataset.postIndex);zone.addEventListener('click',event=>{if(event.target.closest('[data-advanced-manual-files]'))return;if(event.target.closest('.advanced-image-thumb button'))return;zone.querySelector('[data-advanced-manual-files]')?.click()});['dragenter','dragover'].forEach(type=>zone.addEventListener(type,event=>{event.preventDefault();zone.classList.add('is-dragover')}));zone.addEventListener('dragleave',event=>{event.preventDefault();if(!zone.contains(event.relatedTarget))zone.classList.remove('is-dragover')});zone.addEventListener('drop',event=>{event.preventDefault();zone.classList.remove('is-dragover');const id=advancedSelectedPageIds[pageIndex],post=id?ensureAdvancedPageData(id).posts[postIndex]:null;if(!post)return;const incoming=Array.from(event.dataTransfer?.files||[]),valid=incoming.filter(isAllowedPhoto);if(valid.length!==incoming.length)toast('Only JPG/PNG images up to 6 MB each are allowed. Invalid files were skipped.');const free=[];for(let i=0;i<post.imageCount;i++)if(!post.images[i])free.push(i);if(valid.length>free.length)toast('This Post has '+free.length+' empty Image slot(s). Increase Image count or remove an image before adding more.');valid.slice(0,free.length).forEach((file,i)=>post.images[free[i]]=file);renderAdvancedWorkspaces();updatePhotoSlotDropStatus()});zone.addEventListener('keydown',event=>{if(event.target===zone&&(event.key==='Enter'||event.key===' ')){event.preventDefault();zone.querySelector('[data-advanced-manual-files]')?.click()}})});
+ root.querySelectorAll('[data-advanced-manual-files]').forEach(input=>input.addEventListener('change',()=>{const pageIndex=Number(input.dataset.pageIndex),postIndex=Number(input.dataset.postIndex),id=advancedSelectedPageIds[pageIndex],post=id?ensureAdvancedPageData(id).posts[postIndex]:null;if(!post)return;addManualImagesToPost(post,Array.from(input.files||[]),pageIndex,postIndex);input.value='';}));
+ root.querySelectorAll('[data-post-drop-zone]').forEach(zone=>{const pageIndex=Number(zone.dataset.pageIndex),postIndex=Number(zone.dataset.postIndex);zone.addEventListener('click',event=>{if(event.target.closest('[data-advanced-manual-files]'))return;if(event.target.closest('.advanced-image-thumb button'))return;zone.querySelector('[data-advanced-manual-files]')?.click()});['dragenter','dragover'].forEach(type=>zone.addEventListener(type,event=>{event.preventDefault();zone.classList.add('is-dragover')}));zone.addEventListener('dragleave',event=>{event.preventDefault();if(!zone.contains(event.relatedTarget))zone.classList.remove('is-dragover')});zone.addEventListener('drop',event=>{event.preventDefault();zone.classList.remove('is-dragover');const id=advancedSelectedPageIds[pageIndex],post=id?ensureAdvancedPageData(id).posts[postIndex]:null;if(!post)return;addManualImagesToPost(post,Array.from(event.dataTransfer?.files||[]),pageIndex,postIndex)});zone.addEventListener('keydown',event=>{if(event.target===zone&&(event.key==='Enter'||event.key===' ')){event.preventDefault();zone.querySelector('[data-advanced-manual-files]')?.click()}})});
 }
 function renderAdvancedPost(pageIndex,pageId,post,postIndex){
  const filled=filledImages(post).length;
