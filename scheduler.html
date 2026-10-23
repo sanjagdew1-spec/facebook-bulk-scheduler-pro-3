@@ -455,6 +455,7 @@ function shiftedScheduleTime(value,minutes){if(!value)return '';const d=new Date
 function renderAllPagesTimerOffsets(){
  const pagesRoot=$('allPagesOffsets');if(!pagesRoot)return;
  const active=Math.max(1,Math.min(10,Number($('bulkImageCount')?.value)||1));
+ allPageOffsets[0]=0;
  const slot=bulkImageSlots[Math.min(selectedAllTimerSlot,active-1)]||{pageIds:[]};
  const ids=Array.isArray(slot.pageIds)?slot.pageIds:[];
  if(!ids.length){
@@ -463,7 +464,8 @@ function renderAllPagesTimerOffsets(){
  }
  pagesRoot.innerHTML=ids.map((id,i)=>{
   const page=pages.find(p=>String(p.id)===String(id)),name=page?.name||page?.page_name||id;
-  return '<div class="timer-offset-cell"><label for="allPageOffset'+(i+1)+'">Page '+(i+1)+' · '+safe(name)+' · + minutes</label><input id="allPageOffset'+(i+1)+'" data-all-page-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+allPageOffsets[i]+'"></div>';
+  const offset=i===0?0:allPageOffsets[i];
+  return '<div class="timer-offset-cell"><label for="allPageOffset'+(i+1)+'">Page '+(i+1)+' · '+safe(name)+' · + minutes</label><input id="allPageOffset'+(i+1)+'" data-all-page-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+offset+'" '+(i===0?'disabled':'')+'></div>';
  }).join('');
  pagesRoot.querySelectorAll('[data-all-page-offset]:not(:disabled)').forEach(el=>el.addEventListener('change',()=>{
   const i=Number(el.dataset.allPageOffset),v=Number(el.value);
@@ -484,8 +486,9 @@ function selectAllTimerSlot(index){
 function renderGlobalTimerControls(){
  const slotsRoot=$('allSlotsOffsets'),pagesRoot=$('allPagesOffsets');if(!slotsRoot||!pagesRoot)return;
  const active=Math.max(1,Math.min(10,Number($('bulkImageCount')?.value)||1));
+ allSlotOffsets[0]=0;allPageOffsets[0]=0;
  selectedAllTimerSlot=Math.min(Math.max(0,selectedAllTimerSlot),active-1);
- slotsRoot.innerHTML=allSlotOffsets.slice(0,active).map((n,i)=>'<div class="timer-offset-cell '+(i===selectedAllTimerSlot?'is-selected':'')+'" data-all-slot-select="'+i+'" role="button" tabindex="0" aria-pressed="'+String(i===selectedAllTimerSlot)+'"><label for="allSlotOffset'+(i+1)+'">Post '+(i+1)+' · + minutes</label><input id="allSlotOffset'+(i+1)+'" data-all-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+n+'"></div>').join('');
+ slotsRoot.innerHTML=allSlotOffsets.slice(0,active).map((n,i)=>'<div class="timer-offset-cell '+(i===selectedAllTimerSlot?'is-selected':'')+'" data-all-slot-select="'+i+'" role="button" tabindex="0" aria-pressed="'+String(i===selectedAllTimerSlot)+'"><label for="allSlotOffset'+(i+1)+'">Post '+(i+1)+' · + minutes</label><input id="allSlotOffset'+(i+1)+'" data-all-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+(i===0?0:n)+'" '+(i===0?'disabled':'')+'></div>').join('');
  slotsRoot.querySelectorAll('[data-all-slot-select]').forEach(cell=>{
   cell.addEventListener('click',()=>selectAllTimerSlot(Number(cell.dataset.allSlotSelect)));
   cell.addEventListener('keydown',event=>{if((event.key==='Enter'||event.key===' ')&&event.target===cell){event.preventDefault();selectAllTimerSlot(Number(cell.dataset.allSlotSelect));}});
@@ -504,6 +507,7 @@ function applyAllTimerSettings(showToast=true){
  const base=$('allTimerBase')?.value||'';allTimerBase=base;
  if(!base){if(showToast)toast('Set the Main Timer date and time first.');return false}
  const dt=new Date(base);if(Number.isNaN(dt.getTime())){if(showToast)toast('Choose a valid Main Timer date and time.');return false}
+ allSlotOffsets[0]=0;allPageOffsets[0]=0;
  bulkImageSlots.forEach((slot,i)=>{
   slot.time=shiftedScheduleTime(base,allSlotOffsets[i]);slot.manualTime=true;
   slot.pageIds.forEach((id,index)=>{slot.pageTimes[id]=shiftedScheduleTime(slot.time,allPageOffsets[Math.min(index,9)]);slot.manualPageTimes[id]=true});
@@ -514,8 +518,8 @@ function applyAllTimerSettings(showToast=true){
 }
 $('allTimerBase').addEventListener('change',()=>applyAllTimerSettings(false));
 $('applyAllTimer').addEventListener('click',()=>applyAllTimerSettings(true));
-$('applyAllSlotsOffset').addEventListener('click',()=>{const v=Number($('allSlotsValue').value);if(!Number.isInteger(v)||v<0||v>1440){toast('Minutes must be 0–1440.');return}allSlotOffsets=Array(10).fill(v);renderGlobalTimerControls();applyAllTimerSettings(true)});
-$('applyAllPagesOffset').addEventListener('click',()=>{const v=Number($('allPagesValue').value);if(!Number.isInteger(v)||v<0||v>1440){toast('Minutes must be 0–1440.');return}allPageOffsets=Array(10).fill(v);renderGlobalTimerControls();applyAllTimerSettings(true)});
+$('applyAllSlotsOffset').addEventListener('click',()=>{const v=Number($('allSlotsValue').value);if(!Number.isInteger(v)||v<0||v>1440){toast('Minutes must be 0–1440.');return}allSlotOffsets=Array.from({length:10},(_,i)=>i===0?0:i*v);renderGlobalTimerControls();applyAllTimerSettings(true)});
+$('applyAllPagesOffset').addEventListener('click',()=>{const v=Number($('allPagesValue').value);if(!Number.isInteger(v)||v<0||v>1440){toast('Minutes must be 0–1440.');return}allPageOffsets=Array.from({length:10},(_,i)=>i===0?0:i*v);renderGlobalTimerControls();applyAllTimerSettings(true)});
 function renderBulkPhotoDistribution(){const active=Math.max(1,Math.min(10,Number($('bulkImageCount')?.value)||1));document.querySelectorAll('#bulkPhotoDistribution [data-bulk-photo-count]').forEach(input=>{const i=Number(input.dataset.bulkPhotoCount);input.value=String(bulkPhotoSlotCounts[i]||1);const cell=input.closest('.bulk-photo-count-cell');if(cell){cell.classList.toggle('is-inactive',i>=active);cell.hidden=i>=active;cell.setAttribute('aria-hidden',i>=active?'true':'false');input.disabled=i>=active;}});}
 function updateBulkPhotoDropStatus(message){const status=$('bulkPhotoDropStatus');if(!status)return;const total=bulkImageSlots.reduce((sum,slot)=>sum+(slot.files?.length||0),0);const active=Number($('bulkImageCount')?.value)||1;const targets=bulkPhotoSlotCounts.slice(0,active).reduce((sum,n)=>sum+(Number(n)||1),0);status.textContent=message|| (total?total+' photo(s) assigned across '+active+' active slot(s). Configured capacity: '+targets+' photo(s).':'No photos distributed yet. Drop photos here to fill the slots in order.');}
 function distributeBulkDropFiles(fileList){
