@@ -173,6 +173,18 @@
 #allTimerPanel .actions .btn{width:100%;padding:8px;font-size:11px}
 @media(max-width:760px){#allTimerPanel{grid-column:1;grid-row:auto;align-self:start}.all-timer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.timer-offset-list{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:420px){.all-timer-grid{grid-template-columns:minmax(0,1fr)}}
+/* Standalone Advanced Mode switch: keep captions useful in manual mode. */
+.advanced-mode-switch-card{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0;padding:14px 16px;border-color:#36517b;background:linear-gradient(145deg,#111d32,#0b1423)}
+.advanced-mode-switch-card h3{font-size:14px;margin:0 0 4px}
+.advanced-mode-switch-card p{margin:0;max-width:720px;font-size:11px;line-height:1.5}
+.advanced-toggle-standalone{flex-shrink:0}
+#view-bulk-photos:not(.advanced-mode-off) .advanced-only-panel{display:block}
+#view-bulk-photos.advanced-mode-off .advanced-only-panel{display:none!important}
+#view-bulk-photos.advanced-mode-off .advanced-layout{display:block}
+#view-bulk-photos.advanced-mode-off #advancedCaptionCard{width:100%;max-width:none}
+#view-bulk-photos.advanced-mode-off #allPhotosCaption{min-height:300px;height:34vh;max-height:600px;font-size:14px;line-height:1.6}
+#view-bulk-photos.advanced-mode-off #advancedCaptionCard .muted{max-width:900px}
+@media(max-width:700px){.advanced-mode-switch-card{align-items:flex-start;flex-direction:column}.advanced-toggle-standalone{align-self:flex-start}#view-bulk-photos.advanced-mode-off #allPhotosCaption{height:300px}}
 /* Bulk Photos gets its own compact base-time + repeat-gap timer below its caption card. */
 #photoSlotDropCard{grid-column:1;grid-row:1 / span 2;align-self:stretch}
 #allCaptionCard{grid-column:2;grid-row:1;align-self:start}
@@ -260,16 +272,17 @@
 <section class="view" id="view-bulk-photos">
 <div class="hero"><div><div class="eyebrow">Page Slots → Post Slots → Image Slots</div><h2>Advanced Bulk Photos</h2><p>Select multiple Facebook Pages, set how many separate posts each Page needs, then set image capacity for every post. Use the numbered drop targets to control exactly where incoming photos go.</p></div><div class="hero-icon">▧</div></div>
 <div class="notice blue">Bulk Photos only schedules posts. This workflow is separate from Bulk Pages. A Page Slot is one Facebook Page; each Page Slot contains Post Slots; each Post Slot contains Image Slots.</div>
+<div class="card advanced-mode-switch-card" id="advancedModeSwitchCard"><div><h3>Advanced Mode</h3><p class="muted">Turn on the extra Page Slot controls, bulk photo drop box, and All Timer. Turn it off for a larger caption workspace and manual posting.</p></div><label class="advanced-toggle advanced-toggle-standalone"><input id="advancedModeToggle" type="checkbox" checked><span>Advanced Mode</span></label></div>
 <div class="card" id="advancedPagePickerCard">
   <div class="card-head"><h3>1 · Select Facebook Pages</h3><span class="tag" id="advancedSelectedPageCount">0 selected</span></div>
   <p class="muted">Select the Facebook Pages you want to work on. Each selected Page opens its own workspace with one manual post slot ready for an image and schedule time. Unselected Pages do not create empty workspaces.</p>
   <select id="photoPage" hidden aria-hidden="true"><option value="">Choose a Page</option></select>
   <div id="advancedPageChoices" class="advanced-page-choices"><div class="empty">Connect Facebook and refresh Pages first.</div></div>
 </div>
-<section class="card advanced-slot-controls-panel"><div class="card-head"><h3>Post · Slot · Image Controls</h3><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div><p class="muted">Each row is one selected Page Slot. Change Post count on the left and Image count for each post on the right. These controls are separate from the manual post editor below.</p><div id="advancedSlotControlsWorkspace"></div></section>
+<section class="card advanced-slot-controls-panel advanced-only-panel"><div class="card-head"><h3>Post · Slot · Image Controls</h3><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div><p class="muted">Each row is one selected Page Slot. Change Post count on the left and Image count for each post on the right. These controls are separate from the manual post editor below.</p><div id="advancedSlotControlsWorkspace"></div></section>
 <div class="advanced-layout">
   <div class="card" id="advancedDropCard">
-    <div class="card-head"><h3>2 · Bulk Photo Drop Box</h3><label class="advanced-toggle"><input id="advancedModeToggle" type="checkbox" checked><span>Advanced Mode</span></label></div>
+    <div class="card-head"><h3>2 · Bulk Photo Drop Box</h3></div>
     <p class="muted">Choose the Page Slots that may receive photos, then drop files. Files are assigned in Page Slot order → Post Slot order → Image Slot capacity. Files are never spilled into unselected Page Slots.</p>
     <div class="advanced-number-row" id="advancedDropTargets" role="group" aria-label="Choose Page Slot targets">
       <button type="button" class="advanced-number-btn" data-drop-target="0" aria-pressed="false">1</button><button type="button" class="advanced-number-btn" data-drop-target="1" aria-pressed="false">2</button><button type="button" class="advanced-number-btn" data-drop-target="2" aria-pressed="false">3</button><button type="button" class="advanced-number-btn" data-drop-target="3" aria-pressed="false">4</button><button type="button" class="advanced-number-btn" data-drop-target="4" aria-pressed="false">5</button><button type="button" class="advanced-number-btn" data-drop-target="5" aria-pressed="false">6</button><button type="button" class="advanced-number-btn" data-drop-target="6" aria-pressed="false">7</button><button type="button" class="advanced-number-btn" data-drop-target="7" aria-pressed="false">8</button><button type="button" class="advanced-number-btn" data-drop-target="8" aria-pressed="false">9</button><button type="button" class="advanced-number-btn" data-drop-target="9" aria-pressed="false">10</button>
@@ -296,7 +309,7 @@
     <p class="footer-note">A mismatch between the chosen caption count and pasted caption blocks is reported; nothing is applied until the counts match.</p>
   </div>
 </div>
-<section class="card" id="bulkPhotosTimerPanel" aria-label="Bulk Photos All Timer">
+<section class="card advanced-only-panel" id="bulkPhotosTimerPanel" aria-label="Bulk Photos All Timer">
   <div class="card-head"><h3>4 · All Timer</h3><span class="tag">Bulk Photos</span></div>
   <div class="all-timer-main"><label for="bulkPhotosAllTimerBase">Main Timer · date &amp; time</label><input type="datetime-local" id="bulkPhotosAllTimerBase"><small>Each Image/Post Slot time = Main Timer + Page Slot offset + Image offset.</small></div>
   <div class="all-timer-grid">
@@ -546,6 +559,12 @@ function updatePhotoSlotDropStatus(message,extra=''){
  status.textContent=message|| (total?total+' image(s) assigned. Configured Image Slot capacity: '+capacity+' image(s).':'No photos distributed yet. Drop photos here to fill configured Image Slots.');
  if(extra)status.textContent+=' '+extra;
 }
+function syncAdvancedModeVisibility(){
+ const view=$('view-bulk-photos'),toggle=$('advancedModeToggle');if(!view||!toggle)return;
+ view.classList.toggle('advanced-mode-off',!toggle.checked);
+ toggle.setAttribute('aria-expanded',String(toggle.checked));
+}
+$('advancedModeToggle')?.addEventListener('change',syncAdvancedModeVisibility);
 function sortAdvancedFiles(files){const list=Array.from(files);if(!$('advancedModeToggle')?.checked)return list;return list.map((file,index)=>({file,index,match:file.name.match(/^(\d+)\.(?:jpe?g|png)$/i)})).sort((a,b)=>{if(a.match&&b.match)return Number(a.match[1])-Number(b.match[1]);if(a.match)return -1;if(b.match)return 1;return a.index-b.index}).map(x=>x.file);}
 function distributePhotoSlotDropFiles(fileList){
  const incoming=Array.from(fileList||[]);if(!incoming.length)return;
@@ -632,7 +651,7 @@ $('batchScheduleBtn').addEventListener('click',()=>submitBatch());
 $('clearBatch').addEventListener('click',()=>{advancedPageData={};advancedSelectedPageIds=[];advancedDropSelected.clear();advancedDropAll=true;advancedCaptionTarget=0;$('allPhotosCaption').value='';$('allCaptionPhotoCount').value='auto';$('bulkPhotosAllTimerBase').value='';buildSlots();toast('Bulk Photos composer cleared.');});
 $('bulkPhotosAiAll').addEventListener('click',()=>{const all=advancedSelectedPageIds.length&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.slice(0,ensureAdvancedPageData(id).postCount).every(p=>p.isAiContent));for(const id of advancedSelectedPageIds){const data=ensureAdvancedPageData(id);for(const post of data.posts.slice(0,data.postCount))post.isAiContent=!all;}renderAdvancedWorkspaces();updateAdvancedAIAllButton();toast(all?'AI disclosure unchecked for all active posts.':'AI disclosure checked for all active posts.');});
 setupPhotoSlotDropBox();
-renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedDropTargets();renderAdvancedCaptionTargets();renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updateAllCaptionCount();
+renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedDropTargets();renderAdvancedCaptionTargets();renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updateAllCaptionCount();syncAdvancedModeVisibility();
 function statusOf(j){const s=String(j.status||'draft').toLowerCase();return ['published','scheduled','failed'].includes(s)?s:'draft'}
 function jobName(j){return j.page_name||j.pageName||pages.find(p=>String(p.id)===String(j.page_id||j.pageId))?.name||'Facebook Page'}
 function jobCaption(j){return j.message||j.caption||'(No caption)'}
