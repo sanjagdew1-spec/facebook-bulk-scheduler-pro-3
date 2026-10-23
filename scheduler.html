@@ -137,21 +137,23 @@
 .bulk-slot-selector-row .field select{width:100%;box-sizing:border-box}
 .all-groups-selector{width:100%;min-height:42px;white-space:normal}
 @media(max-width:560px){.bulk-slot-selector-row{grid-template-columns:minmax(0,1fr);gap:10px}.all-groups-selector{min-height:40px}}
-/* Align the drop box beside the caption tool and use the caption card's empty lower area for All Timer. */
-.bulk-tools-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start;margin:14px 0;padding:0;border:0;border-radius:0;background:transparent}
+/* Preserve the locked two-column layout: Images per Post Slot above Bulk Photo Drop Box; captions on the right; All Timer aligned beside the drop box. */
+.bulk-tools-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto;gap:14px;align-items:start;margin:14px 0;padding:0;border:0;border-radius:0;background:transparent}
 .bulk-tools-pair>.card{min-width:0;margin:0;height:auto}
-#bulkPhotoDropCard,#bulkPagesCaptionCard{align-self:stretch}
+#bulkPostImageCountCard{grid-column:1;grid-row:1;margin:0}
+#bulkPagesCaptionCard{grid-column:2;grid-row:1;align-self:stretch}
+#bulkPhotoDropCard{grid-column:1;grid-row:2;align-self:start}
+#allTimerPanel{grid-column:2;grid-row:2;margin:0;padding:10px;align-self:start;min-height:0}
 #view-bulk-pages.advanced-mode-on #bulkPostImageCountCard,
 #view-bulk-pages.advanced-mode-on #bulkPhotoDropCard,
 #view-bulk-pages.advanced-mode-on #allTimerPanel{display:none!important}
-#view-bulk-pages.advanced-mode-on #bulkPagesCaptionCard{grid-column:1 / -1;width:100%;max-width:none}
-#view-bulk-pages.advanced-mode-on #bulkPagesAllCaptions{min-height:260px;height:42vh;max-height:560px;font-size:14px;line-height:1.6}
+#view-bulk-pages.advanced-mode-on #bulkPagesCaptionCard{grid-column:1 / -1;grid-row:1;width:100%;max-width:none}
 .bulk-tools-pair .bulk-photo-distribution{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .bulk-tools-pair .bulk-photo-count-cell{padding:8px}
-.bulk-tools-pair .bulk-drop-zone{height:auto;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 12px}
+.bulk-tools-pair .bulk-drop-zone{height:auto;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px}
 .bulk-tools-pair .bulk-drop-zone p{max-width:420px}
 .bulk-tools-pair textarea{width:100%;box-sizing:border-box}
-@media(max-width:760px){.bulk-tools-pair{grid-template-columns:minmax(0,1fr);gap:12px}.bulk-tools-pair>.card{height:auto}#view-bulk-pages.advanced-mode-on #bulkPagesAllCaptions{height:260px;min-height:260px}}
+@media(max-width:760px){.bulk-tools-pair{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;gap:12px}.bulk-tools-pair>.card{height:auto}#bulkPostImageCountCard,#bulkPagesCaptionCard,#bulkPhotoDropCard,#allTimerPanel{grid-column:1;grid-row:auto}#view-bulk-pages.advanced-mode-on #bulkPagesAllCaptions{height:260px;min-height:260px}}
 /* All Timer fills the unused space under Apply captions, beside the tall photo drop box. */
 
 /* Restore original Bulk Pages layout: preserve existing card sizes and keep captions beside the drop box. */
@@ -186,6 +188,9 @@
 #allTimerPanel .actions .btn{width:100%;padding:8px;font-size:11px}
 @media(max-width:760px){#allTimerPanel{grid-column:1;grid-row:auto;align-self:start}.all-timer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.timer-offset-list{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:420px){.all-timer-grid{grid-template-columns:minmax(0,1fr)}}
+/* Advanced Mode caption editor override must follow the normal-height rule above. */
+#view-bulk-pages.advanced-mode-on #bulkPagesCaptionCard #bulkPagesAllCaptions{min-height:260px;height:42vh;max-height:560px;font-size:14px;line-height:1.6}
+@media(max-width:760px){#view-bulk-pages.advanced-mode-on #bulkPagesCaptionCard #bulkPagesAllCaptions{height:260px;min-height:260px;max-height:none}}
 /* Standalone Advanced Mode switch: keep captions useful in manual mode. */
 .advanced-mode-switch-card{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0;padding:14px 16px;border-color:#36517b;background:linear-gradient(145deg,#111d32,#0b1423)}
 .advanced-mode-switch-card h3{font-size:14px;margin:0 0 4px}
@@ -725,11 +730,19 @@ init();
 if(new URLSearchParams(window.location.search).get('view')==='bulk-photos')showView('bulk-photos');
 })();
 </script><script>
-/* Keep the original Bulk Pages card positions; Advanced Mode only hides controls and expands captions. */
+/* Keep the locked card layout together in its existing two-column workspace. */
 (function(){
   const placeBulkCards = () => {
     const view = document.getElementById('view-bulk-pages');
+    const pair = document.getElementById('bulkPagesToolsPair');
+    const imageCount = document.getElementById('bulkPostImageCountCard');
+    const drop = document.getElementById('bulkPhotoDropCard');
+    const timer = document.getElementById('allTimerPanel');
     const toggle = document.getElementById('bulkPagesAdvancedModeToggle');
+    if (pair && imageCount && drop && timer) {
+      pair.insertBefore(imageCount, drop);
+      pair.appendChild(timer);
+    }
     if (view && toggle) {
       const syncMode = () => {
         view.classList.toggle('advanced-mode-on', toggle.checked);
