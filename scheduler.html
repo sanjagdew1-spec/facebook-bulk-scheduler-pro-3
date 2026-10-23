@@ -391,24 +391,37 @@ function updatePhotoSlotDropStatus(message){
 }
 function distributePhotoSlotDropFiles(fileList){
  const incoming=Array.from(fileList||[]);if(!incoming.length)return;
- const valid=incoming.filter(file=>['image/jpeg','image/png'].includes(file.type)&&file.size<=6*1024*1024);
- const rejected=incoming.length-valid.length;if(rejected)toast('Skipped '+rejected+' file(s). Only JPG/PNG images up to 6 MB each are allowed.');
- const active=Number($('slotCount').value)||1;let assigned=0,unassigned=0;
- for(const file of valid){
-  let target=-1;
-  for(let i=0;i<active;i++){
-   const existing=slots[i]?.files||[],limit=Math.max(1,Math.min(10,Number(photoSlotCounts[i])||1));
-   if(existing.length<limit&&existing.length<10&&existing.reduce((sum,f)=>sum+f.size,0)+file.size<=30*1024*1024){target=i;break;}
+ const valid=incoming.filter(isAllowedPhoto),rejected=incoming.length-valid.length;if(rejected)toast('Skipped '+rejected+' file(s). Only JPG/PNG images up to 6 MB each are allowed.');
+ const targets=advancedDropAll?advancedSelectedPageIds.map((_,i)=>i):Array.from(advancedDropSelected).filter(i=>i<advancedSelectedPageIds.length).sort((a,b)=>a-b);
+ if(!targets.length){toast('Select Page Slot button(s) or All before dropping photos.');return}
+ const files=sortAdvancedFiles(valid);
+ // A multi-file drop is a fresh numbered batch: clear images only in the selected Page Slots,
+ // then rebuild their active Post/Image positions from the batch order. A single-file drop
+ // is incremental and fills the next available Image position without replacing existing images.
+ const isBatch=files.length>1;
+ if(isBatch){
+  for(const pi of targets){
+   const id=advancedSelectedPageIds[pi];if(!id)continue;
+   const data=ensureAdvancedPageData(id);
+   for(const post of data.posts.slice(0,data.postCount))post.images=Array(Math.max(1,Number(post.imageCount)||1)).fill(null);
   }
-  if(target<0){unassigned++;continue;}
-  const existing=slots[target].files;
-  const next=checkFiles([file],existing);
-  if(next.length>existing.length){slots[target].files=next;assigned++}else unassigned++;
  }
- renderSlots();updateAllCaptionCount();
- const total=slots.reduce((sum,slot)=>sum+(slot.files?.length||0),0);
- const summary=assigned+' photo(s) distributed in order. '+total+' total photo(s) now assigned.'+(unassigned?' '+unassigned+' photo(s) could not be assigned because the active slots are full. Increase a slot count or add more active slots.':'');
- updatePhotoSlotDropStatus(summary);if(assigned)toast(summary);else if(valid.length)toast('No photos were assigned. Increase the slot counts or the number of active posts first.');
+ let assigned=0,unassigned=0;
+ for(const file of files){
+  let placed=false;
+  for(const pi of targets){
+   const id=advancedSelectedPageIds[pi],data=ensureAdvancedPageData(id);
+   for(const post of data.posts.slice(0,data.postCount)){
+    const free=firstEmptyImageSlot(post);
+    if(free>=0){post.images[free]=file;assigned++;placed=true;break}
+   }
+   if(placed)break;
+  }
+  if(!placed)unassigned++;
+ }
+ renderAdvancedWorkspaces();updatePhotoSlotDropStatus((isBatch?'Batch reset and reordered: ':'')+assigned+' photo(s) assigned in Page Slot → Post Slot → Image Slot order. '+(unassigned?unassigned+' file(s) refused because selected targets are full; nothing spilled into other Page Slots.':''),rejected?'Invalid files skipped: '+rejected+'.':'');
+ if(unassigned)toast(assigned+' photo(s) assigned; '+unassigned+' refused because selected Post/Image Slots are full. Increase Post Slots/Image Slots or select additional targets.');
+ else if(assigned)toast(isBatch?'Batch placed in serial order. Previous images in selected Page Slots were replaced.':'Photo placed in the next available Image Slot.');
 }
 function setupPhotoSlotDropBox(){
  const zone=$('photoSlotDropZone'),picker=$('photoSlotDropInput');if(!zone||!picker)return;
