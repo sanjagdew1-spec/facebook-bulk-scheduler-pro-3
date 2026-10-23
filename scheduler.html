@@ -32,10 +32,10 @@
 .advanced-target-summary{font-size:11px;color:#b8c9e5;min-height:18px;margin:7px 0 12px}
 .advanced-image-all{margin-top:16px}
 .advanced-image-all .btn{margin-bottom:1px}
-.advanced-page-workspace{border:1px solid #334767;border-radius:14px;background:linear-gradient(145deg,#121d31,#0d1524);padding:16px;margin:12px 0}
+.advanced-page-workspace{border:0;border-radius:0;background:transparent;padding:0;margin:8px 0}
 .advanced-page-workspace.is-inactive{opacity:.48;filter:blur(.4px) saturate(.45);background:#0a101b}
 .demo-workspace{border-color:#4b6fa7;box-shadow:inset 3px 0 #4d83ff}.demo-workspace .advanced-step{color:#f3c96d}
-.advanced-page-workspace-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:13px;border-bottom:1px solid #2b3a53}
+.advanced-page-workspace-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:4px;border-bottom:0}
 .advanced-page-workspace-head h3{font-size:16px;margin:4px 0}
 .advanced-page-workspace-head p{font-size:11px;color:var(--muted);margin:0}
 .advanced-step{font-size:9px;letter-spacing:1.2px;font-weight:900;color:#8eb2ff}
@@ -44,10 +44,10 @@
 .advanced-page-count-control select,.advanced-image-count select{background:#0b1323;border:1px solid #34435f;border-radius:8px;color:var(--text);padding:8px}
 .advanced-post-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-top:13px}
 .advanced-post-card{min-width:0;border:1px solid #2b3d59;background:#0b1423;border-radius:11px;padding:12px}
-.advanced-post-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.advanced-post-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
 .advanced-post-head strong{font-size:10px;color:#a8c2f0}
 .advanced-image-count{margin:0;min-width:100px}
-.advanced-manual-upload{display:grid;gap:6px;margin:10px 0}
+.advanced-manual-upload{display:grid;gap:4px;margin:3px 0 5px}
 .advanced-manual-upload label{font-size:10px;color:#c5d1e5;font-weight:750}
 .advanced-manual-upload small{font-size:10px;color:#8394b0;line-height:1.4}
 .advanced-image-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:9px 0}
@@ -56,28 +56,34 @@
 .advanced-image-thumb .slot-image-remove{top:3px;right:3px}
 .advanced-image-thumb small{display:block;font-size:9px;color:#9eafca;overflow-wrap:anywhere;margin-top:3px}
 .advanced-no-images,.advanced-inactive-body{padding:14px;border:1px dashed #2d3d57;border-radius:8px;text-align:center;font-size:10px;color:#8798b4;grid-column:1/-1}
-.advanced-post-card .field{margin:10px 0}
-.advanced-post-card textarea{width:100%;min-height:72px;background:#0b1323;border:1px solid #34435f;border-radius:8px;color:var(--text);padding:10px;resize:vertical}
+.advanced-post-card .field{margin:3px 0 5px}
+.advanced-post-card textarea{width:100%;min-height:58px;background:#0b1323;border:1px solid #34435f;border-radius:8px;color:var(--text);padding:10px;resize:vertical}
 .advanced-post-card input[type=datetime-local]{width:100%;background:#0b1323;border:1px solid #34435f;border-radius:8px;color:var(--text);padding:9px}
 .advanced-post-card .slot-ai{font-size:10px;margin:8px 0}
 /* Separate Post / Schedule / Image controls from the familiar manual photo workspace. */
-.advanced-slot-controls{display:grid;grid-template-columns:minmax(120px,.75fr) minmax(160px,.8fr) minmax(220px,1.6fr);gap:12px;align-items:start;padding:12px;margin:12px 0 16px;border:1px solid #344663;border-radius:12px;background:linear-gradient(145deg,#111b2e,#0b1423)}
-.slot-control-post,.slot-control-schedule,.slot-control-images{display:grid;gap:7px;min-width:0}
-.slot-control-post label,.slot-control-schedule>span,.slot-control-heading{font-size:10px;color:#b7c6df;font-weight:800;letter-spacing:.2px}
-.slot-control-post select,.slot-control-image select{min-width:0;width:100%;background:#0b1323;border:1px solid #34435f;border-radius:8px;color:var(--text);padding:8px}
-.slot-control-schedule{justify-items:center;text-align:center}
-.slot-control-schedule .btn{white-space:normal;line-height:1.25}
-.slot-control-image-list{display:flex;flex-wrap:wrap;gap:7px}
-.slot-control-image{display:grid;gap:4px;min-width:90px;flex:1}
-.slot-control-image span{font-size:9px;color:#91a5c5;font-weight:700}
-@media(max-width:760px){.advanced-slot-controls{grid-template-columns:1fr}.slot-control-schedule{justify-items:stretch;text-align:left}.slot-control-image-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* A fully separate controls panel: Post on the left, Page Slot centered, ten Image selectors on the right. */
+.advanced-slot-control-row{display:grid;grid-template-columns:minmax(78px,.55fr) minmax(110px,.7fr) minmax(0,4fr);gap:12px;align-items:center;padding:10px 12px;margin:8px 0;border:1px solid #344663;border-radius:10px;background:linear-gradient(145deg,#111b2e,#0b1423)}
+.slot-control-post,.slot-control-slot,.slot-control-images{display:grid;gap:5px;min-width:0}
+.slot-control-post label,.slot-control-slot>span{font-size:10px;color:#b7c6df;font-weight:800;letter-spacing:.2px}
+.slot-control-post select,.slot-control-image select{min-width:0;width:100%;background:#0b1323;border:1px solid #34435f;border-radius:7px;color:var(--text);padding:6px}
+.slot-control-slot{justify-items:center;text-align:center}
+.slot-control-slot>span{font-size:13px;color:#f0c76a}
+.slot-control-slot small{font-size:9px;color:#91a5c5;max-width:120px;overflow-wrap:anywhere}
+.slot-control-slot .btn{white-space:nowrap;padding:5px 8px;font-size:10px}
+.slot-control-image-list{display:grid;grid-template-columns:repeat(10,minmax(48px,1fr));gap:6px}
+.slot-control-image{display:grid;gap:3px;min-width:0}
+.slot-control-image span{font-size:9px;color:#91a5c5;font-weight:700;text-align:center}
+@media(max-width:900px){.advanced-slot-control-row{grid-template-columns:72px 90px minmax(0,1fr);gap:7px;padding:8px}.slot-control-image-list{grid-template-columns:repeat(5,minmax(45px,1fr))}}
+@media(max-width:520px){.advanced-slot-control-row{grid-template-columns:1fr}.slot-control-slot{justify-items:start;text-align:left}.slot-control-image-list{grid-template-columns:repeat(5,minmax(0,1fr))}}
 /* Restore the familiar manual workspace: one visible Page workspace per checked Page, with image upload on the left and caption/time controls on the right. */
 .advanced-post-list{grid-template-columns:1fr}
-.advanced-post-card{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(280px,1.2fr);gap:0 18px;border:1px solid #2d3d59;border-radius:13px;padding:15px;margin:13px 0;background:#0e1728}
+.advanced-post-card{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(280px,1.2fr);gap:0 14px;border:1px solid #2d3d59;border-radius:10px;padding:9px 11px;margin:7px 0;background:#0e1728}
 .advanced-post-head{grid-column:1/-1}
 .advanced-manual-upload,.advanced-image-grid{grid-column:1}
 .advanced-post-card>.field,.advanced-post-card>.slot-ai{grid-column:2}
-.advanced-image-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.advanced-post-card>.field:first-of-type{margin-top:0}
+.advanced-post-card>.slot-ai{margin:3px 0 4px}
+.advanced-image-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:4px 0 3px}
 @media(max-width:1050px){.advanced-layout{grid-template-columns:1fr}}
 @media(max-width:760px){.advanced-post-card{grid-template-columns:1fr}.advanced-post-head,.advanced-manual-upload,.advanced-image-grid,.advanced-post-card>.field,.advanced-post-card>.slot-ai{grid-column:1}}
 @media(max-width:700px){.advanced-page-choices{grid-template-columns:1fr}.advanced-inline-control{align-items:stretch;flex-direction:column}.advanced-page-workspace{padding:11px}.advanced-page-workspace-head{align-items:flex-start}.advanced-page-count-control{min-width:112px}.advanced-post-head{align-items:flex-start}}
@@ -452,7 +458,7 @@ let advancedSelectedPageIds=['__demo__'],advancedPageData={'__demo__':{postCount
 function newAdvancedPost(){return {images:[],caption:'',time:'',isAiContent:false,imageCount:1};}
 function filledImages(post){return (post.images||[]).filter(Boolean);}
 function firstEmptyImageSlot(post){for(let i=0;i<post.imageCount;i++)if(!post.images[i])return i;return -1;}
-function ensureAdvancedPageData(pageId){const id=String(pageId);if(!advancedPageData[id])advancedPageData[id]={postCount:1,posts:[newAdvancedPost()]};const data=advancedPageData[id];data.posts=Array.from({length:data.postCount||1},(_,i)=>data.posts[i]||newAdvancedPost());return data;}
+function ensureAdvancedPageData(pageId){const id=String(pageId);if(!advancedPageData[id])advancedPageData[id]={postCount:1,posts:Array.from({length:10},()=>newAdvancedPost())};const data=advancedPageData[id];data.postCount=Math.max(1,Math.min(10,Number(data.postCount)||1));data.posts=Array.from({length:10},(_,i)=>data.posts[i]||newAdvancedPost());return data;}
 function buildSlots(){renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedWorkspaces();renderPhotoSlotDistribution();updatePhotoSlotDropStatus();renderBulkPhotosTimerControls();updateAllCaptionCount();}
 function renderAdvancedPageChoices(){
  const root=$('advancedPageChoices');if(!root)return;
@@ -473,20 +479,29 @@ function renderAdvancedCaptionTargets(){
  root.querySelectorAll('[data-caption-target]').forEach(btn=>{const i=Number(btn.dataset.captionTarget),active=i<advancedSelectedPageIds.length,selected=i===advancedCaptionTarget;btn.hidden=!active;btn.disabled=!active;btn.classList.toggle('is-inactive',!active);btn.classList.toggle('is-selected',selected&&active);btn.setAttribute('aria-pressed',String(selected&&active));});
  const id=advancedSelectedPageIds[advancedCaptionTarget],data=id?ensureAdvancedPageData(id):null;
  $('advancedCaptionTargetLabel').textContent='Page Slot '+(advancedCaptionTarget+1)+(id?' · '+(pages.find(p=>String(p.id)===id)?.name||id):' · not selected');
- if(data){const parts=data.posts.map(p=>p.caption||'');$('allPhotosCaption').value=parts.filter((x,i)=>x||i<parts.length).join('\n\n');$('allCaptionPhotoCount').value='auto';}
+ if(data){const parts=data.posts.slice(0,data.postCount).map(p=>p.caption||'');$('allPhotosCaption').value=parts.filter((x,i)=>x||i<parts.length).join('\n\n');$('allCaptionPhotoCount').value='auto';}
  else {$('allPhotosCaption').value='';$('allCaptionPhotoCount').value='auto';}
 }
 function updateAdvancedAIAllButton(){const all=advancedSelectedPageIds.length>0&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.every(post=>post.isAiContent));const button=$('bulkPhotosAiAll');if(button){button.textContent=all?'AI: Clear All':'AI: Select All';button.setAttribute('aria-pressed',String(all));}}
 function renderAdvancedWorkspaces(){
  const root=$('advancedPageSlotWorkspaces');if(!root)return;
- root.innerHTML=advancedPageSlots.filter(slot=>slot.active).map(slot=>{
+ const controlsRoot=$('advancedSlotControlsWorkspace');
+ const activeSlots=advancedPageSlots.filter(slot=>slot.active);
+ if(controlsRoot){
+  controlsRoot.innerHTML=activeSlots.map(slot=>{
+   const data=slot.data;
+   const postOptions=Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'" '+(data.postCount===i+1?'selected':'')+'>'+(i+1)+'</option>').join('');
+   const imageControls=Array.from({length:10},(_,pi)=>{const post=data.posts[pi];return '<label class="slot-control-image"><span>Image</span><select aria-label="Image count for Post '+(pi+1)+' in Slot '+(slot.index+1)+'" data-advanced-image-count data-page-index="'+slot.index+'" data-post-index="'+pi+'">'+Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'" '+(post.imageCount===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')+'</select></label>'}).join('');
+   const isDemo=slot.pageId==='__demo__',p=pages.find(x=>String(x.id)===slot.pageId);
+   return '<div class="advanced-slot-control-row"><div class="slot-control-post"><label for="advancedPostCount'+slot.index+'">Post</label><select id="advancedPostCount'+slot.index+'" data-advanced-post-count="'+slot.index+'">'+postOptions+'</select></div><div class="slot-control-slot"><span>Slot '+(slot.index+1)+'</span><small>'+safe(isDemo?'Demo Page':(p?.name||slot.pageId))+'</small><button class="btn secondary small" type="button" data-focus-bulk-schedule>Schedule</button></div><div class="slot-control-images"><div class="slot-control-image-list">'+imageControls+'</div></div></div>';
+  }).join('');
+ }
+ root.innerHTML=activeSlots.map(slot=>{
   const isDemo=slot.pageId==='__demo__',p=pages.find(x=>String(x.id)===slot.pageId),data=slot.data;
-  const postOptions=Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'" '+(data.postCount===i+1?'selected':'')+'>'+(i+1)+' post'+(i?'s':'')+'</option>').join('');
-  const imageControls=data.posts.map((post,pi)=>'<label class="slot-control-image"><span>Post '+(pi+1)+' Image</span><select aria-label="Image Slots for Post '+(pi+1)+'" data-advanced-image-count data-page-index="'+slot.index+'" data-post-index="'+pi+'">'+Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'" '+(post.imageCount===i+1?'selected':'')+'>'+(i+1)+' image'+(i?'s':'')+'</option>').join('')+'</select></label>').join('');
-  return '<section class="advanced-page-workspace'+(isDemo?' demo-workspace':'')+'"><div class="advanced-page-workspace-head"><div><span class="advanced-step">'+(isDemo?'DEMO PREVIEW · NOT CONNECTED':'PAGE SLOT '+(slot.index+1))+'</span><h3>'+safe(isDemo?'Demo Page Workspace':(p?.name||slot.pageId))+'</h3><p>'+data.posts.length+' Post Slot(s) · '+data.posts.reduce((sum,post)=>sum+filledImages(post).length,0)+' image(s) loaded'+(isDemo?' · Preview only; connect Facebook to publish':'')+'</p></div></div><div class="advanced-slot-controls"><div class="slot-control-post"><label for="advancedPostCount'+slot.index+'">Post Slots</label><select id="advancedPostCount'+slot.index+'" data-advanced-post-count="'+slot.index+'">'+postOptions+'</select></div><div class="slot-control-schedule"><span>Schedule</span><button class="btn secondary small" type="button" data-focus-bulk-schedule>Go to Schedule</button></div><div class="slot-control-images"><span class="slot-control-heading">Image Slots</span><div class="slot-control-image-list">'+imageControls+'</div></div></div><div class="advanced-post-list">'+data.posts.map((post,pi)=>renderAdvancedPost(slot.index,slot.pageId,post,pi)).join('')+'</div></section>';
+  return '<section class="advanced-page-workspace'+(isDemo?' demo-workspace':'')+'"><div class="advanced-post-list">'+data.posts.slice(0,data.postCount).map((post,pi)=>renderAdvancedPost(slot.index,slot.pageId,post,pi)).join('')+'</div></section>';
  }).join('');
- root.querySelectorAll('[data-advanced-post-count]').forEach(el=>el.addEventListener('change',()=>{const pageIndex=Number(el.dataset.advancedPostCount),id=advancedSelectedPageIds[pageIndex],data=ensureAdvancedPageData(id),n=Number(el.value)||1;if(n<data.posts.length){const removed=data.posts.slice(n);if(removed.some(p=>filledImages(p).length)){toast('Cannot remove Post Slots that still contain images. Remove their images first.');el.value=String(data.postCount);return}}data.postCount=n;data.posts=Array.from({length:n},(_,i)=>data.posts[i]||newAdvancedPost());renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();updateAllCaptionCount();}));
- root.querySelectorAll('[data-advanced-image-count]').forEach(el=>el.addEventListener('change',()=>{const pi=Number(el.dataset.pageIndex),postIndex=Number(el.dataset.postIndex),post=advancedPageData[advancedSelectedPageIds[pi]].posts[postIndex],n=Number(el.value)||1;if(post.images.slice(n).some(Boolean)){toast('This post has images in Image Slots above '+n+'. Remove those images before lowering the Image Slots count.');el.value=String(post.imageCount);return}post.imageCount=n;post.images.length=n;renderAdvancedWorkspaces();updatePhotoSlotDropStatus();}));
+ root.querySelectorAll('[data-advanced-post-count]').forEach(el=>el.addEventListener('change',()=>{const pageIndex=Number(el.dataset.advancedPostCount),id=advancedSelectedPageIds[pageIndex],data=ensureAdvancedPageData(id),n=Number(el.value)||1;data.postCount=n;renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updatePhotoSlotDropStatus();updateAllCaptionCount();}));
+ root.querySelectorAll('[data-advanced-image-count]').forEach(el=>el.addEventListener('change',()=>{const pi=Number(el.dataset.pageIndex),postIndex=Number(el.dataset.postIndex),id=advancedSelectedPageIds[pi],post=ensureAdvancedPageData(id).posts[postIndex],n=Number(el.value)||1;if(post.images.slice(n).some(Boolean)){toast('This post has images in Image controls above '+n+'. Remove those images before lowering the Image count.');el.value=String(post.imageCount);return}post.imageCount=n;post.images.length=n;renderAdvancedWorkspaces();updatePhotoSlotDropStatus();}));
  root.querySelectorAll('[data-focus-bulk-schedule]').forEach(el=>el.addEventListener('click',()=>{const target=$('bulkPhotosAllTimerBase');if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.focus({preventScroll:true});}}));
 }
 function renderAdvancedPost(pageIndex,pageId,post,postIndex){
