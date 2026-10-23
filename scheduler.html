@@ -604,5 +604,6 @@ async function refreshServerHistory(){try{const auth=await api('/api/customer/st
 setInterval(refreshServerHistory,30000);
 setInterval(async()=>{try{const status=await api('/api/customer/status');await refreshPlanAccess(status.signedIn)}catch{}},60000);
 init();
+if(new URLSearchParams(window.location.search).get('view')==='bulk-photos')showView('bulk-photos');
 })();
 </script></body></html>
