@@ -716,24 +716,38 @@ async function submitBatch(){
   else toast('Scheduling results: '+successful+' accepted; '+failed+' failed or unconfirmed. '+results.join(' · ')+'. Unsent composer data was kept so you can correct it.');
  }catch(e){toast(e.message)}
 }
-function renderBulkPhotosTimerControls(){
+function renderBulkPhotosTimerControls(preserveFocusedPageOffset=false){
  const slotsRoot=$('bulkPhotosAllSlotsOffsets'),postsRoot=$('bulkPhotosAllPagesOffsets');if(!slotsRoot||!postsRoot)return;
  const pageCount=Math.max(1,advancedSelectedPageIds.length);
  const activeId=advancedSelectedPageIds[advancedActiveSlotIndex]||'__demo__';
  const activeData=ensureAdvancedPageData(activeId);
  const postCount=activeData.postCount;
- slotsRoot.innerHTML=Array.from({length:pageCount},(_,i)=>{
-  const id=advancedSelectedPageIds[i]||'__demo__',data=ensureAdvancedPageData(id),page=pages.find(p=>String(p.id)===String(id));
-  const pageName=id==='__demo__'?'Demo Page':(page?.name||id);
-  const activePosts=data.posts.slice(0,data.postCount),imageCapacity=activePosts.reduce((sum,post)=>sum+(Number(post.imageCount)||1),0),filled=activePosts.reduce((sum,post)=>sum+filledImages(post).length,0);
-  return '<div class="timer-offset-cell '+(i===advancedActiveSlotIndex?'is-selected':'')+'"><label for="bulkPhotosSlotOffset'+(i+1)+'">Page Slot '+(i+1)+' · '+safe(pageName)+'</label><small class="timer-offset-detail">'+data.postCount+' post(s) · '+filled+'/'+imageCapacity+' images added</small><input id="bulkPhotosSlotOffset'+(i+1)+'" data-bulk-photos-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosSlotOffsets[i]+'"></div>';
- }).join('');
+ if(!preserveFocusedPageOffset){
+  slotsRoot.innerHTML=Array.from({length:pageCount},(_,i)=>{
+   const id=advancedSelectedPageIds[i]||'__demo__',data=ensureAdvancedPageData(id),page=pages.find(p=>String(p.id)===String(id));
+   const pageName=id==='__demo__'?'Demo Page':(page?.name||id);
+   const activePosts=data.posts.slice(0,data.postCount),imageCapacity=activePosts.reduce((sum,post)=>sum+(Number(post.imageCount)||1),0),filled=activePosts.reduce((sum,post)=>sum+filledImages(post).length,0);
+   return '<div class="timer-offset-cell '+(i===advancedActiveSlotIndex?'is-selected':'')+'"><label for="bulkPhotosSlotOffset'+(i+1)+'">Page Slot '+(i+1)+' · '+safe(pageName)+'</label><small class="timer-offset-detail">'+data.postCount+' post(s) · '+filled+'/'+imageCapacity+' images added</small><input id="bulkPhotosSlotOffset'+(i+1)+'" data-bulk-photos-slot-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosSlotOffsets[i]+'"></div>';
+  }).join('');
+ }else{
+  slotsRoot.querySelectorAll('.timer-offset-cell').forEach((cell,i)=>cell.classList.toggle('is-selected',i===advancedActiveSlotIndex));
+ }
  postsRoot.innerHTML=Array.from({length:postCount},(_,i)=>{
   const post=activeData.posts[i],files=filledImages(post),imageNames=files.map(file=>file.name).join(', ');
   const detail=files.length?files.length+' added'+(imageNames?' · '+imageNames:''):'No images added yet';
-  return '<div class="timer-offset-cell"><label for="bulkPhotosPostOffset'+(i+1)+'">Post Slot '+(i+1)+' · '+(Number(post.imageCount)||1)+' image slot(s)</label><small class="timer-offset-detail">'+safe(detail)+'</small><input id="bulkPhotosPostOffset'+(i+1)+'" data-bulk-photos-post-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosPageOffsets[i]+'"></div>';
+  return '<div class="timer-offset-cell"><label for="bulkPhotosPostOffset'+(i+1)+'">Page Slot '+(advancedActiveSlotIndex+1)+' · Post Slot '+(i+1)+' · '+(Number(post.imageCount)||1)+' image slot(s)</label><small class="timer-offset-detail">'+safe(detail)+'</small><input id="bulkPhotosPostOffset'+(i+1)+'" data-bulk-photos-post-offset="'+i+'" type="number" min="0" max="1440" step="1" value="'+bulkPhotosPageOffsets[i]+'"></div>';
  }).join('');
- slotsRoot.querySelectorAll('[data-bulk-photos-slot-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.bulkPhotosSlotOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Page Slot offset must be 0–1440 minutes.');el.value=bulkPhotosSlotOffsets[i];return}bulkPhotosSlotOffsets[i]=v;applyBulkPhotosTimer(false)}));
+ slotsRoot.querySelectorAll('[data-bulk-photos-slot-offset]').forEach(el=>{
+  el.addEventListener('focus',()=>{
+   const next=Number(el.dataset.bulkPhotosSlotOffset);
+   if(!Number.isInteger(next)||next<0||next>=pageCount||next===advancedActiveSlotIndex)return;
+   advancedActiveSlotIndex=next;
+   renderAdvancedPageSlotSelector();
+   renderAdvancedWorkspaces();
+   renderBulkPhotosTimerControls(true);
+  });
+  el.addEventListener('change',()=>{const i=Number(el.dataset.bulkPhotosSlotOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Page Slot offset must be 0–1440 minutes.');el.value=bulkPhotosSlotOffsets[i];return}bulkPhotosSlotOffsets[i]=v;applyBulkPhotosTimer(false)});
+ });
  postsRoot.querySelectorAll('[data-bulk-photos-post-offset]').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.bulkPhotosPostOffset),v=Number(el.value);if(!Number.isInteger(v)||v<0||v>1440){toast('Post Slot offset must be 0–1440 minutes.');el.value=bulkPhotosPageOffsets[i];return}bulkPhotosPageOffsets[i]=v;applyBulkPhotosTimer(false)}));
 }
 function applyBulkPhotosTimer(showToast=true){
