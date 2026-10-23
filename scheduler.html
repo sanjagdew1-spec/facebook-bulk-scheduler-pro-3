@@ -59,7 +59,15 @@
 .advanced-post-card textarea{width:100%;min-height:72px;background:#0b1323;border:1px solid #34435f;border-radius:8px;color:var(--text);padding:10px;resize:vertical}
 .advanced-post-card input[type=datetime-local]{width:100%;background:#0b1323;border:1px solid #34435f;border-radius:8px;color:var(--text);padding:9px}
 .advanced-post-card .slot-ai{font-size:10px;margin:8px 0}
-@media(max-width:1050px){.advanced-layout{grid-template-columns:1fr}.advanced-post-list{grid-template-columns:1fr}}
+/* Restore the familiar manual workspace: one visible Page workspace per checked Page, with image upload on the left and caption/time controls on the right. */
+.advanced-post-list{grid-template-columns:1fr}
+.advanced-post-card{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(280px,1.2fr);gap:0 18px;border:1px solid #2d3d59;border-radius:13px;padding:15px;margin:13px 0;background:#0e1728}
+.advanced-post-head{grid-column:1/-1}
+.advanced-manual-upload,.advanced-image-grid{grid-column:1}
+.advanced-post-card>.field,.advanced-post-card>.slot-ai{grid-column:2}
+.advanced-image-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:1050px){.advanced-layout{grid-template-columns:1fr}}
+@media(max-width:760px){.advanced-post-card{grid-template-columns:1fr}.advanced-post-head,.advanced-manual-upload,.advanced-image-grid,.advanced-post-card>.field,.advanced-post-card>.slot-ai{grid-column:1}}
 @media(max-width:700px){.advanced-page-choices{grid-template-columns:1fr}.advanced-inline-control{align-items:stretch;flex-direction:column}.advanced-page-workspace{padding:11px}.advanced-page-workspace-head{align-items:flex-start}.advanced-page-count-control{min-width:112px}.advanced-post-head{align-items:flex-start}}
 
 
@@ -209,7 +217,7 @@
 <div class="notice blue">Bulk Photos only schedules posts. This workflow is separate from Bulk Pages. A Page Slot is one Facebook Page; each Page Slot contains Post Slots; each Post Slot contains Image Slots.</div>
 <div class="card" id="advancedPagePickerCard">
   <div class="card-head"><h3>1 · Select Facebook Pages</h3><span class="tag" id="advancedSelectedPageCount">0 selected</span></div>
-  <p class="muted">Select Pages in the order you want them assigned to Page Slots 1–10. Selected Pages become active; unused Page Slots stay visible but inactive.</p>
+  <p class="muted">Select the Facebook Pages you want to work on. Each selected Page opens its own workspace with one manual post slot ready for an image and schedule time. Unselected Pages do not create empty workspaces.</p>
   <select id="photoPage" hidden aria-hidden="true"><option value="">Choose a Page</option></select>
   <div id="advancedPageChoices" class="advanced-page-choices"><div class="empty">Connect Facebook and refresh Pages first.</div></div>
   <div class="field"><label for="advancedPostCountAll">Set Post Slots for all selected Pages</label><div class="advanced-inline-control"><select id="advancedPostCountAll"><option value="1">1 post per Page</option><option value="2">2 posts per Page</option><option value="3">3 posts per Page</option><option value="4">4 posts per Page</option><option value="5">5 posts per Page</option><option value="6">6 posts per Page</option><option value="7">7 posts per Page</option><option value="8">8 posts per Page</option><option value="9">9 posts per Page</option><option value="10">10 posts per Page</option></select><button class="btn secondary" id="applyAdvancedPostCountAll" type="button">Apply to All Pages</button></div><small>After applying, you can change the Post Slots count for each Page separately.</small></div>
@@ -253,7 +261,7 @@
   </div>
   <div class="actions"><button class="btn" id="applyBulkPhotosTimer" type="button">Apply All Timer Settings</button></div>
 </section>
-<div class="section-title"><div><h2>5 · Page Slot Workspaces</h2><p>Each selected Page gets its own Post Slots. Each post keeps its own images, caption, AI checkbox, and schedule time.</p></div><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div>
+<div class="section-title"><div><h2>5 · Selected Page Workspaces</h2><p>One manual post slot appears for each selected Facebook Page. Add more Post Slots only when you need them.</p></div><span class="tag" id="advancedWorkspaceCount">0 active Page Slots</span></div>
 <div id="advancedPageSlotWorkspaces"></div>
 <div class="card"><div class="actions"><button class="btn secondary" id="batchScheduleBtn" type="button">Schedule All Posts</button><button class="btn secondary" id="bulkPhotosAiAll" type="button" aria-pressed="false">AI: Select All</button><button class="btn ghost" id="clearBatch" type="button">Clear Bulk Photos</button></div><p class="footer-note">Each Page is submitted separately to the scheduling API. Successful and failed results are reported; the composer is cleared only after every requested post is accepted.</p></div>
 </section>
@@ -443,14 +451,14 @@ function renderAdvancedPageChoices(){
 function syncAdvancedPageSlots(){advancedPageSlots=Array.from({length:10},(_,i)=>{const id=advancedSelectedPageIds[i]||'';return {index:i,pageId:id,data:id?ensureAdvancedPageData(id):null,active:Boolean(id)}});$('advancedSelectedPageCount').textContent=advancedSelectedPageIds.length+' selected';$('advancedWorkspaceCount').textContent=advancedSelectedPageIds.length+' active Page Slots';}
 function renderAdvancedDropTargets(){
  const root=$('advancedDropTargets');if(!root)return;
- root.querySelectorAll('[data-drop-target]').forEach(btn=>{const i=Number(btn.dataset.dropTarget),active=i<advancedSelectedPageIds.length,selected=active&&(advancedDropAll||advancedDropSelected.has(i));btn.classList.toggle('is-inactive',!active);btn.classList.toggle('is-selected',selected);btn.disabled=!active;btn.setAttribute('aria-pressed',String(selected));});
+ root.querySelectorAll('[data-drop-target]').forEach(btn=>{const i=Number(btn.dataset.dropTarget),active=i<advancedSelectedPageIds.length,selected=active&&(advancedDropAll||advancedDropSelected.has(i));btn.hidden=!active;btn.classList.toggle('is-inactive',!active);btn.classList.toggle('is-selected',selected);btn.disabled=!active;btn.setAttribute('aria-pressed',String(selected));});
  $('advancedDropAll').classList.toggle('is-selected',advancedDropAll);$('advancedDropAll').setAttribute('aria-pressed',String(advancedDropAll));
  const targets=advancedDropAll?advancedSelectedPageIds.map((_,i)=>i):Array.from(advancedDropSelected).filter(i=>i<advancedSelectedPageIds.length).sort((a,b)=>a-b);
  $('advancedTargetSummary').textContent=targets.length?(advancedDropAll?'All '+targets.length+' active Page Slot(s) selected.':'Drop target(s): '+targets.map(i=>i+1).join(', ')+'. Only these Page Slots can receive files.'):'No Page Slots selected for the drop box.';
 }
 function renderAdvancedCaptionTargets(){
  const root=$('advancedCaptionTargets');if(!root)return;
- root.querySelectorAll('[data-caption-target]').forEach(btn=>{const i=Number(btn.dataset.captionTarget),active=i<advancedSelectedPageIds.length,selected=i===advancedCaptionTarget;btn.disabled=!active;btn.classList.toggle('is-inactive',!active);btn.classList.toggle('is-selected',selected&&active);btn.setAttribute('aria-pressed',String(selected&&active));});
+ root.querySelectorAll('[data-caption-target]').forEach(btn=>{const i=Number(btn.dataset.captionTarget),active=i<advancedSelectedPageIds.length,selected=i===advancedCaptionTarget;btn.hidden=!active;btn.disabled=!active;btn.classList.toggle('is-inactive',!active);btn.classList.toggle('is-selected',selected&&active);btn.setAttribute('aria-pressed',String(selected&&active));});
  const id=advancedSelectedPageIds[advancedCaptionTarget],data=id?ensureAdvancedPageData(id):null;
  $('advancedCaptionTargetLabel').textContent='Page Slot '+(advancedCaptionTarget+1)+(id?' · '+(pages.find(p=>String(p.id)===id)?.name||id):' · not selected');
  if(data){const parts=data.posts.map(p=>p.caption||'');$('allPhotosCaption').value=parts.filter((x,i)=>x||i<parts.length).join('\n\n');$('allCaptionPhotoCount').value='auto';}
@@ -459,8 +467,7 @@ function renderAdvancedCaptionTargets(){
 function updateAdvancedAIAllButton(){const all=advancedSelectedPageIds.length>0&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.every(post=>post.isAiContent));const button=$('bulkPhotosAiAll');if(button){button.textContent=all?'AI: Clear All':'AI: Select All';button.setAttribute('aria-pressed',String(all));}}
 function renderAdvancedWorkspaces(){
  const root=$('advancedPageSlotWorkspaces');if(!root)return;
- root.innerHTML=advancedPageSlots.map(slot=>{
-  if(!slot.active)return '<section class="advanced-page-workspace is-inactive"><div class="advanced-page-workspace-head"><div><span class="advanced-step">PAGE SLOT '+(slot.index+1)+'</span><h3>Not active</h3><p>Select a Facebook Page above to activate this workspace.</p></div><span class="tag">Inactive</span></div><div class="advanced-inactive-body">Page selection is required. This slot cannot receive files or schedule posts.</div></section>';
+ root.innerHTML=advancedPageSlots.filter(slot=>slot.active).map(slot=>{
   const p=pages.find(x=>String(x.id)===slot.pageId),data=slot.data;
   return '<section class="advanced-page-workspace"><div class="advanced-page-workspace-head"><div><span class="advanced-step">PAGE SLOT '+(slot.index+1)+'</span><h3>'+safe(p?.name||slot.pageId)+'</h3><p>'+data.posts.length+' Post Slot(s) · '+data.posts.reduce((sum,post)=>sum+filledImages(post).length,0)+' image(s) loaded</p></div><div class="advanced-page-count-control"><label for="advancedPostCount'+slot.index+'">Post Slots</label><select id="advancedPostCount'+slot.index+'" data-advanced-post-count="'+slot.index+'">'+Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'" '+(data.postCount===i+1?'selected':'')+'>'+(i+1)+' post'+(i?'s':'')+'</option>').join('')+'</select></div></div><div class="advanced-post-list">'+data.posts.map((post,pi)=>renderAdvancedPost(slot.index,slot.pageId,post,pi)).join('')+'</div></section>';
  }).join('');
