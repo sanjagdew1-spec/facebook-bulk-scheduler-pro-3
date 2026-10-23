@@ -695,7 +695,11 @@ function distributePhotoSlotDropFiles(fileList){
    const id=advancedSelectedPageIds[pi];if(!id)continue;
    const data=ensureAdvancedPageData(id);
    for(const post of data.posts.slice(0,data.postCount)){
+    // A fresh multi-photo batch resets BOTH configured Image Slot contents and
+    // all manually attached photos in the selected Page Slots. Keep the configured
+    // slot count unchanged; incoming files can only fill those configured slots.
     post.images=Array(Math.max(1,Number(post.imageCount)||1)).fill(null);
+    post.manualImages=[];
    }
   }
  }
