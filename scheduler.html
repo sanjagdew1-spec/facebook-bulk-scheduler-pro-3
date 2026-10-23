@@ -456,6 +456,7 @@ function renderAdvancedCaptionTargets(){
  if(data){const parts=data.posts.map(p=>p.caption||'');$('allPhotosCaption').value=parts.filter((x,i)=>x||i<parts.length).join('\n\n');$('allCaptionPhotoCount').value='auto';}
  else {$('allPhotosCaption').value='';$('allCaptionPhotoCount').value='auto';}
 }
+function updateAdvancedAIAllButton(){const all=advancedSelectedPageIds.length>0&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.every(post=>post.isAiContent));const button=$('bulkPhotosAiAll');if(button){button.textContent=all?'AI: Clear All':'AI: Select All';button.setAttribute('aria-pressed',String(all));}}
 function renderAdvancedWorkspaces(){
  const root=$('advancedPageSlotWorkspaces');if(!root)return;
  root.innerHTML=advancedPageSlots.map(slot=>{
@@ -468,7 +469,7 @@ function renderAdvancedWorkspaces(){
  root.querySelectorAll('[data-advanced-manual-files]').forEach(el=>el.addEventListener('change',()=>{const pi=Number(el.dataset.pageIndex),postIndex=Number(el.dataset.postIndex),post=advancedPageData[advancedSelectedPageIds[pi]].posts[postIndex],incoming=Array.from(el.files||[]),valid=incoming.filter(file=>isAllowedPhoto(file));let rejected=incoming.length-valid.length,added=0;for(const file of valid){if(post.images.length>=post.imageCount||post.images.length>=10){rejected++;continue}if(post.images.some(f=>f.name===file.name&&f.size===file.size&&f.lastModified===file.lastModified)){continue}post.images.push(file);added++}el.value='';renderAdvancedWorkspaces();updatePhotoSlotDropStatus(added+' image(s) manually added to Page Slot '+(pi+1),rejected?' '+rejected+' file(s) skipped because of type, size, or Image Slot capacity.':'');if(rejected)toast(rejected+' file(s) skipped: check JPG/PNG, 6 MB limit, and Image Slot capacity.');}));
  root.querySelectorAll('[data-advanced-image-remove]').forEach(el=>el.addEventListener('click',()=>{const pi=Number(el.dataset.pageIndex),postIndex=Number(el.dataset.postIndex),imageIndex=Number(el.dataset.imageIndex),post=advancedPageData[advancedSelectedPageIds[pi]].posts[postIndex];post.images.splice(imageIndex,1);renderAdvancedWorkspaces();updatePhotoSlotDropStatus();}));
  root.querySelectorAll('[data-advanced-caption]').forEach(el=>el.addEventListener('input',()=>{advancedPageData[advancedSelectedPageIds[Number(el.dataset.pageIndex)]].posts[Number(el.dataset.postIndex)].caption=el.value;}));
- root.querySelectorAll('[data-advanced-ai]').forEach(el=>el.addEventListener('change',()=>{advancedPageData[advancedSelectedPageIds[Number(el.dataset.pageIndex)]].posts[Number(el.dataset.postIndex)].isAiContent=el.checked;updateAIAllButtons();}));
+ root.querySelectorAll('[data-advanced-ai]').forEach(el=>el.addEventListener('change',()=>{advancedPageData[advancedSelectedPageIds[Number(el.dataset.pageIndex)]].posts[Number(el.dataset.postIndex)].isAiContent=el.checked;updateAdvancedAIAllButton();}));
  root.querySelectorAll('[data-advanced-time]').forEach(el=>el.addEventListener('change',()=>{advancedPageData[advancedSelectedPageIds[Number(el.dataset.pageIndex)]].posts[Number(el.dataset.postIndex)].time=el.value;}));
 
 }
@@ -567,7 +568,7 @@ $('applyBulkPhotosAllSlotsOffset').addEventListener('click',()=>{const v=Number(
 $('applyBulkPhotosAllPagesOffset').addEventListener('click',()=>{const v=Number($('bulkPhotosAllPagesValue').value);if(!Number.isInteger(v)||v<0||v>1440){toast('Minutes must be 0–1440.');return}bulkPhotosPageOffsets=Array(10).fill(v);renderBulkPhotosTimerControls();applyBulkPhotosTimer(true)});
 $('batchScheduleBtn').addEventListener('click',()=>submitBatch());
 $('clearBatch').addEventListener('click',()=>{advancedPageData={};advancedSelectedPageIds=[];advancedDropSelected.clear();advancedDropAll=true;advancedCaptionTarget=0;$('allPhotosCaption').value='';$('allCaptionPhotoCount').value='auto';$('bulkPhotosAllTimerBase').value='';buildSlots();toast('Bulk Photos composer cleared.');});
-$('bulkPhotosAiAll').addEventListener('click',()=>{const all=advancedSelectedPageIds.length&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.every(p=>p.isAiContent));for(const id of advancedSelectedPageIds)for(const post of ensureAdvancedPageData(id).posts)post.isAiContent=!all;renderAdvancedWorkspaces();toast(all?'AI disclosure unchecked for all active posts.':'AI disclosure checked for all active posts.');});
+$('bulkPhotosAiAll').addEventListener('click',()=>{const all=advancedSelectedPageIds.length&&advancedSelectedPageIds.every(id=>ensureAdvancedPageData(id).posts.every(p=>p.isAiContent));for(const id of advancedSelectedPageIds)for(const post of ensureAdvancedPageData(id).posts)post.isAiContent=!all;renderAdvancedWorkspaces();updateAdvancedAIAllButton();toast(all?'AI disclosure unchecked for all active posts.':'AI disclosure checked for all active posts.');});
 setupPhotoSlotDropBox();
 renderAdvancedPageChoices();syncAdvancedPageSlots();renderAdvancedDropTargets();renderAdvancedCaptionTargets();renderAdvancedWorkspaces();renderBulkPhotosTimerControls();updateAllCaptionCount();
 function statusOf(j){const s=String(j.status||'draft').toLowerCase();return ['published','scheduled','failed'].includes(s)?s:'draft'}
