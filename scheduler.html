@@ -398,13 +398,22 @@ function distributePhotoSlotDropFiles(fileList){
  const targets=advancedDropAll?advancedSelectedPageIds.map((_,i)=>i):Array.from(advancedDropSelected).filter(i=>i<advancedSelectedPageIds.length).sort((a,b)=>a-b);
  if(!targets.length){toast('Select Page Slot button(s) or All before dropping photos.');return}
  const files=sortAdvancedFiles(valid),isBatch=files.length>1;
- // A new multi-file batch starts the serial distribution over from the beginning.
- // Manual additions made after that batch do not change the next batch's reset behavior.
+ // A fresh multi-photo batch clears manual additions from EVERY currently selected
+ // Page Slot first, regardless of the narrower drop-target selection. Manual photos
+ // are extras, not configured Image Slots, and must never survive into the next batch.
  if(isBatch){
+  for(const id of advancedSelectedPageIds){
+   if(!id)continue;
+   const data=ensureAdvancedPageData(id);
+   for(const post of data.posts.slice(0,data.postCount))post.manualImages=[];
+  }
+  // Reset configured Image Slot contents only in the actual serial distribution targets.
+  // Keep each configured Image Slot count unchanged; the incoming batch fills fixed slots.
   for(const pi of targets){
    const id=advancedSelectedPageIds[pi];if(!id)continue;
    const data=ensureAdvancedPageData(id);
-   for(const post of data.posts.slice(0,data.postCount)){post.images=Array(Math.max(1,Number(post.imageCount)||1)).fill(null);post.manualImages=[];}
+   for(const post of data.posts.slice(0,data.postCount))
+    post.images=Array(Math.max(1,Number(post.imageCount)||1)).fill(null);
   }
  }
  let assigned=0,unassigned=0;
