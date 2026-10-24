@@ -100,7 +100,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   image_data BLOB, image_mime_type TEXT,
   scheduled_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled',
   post_id TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-  customer_id TEXT
+  customer_id TEXT,
+  retry_count INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS jobs_due_idx ON jobs(status, scheduled_at);
 CREATE TABLE IF NOT EXISTS job_images (
@@ -115,6 +116,7 @@ for (const migration of [
   'ALTER TABLE jobs ADD COLUMN image_mime_type TEXT',
   'ALTER TABLE jobs ADD COLUMN is_ai_content INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE jobs ADD COLUMN customer_id TEXT',
+  'ALTER TABLE jobs ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE pages ADD COLUMN customer_id TEXT'
 ]) {
   try { db.exec(migration); }
@@ -562,7 +564,7 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, requirePlanAcces
     tx();
     if (mode === 'now') {
       for (let attempt = 0; attempt < Math.ceil(created.length / 10) + 2; attempt++) {
-        await publishDueJobs();
+        await publishDueJobs(created);
         const remaining = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE id IN (" + created.map(() => '?').join(',') + ") AND status IN ('scheduled','publishing') AND scheduled_at<=?").get(...created, now()).count;
         if (!remaining) break;
       }
@@ -727,7 +729,7 @@ app.post('/api/publish-now', requireTrustedOrigin, requireAuth, requirePlanAcces
     // The shared scheduler processes up to 10 due jobs per pass. Repeat passes so
     // Publish Now can handle bulk selections larger than 10 Pages.
     for (let attempt = 0; attempt < Math.ceil(created.length / 10) + 2; attempt++) {
-      await publishDueJobs();
+      await publishDueJobs(created);
       const remaining = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE id IN (" + placeholders + ") AND status='scheduled' AND scheduled_at<=?").get(...created, now()).count;
       if (!remaining) break;
     }
@@ -744,6 +746,15 @@ app.delete('/api/schedule/:id', requireTrustedOrigin, requireAuth, (req, res) =>
   res.json({ ok: true });
 });
 
+function safePublishTransportRetryCode(error) {
+  const cause = error?.cause || {};
+  const code = String(cause.code || cause.cause?.code || error?.code || '');
+  if (['EAI_AGAIN','ENOTFOUND','ECONNREFUSED','ENETUNREACH','EHOSTUNREACH','UND_ERR_CONNECT_TIMEOUT'].includes(code)) return code;
+  // Retry socket failures only when no request bytes were written, avoiding duplicate posts.
+  if (code === 'UND_ERR_SOCKET' && Number(cause.socket?.bytesWritten || 0) === 0) return code;
+  return null;
+}
+
 function describeMetaError(data, httpStatus) {
   const err = data?.error || {};
   const parts = [err.message || 'Meta rejected the photo post.'];
@@ -755,8 +766,18 @@ function describeMetaError(data, httpStatus) {
   return parts.join(' | ').slice(0, 1400);
 }
 
-async function publishDueJobs() {
-  const due = db.prepare("SELECT * FROM jobs WHERE status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT 10").all(now());
+let publishQueueTail = Promise.resolve();
+async function publishDueJobs(jobIds = null) {
+  // Serialize cron and Publish Now work so concurrent customers cannot race for the same
+  // queue slice. Publish Now supplies its own IDs and isn't delayed by unrelated jobs.
+  const previousPass = publishQueueTail;
+  let releasePass;
+  publishQueueTail = new Promise(resolve => { releasePass = resolve; });
+  await previousPass;
+  try {
+    const due = Array.isArray(jobIds) && jobIds.length
+      ? db.prepare("SELECT * FROM jobs WHERE id IN (" + jobIds.map(() => '?').join(',') + ") AND status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT 10").all(...jobIds, now())
+      : db.prepare("SELECT * FROM jobs WHERE status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT 10").all(now());
   for (const job of due) {
     const claimed = db.prepare("UPDATE jobs SET status='publishing',updated_at=? WHERE id=? AND status='scheduled'").run(now(), job.id);
     if (!claimed.changes) continue;
@@ -826,7 +847,17 @@ async function publishDueJobs() {
       if (!response.ok || data.error) throw new Error(describeMetaError(data, response.status));
       db.prepare("UPDATE jobs SET status='published',post_id=?,error=NULL,updated_at=? WHERE id=?").run(String(data.post_id || data.id || ''), now(), job.id);
     } catch (e) {
-      const message = String(e.message || e).slice(0, 1500);
+      const retryCode = safePublishTransportRetryCode(e);
+      const retryCount = Number(job.retry_count || 0);
+      if (retryCode && retryCount < 3) {
+        const retryAt = new Date(Date.now() + 15000 * (retryCount + 1)).toISOString();
+        const retryMessage = 'Temporary Facebook connection failure (' + retryCode + '); automatic retry ' + (retryCount + 1) + '/3 scheduled.';
+        db.prepare("UPDATE jobs SET status='scheduled',scheduled_at=?,retry_count=retry_count+1,error=?,updated_at=? WHERE id=?").run(retryAt, retryMessage, now(), job.id);
+        console.warn('Publish retry scheduled', job.id, retryCode, retryCount + 1);
+        continue;
+      }
+      const causeCode = e?.cause?.code || e?.cause?.cause?.code || null;
+      const message = (String(e.message || e) + (causeCode && !retryCode ? ' (network code ' + causeCode + ')' : '')).slice(0, 1500);
       if (e?.code === 'ACCESS_SERVICE_UNAVAILABLE') {
         db.prepare("UPDATE jobs SET status='scheduled',error=?,updated_at=? WHERE id=?").run(message, now(), job.id);
         console.warn('Scheduled publish deferred', job.id, message);
@@ -835,6 +866,9 @@ async function publishDueJobs() {
       db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=?").run(message, now(), job.id);
       console.error('Scheduled publish failed', job.id, message);
     }
+  }
+  } finally {
+    releasePass();
   }
 }
 const schedulerExpression = process.env.NODE_ENV === 'test' && process.env.TEST_SCHEDULER_CRON
