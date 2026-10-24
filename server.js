@@ -497,8 +497,10 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, requirePlanAcces
   for (const item of posts) { const ids=Array.isArray(item?.pageSchedules)&&item.pageSchedules.length?item.pageSchedules.map(t=>t?.pageId):Array.isArray(item?.pageIds)&&item.pageIds.length?item.pageIds:(item?.pageId!=null?[item.pageId]:(defaultPageId!=null?[defaultPageId]:[])); batchPageIds.push(...ids.filter(x=>x!=null)); batchTargetCount+=ids.filter(x=>x!=null).length; if(mode==='schedule'){if(Array.isArray(item?.pageSchedules)&&item.pageSchedules.length)scheduledBatchDates.push(...item.pageSchedules.map(t=>t?.scheduledAt||item.scheduledAt).filter(Boolean));else if(item?.scheduledAt)scheduledBatchDates.push(item.scheduledAt);} }
   const accessLimits = req.planAccess?.limits || {};
   const configuredBatchLimit = Number(accessLimits.slotsPerBatch ?? accessLimits.slots_per_batch ?? accessLimits.batchLimit ?? accessLimits.postsPerBatch);
-  console.info('[batch-limit-check]', JSON.stringify({ role: req.planAccess?.role || null, planName: req.planAccess?.planName || null, postSlotsInRequest: posts.length, actualPagePostJobs: batchTargetCount, configuredBatchLimit: Number.isFinite(configuredBatchLimit) ? configuredBatchLimit : null, unlimited: Boolean(req.planAccess?.unlimited) }));
-  if (!enforcePlanLimits(req,res,{batchCount:batchTargetCount,targetCount:batchTargetCount,pageIds:batchPageIds,scheduledDates:scheduledBatchDates})) return;
+  const declaredBatchCount = req.body?.declaredBatchCount == null ? batchTargetCount : Number(req.body.declaredBatchCount);
+  if (!Number.isInteger(declaredBatchCount) || declaredBatchCount < batchTargetCount || declaredBatchCount > 100) return res.status(400).json({ error: 'The declared batch size is invalid. Please retry the schedule.' });
+  console.info('[batch-limit-check]', JSON.stringify({ role: req.planAccess?.role || null, planName: req.planAccess?.planName || null, postSlotsInRequest: posts.length, actualPagePostJobs: batchTargetCount, declaredBatchCount, configuredBatchLimit: Number.isFinite(configuredBatchLimit) ? configuredBatchLimit : null, unlimited: Boolean(req.planAccess?.unlimited) }));
+  if (!enforcePlanLimits(req,res,{batchCount:declaredBatchCount,targetCount:batchTargetCount,pageIds:batchPageIds,scheduledDates:scheduledBatchDates})) return;
   const prepared = [];
   for (let index = 0; index < posts.length; index++) {
     const item = posts[index] || {};
