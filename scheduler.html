@@ -921,12 +921,3 @@ if(new URLSearchParams(window.location.search).get('view')==='bulk-photos')showV
 })();
 </script>
 </body></html>
-
-/* Bulk Pages timer layout: keep the ten per-Page timer boxes compact in a 5 + 5 grid, matching Bulk Photos and using the blank width below the AI-content row. */
-#view-bulk-pages .timer-offset-list,
-#view-bulk-pages #allSlotsOffsets,
-#view-bulk-pages #allPagesOffsets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;width:100%;min-width:0}
-#view-bulk-pages .timer-offset-cell{min-width:0;padding:5px 4px}
-#view-bulk-pages .timer-offset-cell label{font-size:9px;line-height:1.2;overflow-wrap:anywhere}
-#view-bulk-pages .timer-offset-cell input{width:100%;min-width:0;padding:5px 2px;font-size:10px}
-@media(max-width:760px){#view-bulk-pages .timer-offset-list,#view-bulk-pages #allSlotsOffsets,#view-bulk-pages #allPagesOffsets{grid-template-columns:repeat(5,minmax(0,1fr))}}
