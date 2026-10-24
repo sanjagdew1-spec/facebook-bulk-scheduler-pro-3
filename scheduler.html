@@ -802,14 +802,26 @@ async function submitBatch(){
     const postImages=filledImages(post);if(!postImages.length)throw Error(label+' needs at least one image.');
     if(postImages.length>10)throw Error(label+' cannot contain more than 10 images.');
     const dt=new Date(post.time);if(!post.time||Number.isNaN(dt.getTime())||dt.getTime()<Date.now()+60000)throw Error(label+' needs a valid future schedule time.');
-    posts.push({message:withAiDisclosure(post.caption,post.isAiContent),images:await Promise.all(postImages.map(fileToData)),scheduledAt:dt.toISOString(),isAiContent:Boolean(post.isAiContent)});
+    const images=await Promise.all(postImages.map(fileToData));
+    const totalBytes=images.reduce((sum,img)=>sum+Math.max(0,Math.floor((String(img.imageData||'').length-String(img.imageData||'').indexOf(',')-1)*3/4)),0);
+    if(totalBytes>30*1024*1024)throw Error(label+' images together must be 30 MB or smaller.');
+    posts.push({message:withAiDisclosure(post.caption,post.isAiContent),images,scheduledAt:dt.toISOString(),isAiContent:Boolean(post.isAiContent)});
    }
    preparedByPage.push({pageId:id,pageName:page?.name||page?.page_name||id,posts});
   }
   let successful=0,failed=0,results=[];
   for(const entry of preparedByPage){
-   try{const data=await api('/api/bulk-photos',{method:'POST',body:JSON.stringify({pageId:entry.pageId,posts:entry.posts,mode:'schedule'})});const returned=data.jobs||[];jobs=[...returned,...jobs];if(returned.length===entry.posts.length&&returned.every(j=>['scheduled','published'].includes(statusOf(j)))){successful+=returned.length;results.push(entry.pageName+': '+returned.length+' scheduled')}else{failed+=Math.max(1,entry.posts.length-returned.filter(j=>['scheduled','published'].includes(statusOf(j))).length);results.push(entry.pageName+': partial/failed response')}}
-   catch(error){failed+=entry.posts.length;results.push(entry.pageName+': failed ('+error.message+')')}
+   let pageSuccessful=0,pageFailed=0;
+   for(let postIndex=0;postIndex<entry.posts.length;postIndex++){
+    const post=entry.posts[postIndex];
+    try{
+     const data=await api('/api/bulk-photos',{method:'POST',body:JSON.stringify({pageId:entry.pageId,posts:[post],mode:'schedule',declaredBatchCount:entry.posts.length})});
+     const returned=data.jobs||[];jobs=[...returned,...jobs];
+     if(returned.length===1&&['scheduled','published'].includes(statusOf(returned[0]))){successful++;pageSuccessful++;}
+     else{failed++;pageFailed++;results.push(entry.pageName+' · Post '+(postIndex+1)+': partial/failed response');}
+    }catch(error){failed++;pageFailed++;results.push(entry.pageName+' · Post '+(postIndex+1)+': failed ('+error.message+')');}
+   }
+   results.unshift(entry.pageName+': '+pageSuccessful+' scheduled'+(pageFailed?' / '+pageFailed+' failed':''));
   }
   renderStats();renderHistory();
   if(failed===0&&successful>0){advancedPageData={};advancedSelectedPageIds=[];advancedDropSelected.clear();advancedDropAll=true;advancedCaptionTarget=0;advancedTimerApplied=false;$('allPhotosCaption').value='';$('allCaptionPhotoCount').value='auto';$('bulkPhotosAllTimerBase').value='';buildSlots();toast('All '+successful+' post(s) accepted. '+results.join(' · ')+' Composer cleared. Check History for status.')}
