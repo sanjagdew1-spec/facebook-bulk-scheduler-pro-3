@@ -488,7 +488,7 @@ app.post('/api/history/clear', requireTrustedOrigin, requireAuth, (req, res) => 
 });
 
 app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
-  const { pageId: defaultPageId, posts, mode = 'now' } = req.body || {};
+  const { pageId: defaultPageId, posts, mode = 'now', imageGroups = {} } = req.body || {};
   if (!Array.isArray(posts) || posts.length < 1 || posts.length > 100) return res.status(400).json({ error: 'A photo batch must contain between 1 and 100 separate posts.' });
   // The composer can create several Page-specific jobs from one image/post slot.
   // Apply the plan batch limit to actual post jobs (Page targets), not just image slots.
@@ -504,10 +504,11 @@ app.post('/api/bulk-photos', requireTrustedOrigin, requireAuth, requirePlanAcces
   const prepared = [];
   for (let index = 0; index < posts.length; index++) {
     const item = posts[index] || {};
-    if (!Array.isArray(item.images) || item.images.length < 1 || item.images.length > 10) return res.status(400).json({ error: 'Post ' + (index + 1) + ' must contain 1 to 10 images.' });
+    const itemImages = Array.isArray(item.images) ? item.images : (item.imageGroupKey != null ? imageGroups[String(item.imageGroupKey)] : null);
+    if (!Array.isArray(itemImages) || itemImages.length < 1 || itemImages.length > 10) return res.status(400).json({ error: 'Post ' + (index + 1) + ' must contain 1 to 10 images.' });
     let bytes = 0;
     const photos = [];
-    for (const photo of item.images) {
+    for (const photo of itemImages) {
       const match = typeof photo?.imageData === 'string' ? photo.imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/) : null;
       if (!match) return res.status(400).json({ error: 'Post ' + (index + 1) + ' contains an invalid JPG/PNG image.' });
       const buffer = Buffer.from(match[2], 'base64');
