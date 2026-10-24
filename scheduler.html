@@ -149,13 +149,14 @@ async function submitBulkNow(){
   const published=returned.filter(j=>statusOf(j)==='published').length;
   const failed=returned.filter(j=>statusOf(j)==='failed').length;
   const pending=returned.filter(j=>['scheduled','publishing'].includes(statusOf(j))).length;
-  await refreshPostUsage();
-  if(returned.length>0&&published===returned.length){
+  const allPublished=returned.length>0&&published===returned.length;
+  if(allPublished){
    clearBulkPagesComposer();
-   toast('Success: all '+published+' selected Page(s) published.');
+   toast('Success: all '+published+' selected Page(s) published. Composer cleared.');
   }else{
    toast('Publish result: '+published+' published, '+failed+' failed, '+pending+' pending/automatic retry. Form kept. Check History; before retrying, select only failed Pages to avoid duplicate posts.');
   }
+  try{await refreshPostUsage();}catch(usageError){console.warn('Published successfully; post-usage refresh failed:',usageError);}
  }catch(e){toast(e.message)}
  finally{if(publishButton)publishButton.disabled=false;if(scheduleButton)scheduleButton.disabled=false}
 }
