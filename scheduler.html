@@ -612,8 +612,12 @@ function applyOnlySelectedPages(){
   if(slotIndex===0)return;
   slot.pageIds=[...validIds];
   validIds.forEach((id,index)=>{
-   if(!slot.pageTimes[id])slot.pageTimes[id]=allTimerBase?shiftedScheduleTime(slot.time,allPageOffsets[Math.min(index,9)]):(slot.time||'');
-   slot.manualPageTimes[id]=Boolean(allTimerBase);
+   if(allTimerBase){
+    slot.pageTimes[id]=shiftedScheduleTime(slot.time,allPageOffsets[Math.min(index,9)]);
+    slot.manualPageTimes[id]=true;
+   }else if(!slot.pageTimes[id]){
+    slot.pageTimes[id]=slot.time||'';
+   }
   });
   Object.keys(slot.pageTimes||{}).forEach(id=>{if(!validIds.includes(String(id))){delete slot.pageTimes[id];delete slot.manualPageTimes[id]}});
  });
