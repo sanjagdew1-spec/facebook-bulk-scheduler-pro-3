@@ -104,6 +104,14 @@ def parse_results(provider, raw, query):
                 # Get nearby anchor text from source for the name/snippet where possible.
                 entries.append((label, href, ""))
         for title, raw_url, description in entries:
+            # Google and some HTML search results use relative redirect paths.
+            if raw_url.startswith("/"):
+                base_host = {
+                    "Google": "https://www.google.com",
+                    "DuckDuckGo": "https://html.duckduckgo.com",
+                    "Yahoo": "https://search.yahoo.com"
+                }.get(provider, "")
+                raw_url = base_host + raw_url
             url = normalize_group_url(raw_url)
             if not url:
                 continue
