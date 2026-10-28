@@ -6,8 +6,10 @@ from xml.etree import ElementTree as ET
 PORT = int(os.environ.get("PORT", "10000"))
 UA = "Mozilla/5.0 (compatible; GroupFinderPrototype/1.0; public search results)"
 
-def fetch_keyword(keyword, country, min_members, priority):
-    query = 'site:facebook.com/groups ' + keyword
+def fetch_keyword(keyword, country, min_members, priority, extra):
+    query = 'site:facebook.com/groups ' + keyword + (' ' + extra if extra else '')
+    if min_members >= 1000:
+        query += ' ' + str(min_members // 1000) + 'k members'
     if country and country != "Worldwide":
         query += ' "' + country + '"'
     if priority in ("high", "very high", "recent posts"):
@@ -92,13 +94,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error":"Enter at least one keyword or phrase."})
             country = str(data.get("country") or "United States").strip()
             priority = str(data.get("activityPriority") or "very high").lower()
+            extra = str(data.get("extraKeywords") or "").strip()
             try: min_members = int(data.get("minimumMembers") or 0)
             except Exception: min_members = 0
         except Exception:
             return self._send(400, {"error":"Invalid JSON request."})
         groups, errors = [], []
         with ThreadPoolExecutor(max_workers=8) as pool:
-            futures = {pool.submit(fetch_keyword, kw, country, min_members, priority): kw for kw in keywords}
+            futures = {pool.submit(fetch_keyword, kw, country, min_members, priority, extra): kw for kw in keywords}
             for future in as_completed(futures):
                 kw = futures[future]
                 try:
