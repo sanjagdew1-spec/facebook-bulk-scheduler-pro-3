@@ -40,7 +40,7 @@ main{padding:30px clamp(18px,3vw,42px) 48px;max-width:1600px;width:100%;margin:a
     <div class="fieldwrap"><label class="field-label">Activity level to prioritize</label><div class="chips" id="activityChips"><button type="button" class="chip" data-value="high">High activity</button><button type="button" class="chip selected" data-value="very high">Very high activity</button><button type="button" class="chip" data-value="largest communities">Largest communities</button><button type="button" class="chip" data-value="recent posts">Recent posts</button></div><div class="hint">Activity preference guides the search terms. Exact daily post counts may not be publicly visible.</div></div>
     <div class="fieldwrap"><label class="field-label" for="minimum">Minimum member size target</label><div class="range-row"><input id="minimum" type="range" min="1000" max="1000000" step="1000" value="50000"><span class="range-value" id="minimumLabel">50,000+</span></div><div class="hint">This is a search target, not a verified filter unless a source displays member counts.</div></div>
     <div class="fieldwrap"><label class="field-label" for="extra">Optional extra keywords</label><input id="extra" class="field" placeholder="e.g. USA, daily posts, buy sell trade"></div>
-    <div class="actions"><button class="primary" type="submit">⌕ Generate Group Searches</button><button class="secondary" type="button" id="resetBtn">Reset filters</button></div>
+    <div class="actions"><button class="primary" type="submit">⌕ Find Real Group Candidates</button><button class="secondary" type="button" id="resetBtn">Reset filters</button></div>
     <div class="toast" id="toast" role="status"></div>
    </form>
   </section>
@@ -58,11 +58,11 @@ main{padding:30px clamp(18px,3vw,42px) 48px;max-width:1600px;width:100%;margin:a
  </div>
  <section class="results">
   <div class="results-top"><div><h2>Discovery sources</h2><p id="resultSubtitle">Add any number of keywords, then generate separate searches for each phrase.</p></div><span class="pill">NO FAKE GROUP DATA</span></div>
-  <div id="keywordResults" class="result-grid">
-   <article class="source-card"><div class="source-head"><div class="source-icon">f</div><span class="source-tag">FACEBOOK</span></div><h3>Facebook Group Search</h3><p>Search Facebook’s discoverable Group results for your selected topic and country.</p><a id="facebookLink" href="https://www.facebook.com/groups/" target="_blank" rel="noopener">Open Group Search ↗</a></article>
-   <article class="source-card"><div class="source-head"><div class="source-icon">G</div><span class="source-tag">WEB SEARCH</span></div><h3>Public web results</h3><p>Find publicly indexed Facebook Group pages using country and niche keywords.</p><a id="googleLink" href="https://www.google.com/search?q=Facebook+groups" target="_blank" rel="noopener">Search public results ↗</a></article>
-   <article class="source-card"><div class="source-head"><div class="source-icon">⌕</div><span class="source-tag">ACTIVITY CHECK</span></div><h3>Recent activity signals</h3><p>Look for public discussions and recent posts. Verify activity manually before ranking.</p><a id="bingLink" href="https://www.bing.com/search?q=Facebook+groups" target="_blank" rel="noopener">Check activity clues ↗</a></article>
-  </div>
+  <div id="searchStatus" class="notice" style="margin-bottom:14px"><span>ⓘ</span><div>Search uses a public web index. Group names and links are returned from indexed results; member counts and activity are only shown when the source provides evidence.</div></div>
+  <div id="keywordResults" class="result-grid"><article class="source-card"><h3>Ready to search</h3><p>Enter keywords and click Find Real Group Candidates.</p></article></div>
+  <div class="notice"><span>ⓘ</span><div><b>Data honesty:</b> Results come from the public web index, not a complete Facebook directory. Facebook may hide group details. We never invent member counts or posts-per-day. Open each group on Facebook to confirm it is active before saving it to your shortlist.</div></div>
+  </section>
+  <section class="results" id="shortlistSection"><div class="results-top"><div><h2>Selected Groups</h2><p>Save candidates to this browser only; this does not join groups or save anything to Facebook.</p></div><button class="secondary" type="button" id="clearSaved">Clear shortlist</button></div><div id="savedGroups" class="result-grid"></div></section>
   <div class="notice"><span>ⓘ</span><div><b>Important preview limitation:</b> This version creates separate real search links for every keyword you enter. Search results open on Facebook/Google/Bing; this page does not yet import those results automatically or verify live post counts. We will not invent Group names or activity data.</div></div>
  </section>
  <div class="footer">TOP FACEBOOK GROUP FINDER • SEPARATE TEST PROJECT • NOT CONNECTED TO THE SCHEDULER</div>
@@ -70,30 +70,62 @@ main{padding:30px clamp(18px,3vw,42px) 48px;max-width:1600px;width:100%;margin:a
 </div>
 <script>
 const country=document.getElementById('country'), topic=document.getElementById('topic'), onlyUsa=document.getElementById('onlyUsa'), minimum=document.getElementById('minimum'), minimumLabel=document.getElementById('minimumLabel'), extra=document.getElementById('extra'), toast=document.getElementById('toast');
-let activity='very high';
+const API='https://group-finder-search-api.onrender.com';
+let activity='very high', busy=false;
 function countryValue(){return onlyUsa.checked?'United States':country.value}
 function fmt(n){return Number(n).toLocaleString('en-US')}
-function keywords(){return [...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
+function keywords(){return [...new Set(topic.value.split(/[\\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function saved(){try{return JSON.parse(localStorage.getItem('groupFinderSaved')||'[]')}catch{return []}}
+function saveAll(rows){localStorage.setItem('groupFinderSaved',JSON.stringify(rows));renderSaved()}
+function renderSaved(){
+ const rows=saved(), host=document.getElementById('savedGroups');
+ if(!rows.length){host.innerHTML='<article class="source-card"><h3>No selected groups yet</h3><p>Tick a result and choose Save selected groups.</p></article>';return}
+ host.innerHTML=rows.map((g,i)=>'<article class="source-card"><div class="source-head"><span class="source-tag">SAVED GROUP</span><button type="button" class="secondary removeSaved" data-i="'+i+'">Remove</button></div><h3>'+escapeHtml(g.name)+'</h3><p>'+escapeHtml(g.keyword||'')+'</p><a href="'+escapeHtml(g.url)+'" target="_blank" rel="noopener">Open Facebook Group ↗</a><p>Members: '+(g.members==null?'Not shown by source':fmt(g.members))+' · Posts/day: '+(g.postsPerDay==null?'Not shown by source':fmt(g.postsPerDay))+'</p></article>').join('');
+ host.querySelectorAll('.removeSaved').forEach(b=>b.addEventListener('click',()=>{const rows=saved();rows.splice(Number(b.dataset.i),1);saveAll(rows)}))
+}
+function groupCard(g,i){
+ const activityInfo=g.postsPerDay!=null?fmt(g.postsPerDay)+' posts/day (source snippet)':(g.activityClues?.length?'Activity words in snippet: '+g.activityClues.join(', '):'No reliable daily activity count found');
+ return '<article class="source-card"><div class="source-head"><label><input class="pickGroup" type="checkbox" data-i="'+i+'"> Select</label><span class="source-tag">PUBLIC INDEX RESULT</span></div><h3>'+escapeHtml(g.name)+'</h3><p><b>Keyword:</b> '+escapeHtml(g.keyword)+'</p><p><b>Members:</b> '+(g.members==null?'Not shown by source':fmt(g.members))+'</p><p><b>Activity:</b> '+escapeHtml(activityInfo)+'</p><p class="hint">'+escapeHtml(g.snippet||'No public snippet available.')+'</p><a href="'+escapeHtml(g.url)+'" target="_blank" rel="noopener">Open Facebook Group ↗</a></article>'
+}
 minimum.addEventListener('input',()=>minimumLabel.textContent=fmt(minimum.value)+'+');
 onlyUsa.addEventListener('change',()=>{country.disabled=onlyUsa.checked;if(onlyUsa.checked)country.value='United States';country.style.opacity=onlyUsa.checked?'.6':'1';});
 document.querySelectorAll('#activityChips .chip').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');activity=b.dataset.value;}));
-function buildLinks(){
- const c=countryValue(), list=keywords(), e=extra.value.trim(), m=fmt(minimum.value);
+document.getElementById('searchForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const list=keywords();
  if(!list.length){toast.textContent='Please enter at least one keyword or phrase.';toast.classList.add('show');topic.focus();return}
- const host=document.getElementById('keywordResults');
- host.innerHTML=list.map((t,i)=>{
-  const terms=[t,c,e].filter(Boolean).join(' ');
-  const fb='https://www.facebook.com/search/groups/?q='+encodeURIComponent(terms);
-  const q1='site:facebook.com/groups '+terms+' '+activity+' active members '+m;
-  const q2='site:facebook.com/groups '+terms+' recent posts discussions';
-  return '<article class="source-card"><div class="source-head"><div class="source-icon">'+(i+1)+'</div><span class="source-tag">KEYWORD '+(i+1)+'</span></div><h3>'+escapeHtml(t)+'</h3><p>Country: '+escapeHtml(c)+' · Activity: '+escapeHtml(activity)+' · Target: '+m+'+ members</p><a href="'+fb+'" target="_blank" rel="noopener">Facebook Groups ↗</a><div style="height:8px"></div><a href="https://www.google.com/search?q='+encodeURIComponent(q1)+'" target="_blank" rel="noopener">Google results ↗</a><div style="height:8px"></div><a href="https://www.bing.com/search?q='+encodeURIComponent(q2)+'" target="_blank" rel="noopener">Recent activity clues ↗</a></article>'
- }).join('');
- document.getElementById('resultSubtitle').textContent=list.length+' keyword search'+(list.length===1?'':'es')+' prepared for '+c+'. All phrases are processed; no keyword-count limit is set.';
- toast.textContent='Prepared '+list.length+' keyword searches. Open the results below to see real source results; activity must still be verified on the source.';
- toast.classList.add('show');
-}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-document.getElementById('searchForm').addEventListener('submit',e=>{e.preventDefault();buildLinks();document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});});
-document.getElementById('resetBtn').addEventListener('click',()=>{country.value='United States';country.disabled=false;country.style.opacity='1';topic.value='classic car restoration';onlyUsa.checked=false;minimum.value='50000';minimumLabel.textContent='50,000+';extra.value='';activity='very high';document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.toggle('selected',x.dataset.value==='very high'));toast.classList.remove('show');document.getElementById('resultSubtitle').textContent='Add any number of keywords, then generate separate searches for each phrase.';document.getElementById('keywordResults').innerHTML='';});
+ if(busy)return;
+ busy=true;const submit=e.submitter||document.querySelector('#searchForm button[type="submit"]');submit.disabled=true;submit.textContent='Searching public index…';
+ const host=document.getElementById('keywordResults'), subtitle=document.getElementById('resultSubtitle'), status=document.getElementById('searchStatus');
+ host.innerHTML='<article class="source-card"><h3>Searching…</h3><p>Checking public indexed Facebook Group pages for '+list.length+' keyword phrases.</p></article>';
+ subtitle.textContent='Searching '+list.length+' keyword phrases for '+countryValue()+'.';
+ status.innerHTML='<span>⌕</span><div>Contacting public search index. This may take a little longer when you enter many keywords.</div>';
+ try{
+  const response=await fetch(API+'/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keywords:list,country:countryValue(),minimumMembers:Number(minimum.value),activityPriority:activity,extraKeywords:extra.value.trim()})});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||'Search request failed');
+  const rows=data.groups||[];
+  host.innerHTML=rows.length?rows.map(groupCard).join('')+'<div class="source-card"><h3>Save your picks</h3><p>Selected groups are saved in this browser only.</p><button class="primary" id="saveSelected" type="button">Save selected groups</button></div>':'<article class="source-card"><h3>No indexed Facebook Group results found</h3><p>Try a broader keyword or another country. This is a public index limitation, not proof that no groups exist.</p></article>';
+  document.getElementById('saveSelected')?.addEventListener('click',()=>{
+   const picked=[...host.querySelectorAll('.pickGroup:checked')].map(el=>rows[Number(el.dataset.i)]);
+   if(!picked.length){toast.textContent='Select at least one group first.';toast.classList.add('show');return}
+   const existing=saved(), seen=new Set(existing.map(x=>x.url));
+   const added=picked.filter(g=>!seen.has(g.url)).map(g=>({...g, savedAt:new Date().toISOString()}));
+   saveAll([...existing,...added]);toast.textContent='Saved '+added.length+' new group(s) to your browser shortlist.';toast.classList.add('show');
+  });
+  subtitle.textContent=data.resultCount+' unique group candidates from '+data.keywordsProcessed+' keyword phrases.';
+  status.innerHTML='<span>ⓘ</span><div>'+escapeHtml(data.notice||'Results are from public indexed pages.')+(data.errors?.length?' Some keyword searches could not be completed: '+escapeHtml(data.errors.map(x=>x.keyword).join(', ')):'')+'</div>';
+  toast.textContent='Search finished: '+data.resultCount+' group candidates found.';toast.classList.add('show');
+ }catch(err){
+  host.innerHTML='<article class="source-card"><h3>Search service not reachable</h3><p>'+escapeHtml(err.message)+'</p><p>Try again after the search API is live.</p></article>';
+  status.innerHTML='<span>!</span><div>The live search service could not be reached. No fake group results were generated.</div>';
+  toast.textContent='Search failed. Please try again.';toast.classList.add('show');
+ }finally{busy=false;submit.disabled=false;submit.textContent='⌕ Find Real Group Candidates'}
+ document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});
+});
+document.getElementById('clearSaved').addEventListener('click',()=>{saveAll([])});
+document.getElementById('resetBtn').addEventListener('click',()=>{country.value='United States';country.disabled=false;country.style.opacity='1';topic.value='classic car restoration';onlyUsa.checked=false;minimum.value='50000';minimumLabel.textContent='50,000+';extra.value='';activity='very high';document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.toggle('selected',x.dataset.value==='very high'));toast.classList.remove('show');document.getElementById('resultSubtitle').textContent='Add any number of keywords, then find real public-index results.';document.getElementById('keywordResults').innerHTML='';});
+renderSaved();
 </script>
 </body></html>
