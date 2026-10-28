@@ -117,9 +117,9 @@ def parse_results(provider, raw, query):
         raw_text = raw.decode("utf-8", "ignore") if isinstance(raw, bytes) else str(raw)
         raw_text = html.unescape(raw_text)
         # Search results often JSON-escape URLs as https:\\/\\/... or use \\u002F.
-        raw_text = re.sub(r"\\\\u002f", "/", raw_text, flags=re.I)
-        raw_text = raw_text.replace(r"\\/", "/").replace(r"\\\\/", "/")
-        raw_text = raw_text.replace(r"\\u003a", ":").replace(r"\\\\u003a", ":")
+        raw_text = re.sub(r"\\u002f", "/", raw_text, flags=re.I)
+        raw_text = raw_text.replace(r"\/", "/").replace(r"\\/", "/")
+        raw_text = raw_text.replace(r"\u003a", ":").replace(r"\\u003a", ":")
         embedded = re.findall(
             r"(?:https?:)?(?:%3A)?(?:%2F|/){2}(?:www\.)?facebook\.com(?:%2F|/)groups(?:%2F|/)[A-Za-z0-9_.%-]+",
             raw_text, re.I
