@@ -174,8 +174,8 @@ def request_source(provider, query):
     return rows
 
 def fetch_keyword(keyword, country, min_members, priority, extra):
-    # Keep the user's exact keyword, but do not let optional keywords/country/activity
-    # terms over-constrain public indexes. Try broad phrases first, then site filters.
+    # Preserve broad discovery without serially spending 9 seconds on each query.
+    # Try the two strongest variants together; only run fallback variants if needed.
     base = " ".join(x for x in [keyword, extra] if x).strip()
     location = "USA" if country == "United States" else ("" if country == "Worldwide" else country)
     variants = [
@@ -186,25 +186,29 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
         (base + " groups").strip(),
     ]
     errors = []
-    for query in variants:
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {pool.submit(request_source, provider, query): provider for provider in ("Bing RSS", "DuckDuckGo", "Yahoo", "Google")}
-            found = []
+    providers = ("Bing RSS", "DuckDuckGo", "Yahoo", "Google")
+    for batch in (variants[:2], variants[2:]):
+        found = []
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                pool.submit(request_source, provider, query): (provider, query)
+                for query in batch for provider in providers
+            }
             for future in as_completed(futures):
-                provider = futures[future]
+                provider, query = futures[future]
                 try:
                     found.extend(future.result())
                 except Exception as exc:
                     errors.append(provider + ":" + type(exc).__name__)
-                    print("SEARCH_PROVIDER_ERROR", provider, type(exc).__name__, flush=True)
-            if found:
-                unique, seen = [], set()
-                for row in found:
-                    if row["url"] not in seen:
-                        seen.add(row["url"])
-                        unique.append(row)
-                print("KEYWORD_RESULTS", keyword, "query", query, "count", len(unique), flush=True)
-                return unique, None
+                    print("SEARCH_PROVIDER_ERROR", provider, type(exc).__name__, "query", query[:100], flush=True)
+        if found:
+            unique, seen = [], set()
+            for row in found:
+                if row["url"] not in seen:
+                    seen.add(row["url"])
+                    unique.append(row)
+            print("KEYWORD_RESULTS", keyword, "queries", len(batch), "count", len(unique), flush=True)
+            return unique, None
     return [], ",".join(sorted(set(errors))) or "No indexed group URLs in provider responses"
 
 class Handler(BaseHTTPRequestHandler):
