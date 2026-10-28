@@ -73,7 +73,7 @@ const country=document.getElementById('country'), topic=document.getElementById(
 let activity='very high';
 function countryValue(){return onlyUsa.checked?'United States':country.value}
 function fmt(n){return Number(n).toLocaleString('en-US')}
-function keywords(){return [...new Set(topic.value.split(/[\\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
+function keywords(){return [...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
 minimum.addEventListener('input',()=>minimumLabel.textContent=fmt(minimum.value)+'+');
 onlyUsa.addEventListener('change',()=>{country.disabled=onlyUsa.checked;if(onlyUsa.checked)country.value='United States';country.style.opacity=onlyUsa.checked?'.6':'1';});
 document.querySelectorAll('#activityChips .chip').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');activity=b.dataset.value;}));
