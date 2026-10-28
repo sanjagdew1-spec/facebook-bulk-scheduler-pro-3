@@ -7,60 +7,67 @@ PORT = int(os.environ.get("PORT", "10000"))
 UA = "Mozilla/5.0 (compatible; GroupFinderPrototype/1.0; public search results)"
 
 def fetch_keyword(keyword, country, min_members, priority, extra):
-    query = 'site:facebook.com/groups ' + keyword + (' ' + extra if extra else '')
-    if min_members >= 1000:
-        query += ' ' + str(min_members // 1000) + 'k members'
-    if country and country != "Worldwide":
-        query += ' "' + country + '"'
+    # Do not turn a member-size preference into a hard search requirement.
+    # Search broad-to-narrow and stop when a query returns usable Facebook Group candidates.
+    base = " ".join(x for x in [keyword, extra] if x).strip()
+    location = "USA" if country == "United States" else ("" if country == "Worldwide" else country)
+    variants = [
+        "site:facebook.com/groups " + base + (" " + location if location else ""),
+        "site:facebook.com/groups " + base,
+        '"facebook groups" ' + base + (" " + location if location else "")
+    ]
     if priority in ("high", "very high", "recent posts"):
-        query += ' active posts discussions'
+        variants = [variants[0] + " active", variants[1], variants[2]]
     elif priority == "largest communities":
-        query += ' members community'
-    url = "https://www.bing.com/search?format=rss&count=20&q=" + urllib.parse.quote(query)
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/rss+xml,application/xml,text/xml"})
-    try:
-        with urllib.request.urlopen(req, timeout=18) as response:
-            raw = response.read(1_500_000)
-        root = ET.fromstring(raw)
-    except Exception as exc:
-        return [], str(exc)
-    found = []
-    for item in root.findall(".//item"):
-        title = (item.findtext("title") or "").strip()
-        link = (item.findtext("link") or "").strip()
-        description = re.sub(r"<[^>]+>", " ", item.findtext("description") or "")
-        description = re.sub(r"\s+", " ", description).strip()
-        parsed = urllib.parse.urlparse(link)
-        if "facebook.com" not in parsed.netloc.lower() or "/groups/" not in parsed.path.lower():
+        variants = [variants[0] + " members", variants[1], variants[2]]
+    last_error = None
+    for query in variants:
+        url = "https://www.bing.com/search?format=rss&count=30&q=" + urllib.parse.quote(query)
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/rss+xml,application/xml,text/xml"})
+        try:
+            with urllib.request.urlopen(req, timeout=12) as response:
+                raw = response.read(1_500_000)
+            root = ET.fromstring(raw)
+        except Exception as exc:
+            last_error = str(exc)
             continue
-        link = urllib.parse.urlunparse((parsed.scheme or "https", parsed.netloc, parsed.path.rstrip("/"), "", "", ""))
-        blob = title + " " + description
-        member_match = re.search(r"(\d[\d,.]*\s*(?:k|m)?\s*(?:members|member|people|followers))", blob, re.I)
-        members = None
-        if member_match:
-            val = re.search(r"([\d,.]+)\s*([km]?)", member_match.group(1), re.I)
-            if val:
-                try:
-                    members = int(float(val.group(1).replace(",", "")) * (1000 if val.group(2).lower()=="k" else 1000000 if val.group(2).lower()=="m" else 1))
-                except Exception:
-                    members = None
-        posts_match = re.search(r"(\d+)\s*(?:posts?|discussions?)\s*(?:in|over|during|within)?\s*(?:the\s*)?(?:last\s*)?(24\s*hours?|day|daily)", blob, re.I)
-        posts_day = int(posts_match.group(1)) if posts_match else None
-        activity_clues = []
-        for term in ("active", "recent posts", "new posts", "daily discussion", "posts today", "very active"):
-            if term in blob.lower():
-                activity_clues.append(term)
-        score = None
-        if posts_day is not None:
-            score = min(100, round(posts_day / 100 * 100)) 
-        found.append({
-            "keyword": keyword, "name": title or "Facebook Group", "url": link,
-            "snippet": description[:600], "members": members, "postsPerDay": posts_day,
-            "activityScore": score, "activityClues": activity_clues,
-            "source": "Bing public web index", "verifiedLive": False
-        })
-    return found, None
-
+        found = []
+        for item in root.findall(".//item"):
+            title = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            description = re.sub(r"<[^>]+>", " ", item.findtext("description") or "")
+            description = re.sub(r"\s+", " ", description).strip()
+            parsed = urllib.parse.urlparse(link)
+            host = parsed.netloc.lower().split(":")[0]
+            if not (host == "facebook.com" or host.endswith(".facebook.com")) or "/groups/" not in parsed.path.lower():
+                continue
+            link = urllib.parse.urlunparse((parsed.scheme or "https", parsed.netloc, parsed.path.rstrip("/"), "", "", ""))
+            blob = title + " " + description
+            member_match = re.search(r"(\d[\d,.]*\s*(?:k|m)?\s*(?:members|member|people|followers))", blob, re.I)
+            members = None
+            if member_match:
+                val = re.search(r"([\d,.]+)\s*([km]?)", member_match.group(1), re.I)
+                if val:
+                    try:
+                        members = int(float(val.group(1).replace(",", "")) * (1000 if val.group(2).lower()=="k" else 1000000 if val.group(2).lower()=="m" else 1))
+                    except Exception:
+                        members = None
+            posts_match = re.search(r"(\d+)\s*(?:posts?|discussions?)\s*(?:in|over|during|within)?\s*(?:the\s*)?(?:last\s*)?(24\s*hours?|day|daily)", blob, re.I)
+            posts_day = int(posts_match.group(1)) if posts_match else None
+            activity_clues = []
+            for term in ("active", "recent posts", "new posts", "daily discussion", "posts today", "very active"):
+                if term in blob.lower():
+                    activity_clues.append(term)
+            score = min(100, posts_day) if posts_day is not None else None
+            found.append({
+                "keyword": keyword, "name": title or "Facebook Group", "url": link,
+                "snippet": description[:600], "members": members, "postsPerDay": posts_day,
+                "activityScore": score, "activityClues": activity_clues,
+                "source": "Bing public web index", "verifiedLive": False
+            })
+        if found:
+            return found, None
+    return [], last_error
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status, data):
         body = json.dumps(data, ensure_ascii=False).encode()
