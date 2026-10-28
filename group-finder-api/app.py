@@ -120,20 +120,19 @@ def request_source(provider, query):
     return rows
 
 def fetch_keyword(keyword, country, min_members, priority, extra):
+    # Keep the user's exact keyword, but do not let optional keywords/country/activity
+    # terms over-constrain public indexes. Try broad phrases first, then site filters.
     base = " ".join(x for x in [keyword, extra] if x).strip()
     location = "USA" if country == "United States" else ("" if country == "Worldwide" else country)
     variants = [
-        "site:facebook.com/groups " + base + (" " + location if location else ""),
-        "site:facebook.com/groups " + base,
-        '"facebook groups" ' + base + (" " + location if location else "")
+        (base + " Facebook groups " + location).strip(),
+        ("Facebook groups " + base + " " + location).strip(),
+        ("facebook.com/groups " + base).strip(),
+        ("site:facebook.com/groups " + base).strip(),
+        (base + " groups").strip(),
     ]
-    if priority in ("high", "very high", "recent posts"):
-        variants[0] += " active"
-    elif priority == "largest communities":
-        variants[0] += " members"
     errors = []
     for query in variants:
-        # Query independent providers together: a blocked/empty provider must not hide all results.
         with ThreadPoolExecutor(max_workers=3) as pool:
             futures = {pool.submit(request_source, provider, query): provider for provider in ("Bing RSS", "DuckDuckGo", "Yahoo")}
             found = []
@@ -143,13 +142,14 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
                     found.extend(future.result())
                 except Exception as exc:
                     errors.append(provider + ":" + type(exc).__name__)
+                    print("SEARCH_PROVIDER_ERROR", provider, type(exc).__name__, flush=True)
             if found:
-                # De-duplicate results within this keyword and return the useful candidates.
                 unique, seen = [], set()
                 for row in found:
                     if row["url"] not in seen:
                         seen.add(row["url"])
                         unique.append(row)
+                print("KEYWORD_RESULTS", keyword, "query", query, "count", len(unique), flush=True)
                 return unique, None
     return [], ",".join(sorted(set(errors))) or "No indexed group URLs in provider responses"
 
