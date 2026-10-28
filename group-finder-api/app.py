@@ -1,14 +1,119 @@
-import json, os, re, time, urllib.parse, urllib.request, urllib.error
+import html, json, os, re, time, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from xml.etree import ElementTree as ET
 
 PORT = int(os.environ.get("PORT", "10000"))
-UA = "Mozilla/5.0 (compatible; GroupFinderPrototype/1.0; public search results)"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
+class AnchorParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "a":
+            attrs = dict(attrs)
+            href = attrs.get("href", "")
+            if href:
+                self.links.append((href, attrs.get("aria-label", "")))
+    def handle_data(self, data):
+        pass
+
+def normalize_group_url(raw):
+    try:
+        raw = html.unescape(raw.strip())
+        if raw.startswith("//"):
+            raw = "https:" + raw
+        p = urllib.parse.urlparse(raw)
+        if p.netloc.lower().endswith("duckduckgo.com") and p.path.startswith("/l/"):
+            qs = urllib.parse.parse_qs(p.query)
+            raw = (qs.get("uddg") or qs.get("url") or [""])[0]
+            p = urllib.parse.urlparse(raw)
+        host = p.netloc.lower().split(":")[0]
+        if host.startswith("www."):
+            host = host[4:]
+        if host != "facebook.com" and not host.endswith(".facebook.com"):
+            return None
+        if "/groups/" not in p.path.lower():
+            return None
+        path = p.path.rstrip("/")
+        # Keep group root, discard post and query fragments.
+        m = re.search(r"(/groups/[^/]+)", path, re.I)
+        if not m:
+            return None
+        return "https://www.facebook.com" + m.group(1) + "/"
+    except Exception:
+        return None
+
+def parse_count(blob):
+    member_match = re.search(r"(\d[\d,.]*\s*(?:k|m)?\s*(?:members|member|people|followers))", blob, re.I)
+    members = None
+    if member_match:
+        val = re.search(r"([\d,.]+)\s*([km]?)", member_match.group(1), re.I)
+        if val:
+            try:
+                members = int(float(val.group(1).replace(",", "")) * (1000 if val.group(2).lower()=="k" else 1000000 if val.group(2).lower()=="m" else 1))
+            except Exception:
+                pass
+    posts_match = re.search(r"(\d+)\s*(?:posts?|discussions?)\s*(?:in|over|during|within)?\s*(?:the\s*)?(?:last\s*)?(24\s*hours?|day|daily)", blob, re.I)
+    posts_day = int(posts_match.group(1)) if posts_match else None
+    return members, posts_day
+
+def parse_results(provider, raw, query):
+    rows = []
+    try:
+        if provider == "Bing RSS":
+            root = ET.fromstring(raw)
+            entries = [(item.findtext("title") or "", item.findtext("link") or "", item.findtext("description") or "") for item in root.findall(".//item")]
+        else:
+            parser = AnchorParser()
+            parser.feed(raw.decode("utf-8", "ignore"))
+            entries = []
+            for href, label in parser.links:
+                # Get nearby anchor text from source for the name/snippet where possible.
+                entries.append((label, href, ""))
+        for title, raw_url, description in entries:
+            url = normalize_group_url(raw_url)
+            if not url:
+                continue
+            title = html.unescape(re.sub(r"<[^>]+>", " ", title or "")).strip()
+            description = html.unescape(re.sub(r"<[^>]+>", " ", description or ""))
+            description = re.sub(r"\s+", " ", description).strip()
+            if not title or title.lower() in ("facebook", "log in or sign up"):
+                title = "Facebook Group · " + urllib.parse.unquote(url.rstrip("/").split("/")[-1])
+            members, posts_day = parse_count(title + " " + description)
+            blob = (title + " " + description).lower()
+            clues = [term for term in ("active", "recent posts", "new posts", "daily discussion", "posts today", "very active") if term in blob]
+            rows.append({
+                "keyword": query, "name": title[:240], "url": url,
+                "snippet": description[:600], "members": members, "postsPerDay": posts_day,
+                "activityScore": min(100, posts_day) if posts_day is not None else None,
+                "activityClues": clues, "source": provider, "verifiedLive": False
+            })
+    except Exception as exc:
+        print("PARSE_ERROR", provider, type(exc).__name__, flush=True)
+    return rows
+
+def request_source(provider, query):
+    encoded = urllib.parse.quote(query)
+    if provider == "Bing RSS":
+        url = "https://www.bing.com/search?format=rss&count=30&q=" + encoded
+        accept = "application/rss+xml,application/xml,text/xml"
+    elif provider == "DuckDuckGo":
+        url = "https://html.duckduckgo.com/html/?q=" + encoded
+        accept = "text/html,application/xhtml+xml"
+    else:
+        url = "https://search.yahoo.com/search?p=" + encoded
+        accept = "text/html,application/xhtml+xml"
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": accept, "Accept-Language": "en-US,en;q=0.9"})
+    with urllib.request.urlopen(req, timeout=9) as response:
+        raw = response.read(2_000_000)
+    rows = parse_results(provider, raw, query)
+    print("SEARCH_SOURCE", provider, "bytes", len(raw), "candidates", len(rows), flush=True)
+    return rows
 
 def fetch_keyword(keyword, country, min_members, priority, extra):
-    # Do not turn a member-size preference into a hard search requirement.
-    # Search broad-to-narrow and stop when a query returns usable Facebook Group candidates.
     base = " ".join(x for x in [keyword, extra] if x).strip()
     location = "USA" if country == "United States" else ("" if country == "Worldwide" else country)
     variants = [
@@ -17,57 +122,31 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
         '"facebook groups" ' + base + (" " + location if location else "")
     ]
     if priority in ("high", "very high", "recent posts"):
-        variants = [variants[0] + " active", variants[1], variants[2]]
+        variants[0] += " active"
     elif priority == "largest communities":
-        variants = [variants[0] + " members", variants[1], variants[2]]
-    last_error = None
+        variants[0] += " members"
+    errors = []
     for query in variants:
-        url = "https://www.bing.com/search?format=rss&count=30&q=" + urllib.parse.quote(query)
-        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/rss+xml,application/xml,text/xml"})
-        try:
-            with urllib.request.urlopen(req, timeout=12) as response:
-                raw = response.read(1_500_000)
-            root = ET.fromstring(raw)
-        except Exception as exc:
-            last_error = str(exc)
-            continue
-        found = []
-        for item in root.findall(".//item"):
-            title = (item.findtext("title") or "").strip()
-            link = (item.findtext("link") or "").strip()
-            description = re.sub(r"<[^>]+>", " ", item.findtext("description") or "")
-            description = re.sub(r"\s+", " ", description).strip()
-            parsed = urllib.parse.urlparse(link)
-            host = parsed.netloc.lower().split(":")[0]
-            if not (host == "facebook.com" or host.endswith(".facebook.com")) or "/groups/" not in parsed.path.lower():
-                continue
-            link = urllib.parse.urlunparse((parsed.scheme or "https", parsed.netloc, parsed.path.rstrip("/"), "", "", ""))
-            blob = title + " " + description
-            member_match = re.search(r"(\d[\d,.]*\s*(?:k|m)?\s*(?:members|member|people|followers))", blob, re.I)
-            members = None
-            if member_match:
-                val = re.search(r"([\d,.]+)\s*([km]?)", member_match.group(1), re.I)
-                if val:
-                    try:
-                        members = int(float(val.group(1).replace(",", "")) * (1000 if val.group(2).lower()=="k" else 1000000 if val.group(2).lower()=="m" else 1))
-                    except Exception:
-                        members = None
-            posts_match = re.search(r"(\d+)\s*(?:posts?|discussions?)\s*(?:in|over|during|within)?\s*(?:the\s*)?(?:last\s*)?(24\s*hours?|day|daily)", blob, re.I)
-            posts_day = int(posts_match.group(1)) if posts_match else None
-            activity_clues = []
-            for term in ("active", "recent posts", "new posts", "daily discussion", "posts today", "very active"):
-                if term in blob.lower():
-                    activity_clues.append(term)
-            score = min(100, posts_day) if posts_day is not None else None
-            found.append({
-                "keyword": keyword, "name": title or "Facebook Group", "url": link,
-                "snippet": description[:600], "members": members, "postsPerDay": posts_day,
-                "activityScore": score, "activityClues": activity_clues,
-                "source": "Bing public web index", "verifiedLive": False
-            })
-        if found:
-            return found, None
-    return [], last_error
+        # Query independent providers together: a blocked/empty provider must not hide all results.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {pool.submit(request_source, provider, query): provider for provider in ("Bing RSS", "DuckDuckGo", "Yahoo")}
+            found = []
+            for future in as_completed(futures):
+                provider = futures[future]
+                try:
+                    found.extend(future.result())
+                except Exception as exc:
+                    errors.append(provider + ":" + type(exc).__name__)
+            if found:
+                # De-duplicate results within this keyword and return the useful candidates.
+                unique, seen = [], set()
+                for row in found:
+                    if row["url"] not in seen:
+                        seen.add(row["url"])
+                        unique.append(row)
+                return unique, None
+    return [], ",".join(sorted(set(errors))) or "No indexed group URLs in provider responses"
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status, data):
         body = json.dumps(data, ensure_ascii=False).encode()
@@ -88,7 +167,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
     def do_GET(self):
         if self.path.rstrip("/") in ("", "/health"):
-            return self._send(200, {"ok": True, "service": "group-finder-search-api", "source": "Bing public web index", "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
+            return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Bing public web index", "DuckDuckGo public web index", "Yahoo public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
         return self._send(404, {"error":"Not found"})
     def do_POST(self):
         if self.path.rstrip("/") != "/api/search":
@@ -107,10 +186,13 @@ class Handler(BaseHTTPRequestHandler):
             country = str(data.get("country") or "United States").strip()
             priority = str(data.get("activityPriority") or "very high").lower()
             extra = str(data.get("extraKeywords") or "").strip()
-            try: min_members = int(data.get("minimumMembers") or 0)
-            except Exception: min_members = 0
+            try:
+                min_members = int(data.get("minimumMembers") or 0)
+            except Exception:
+                min_members = 0
         except Exception:
             return self._send(400, {"error":"Invalid JSON request."})
+        print("SEARCH_REQUEST", "keywords", len(keywords), "country", country, "priority", priority, flush=True)
         groups, errors = [], []
         with ThreadPoolExecutor(max_workers=8) as pool:
             futures = {pool.submit(fetch_keyword, kw, country, min_members, priority, extra): kw for kw in keywords}
@@ -119,18 +201,22 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     rows, error = future.result()
                     groups.extend(rows)
-                    if error: errors.append({"keyword":kw,"message":"Public search source could not be reached for this phrase."})
-                except Exception:
+                    if error:
+                        errors.append({"keyword":kw,"message":"Public search providers returned no usable group link (" + error + ")."})
+                except Exception as exc:
+                    print("KEYWORD_ERROR", kw, type(exc).__name__, flush=True)
                     errors.append({"keyword":kw,"message":"Search failed for this phrase."})
         unique, seen = [], set()
-        for g in groups:
-            if g["url"] in seen: continue
-            seen.add(g["url"])
-            unique.append(g)
+        for group in groups:
+            if group["url"] in seen:
+                continue
+            seen.add(group["url"])
+            unique.append(group)
         unique.sort(key=lambda g: (g["postsPerDay"] is not None, g["postsPerDay"] or -1, g["members"] is not None, g["members"] or -1), reverse=True)
+        print("SEARCH_COMPLETE", "processed", len(keywords), "results", len(unique), "errors", len(errors), flush=True)
         return self._send(200, {
-            "ok": True, "source": "Bing public web index", "keywordsProcessed": len(keywords),
-            "resultCount": len(unique), "groups": unique, "errors": errors,
+            "ok": True, "source": "Bing, DuckDuckGo and Yahoo public web indexes",
+            "keywordsProcessed": len(keywords), "resultCount": len(unique), "groups": unique, "errors": errors,
             "notice": "These are public indexed search candidates, not a complete Facebook directory. Facebook may hide group details; member counts and posts/day are only shown when the source explicitly exposes them. No estimated or invented metrics are used."
         })
     def log_message(self, fmt, *args):
