@@ -63,8 +63,6 @@ main{padding:30px clamp(18px,3vw,42px) 48px;max-width:1600px;width:100%;margin:a
   <div class="notice"><span>ⓘ</span><div><b>Data honesty:</b> Results come from the public web index, not a complete Facebook directory. Facebook may hide group details. We never invent member counts or posts-per-day. Open each group on Facebook to confirm it is active before saving it to your shortlist.</div></div>
   </section>
   <section class="results" id="shortlistSection"><div class="results-top"><div><h2>Selected Groups</h2><p>Save candidates to this browser only; this does not join groups or save anything to Facebook.</p></div><button class="secondary" type="button" id="clearSaved">Clear shortlist</button></div><div id="savedGroups" class="result-grid"></div></section>
-  <div class="notice"><span>ⓘ</span><div><b>Important preview limitation:</b> This version creates separate real search links for every keyword you enter. Search results open on Facebook/Google/Bing; this page does not yet import those results automatically or verify live post counts. We will not invent Group names or activity data.</div></div>
- </section>
  <div class="footer">TOP FACEBOOK GROUP FINDER • SEPARATE TEST PROJECT • NOT CONNECTED TO THE SCHEDULER</div>
 </main>
 </div>
@@ -74,7 +72,7 @@ const API='https://group-finder-search-api.onrender.com';
 let activity='very high', busy=false;
 function countryValue(){return onlyUsa.checked?'United States':country.value}
 function fmt(n){return Number(n).toLocaleString('en-US')}
-function keywords(){return [...new Set(topic.value.split(/[\\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
+function keywords(){return [...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function saved(){try{return JSON.parse(localStorage.getItem('groupFinderSaved')||'[]')}catch{return []}}
 function saveAll(rows){localStorage.setItem('groupFinderSaved',JSON.stringify(rows));renderSaved()}
