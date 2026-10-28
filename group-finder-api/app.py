@@ -11,14 +11,20 @@ class AnchorParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
+        self.current = None
     def handle_starttag(self, tag, attrs):
         if tag.lower() == "a":
             attrs = dict(attrs)
             href = attrs.get("href", "")
             if href:
-                self.links.append((href, attrs.get("aria-label", "")))
+                self.current = {"href": href, "text": [attrs.get("aria-label", "")]}
     def handle_data(self, data):
-        pass
+        if self.current is not None and data.strip():
+            self.current["text"].append(data.strip())
+    def handle_endtag(self, tag):
+        if tag.lower() == "a" and self.current is not None:
+            self.links.append((self.current["href"], " ".join(self.current["text"]).strip()))
+            self.current = None
 
 def normalize_group_url(raw):
     try:
