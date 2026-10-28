@@ -32,9 +32,33 @@ def normalize_group_url(raw):
         if raw.startswith("//"):
             raw = "https:" + raw
         p = urllib.parse.urlparse(raw)
-        if p.netloc.lower().endswith("duckduckgo.com") and p.path.startswith("/l/"):
+        # Unwrap common search-engine redirect URLs before validating Facebook links.
+        for _ in range(3):
+            host0 = p.netloc.lower().split(":")[0]
             qs = urllib.parse.parse_qs(p.query)
-            raw = (qs.get("uddg") or qs.get("url") or [""])[0]
+            unwrapped = ""
+            if host0.endswith("duckduckgo.com") and p.path.startswith("/l/"):
+                unwrapped = (qs.get("uddg") or qs.get("url") or [""])[0]
+            elif host0.endswith("google.com") and p.path == "/url":
+                unwrapped = (qs.get("q") or qs.get("url") or [""])[0]
+            elif host0.endswith("search.yahoo.com"):
+                # Yahoo result redirects commonly carry the destination in RU=.
+                match = re.search(r"(?:^|/)RU=([^/]+)", p.path, re.I)
+                if match:
+                    unwrapped = urllib.parse.unquote(match.group(1))
+            elif host0.endswith("bing.com") and p.path.startswith("/ck/a"):
+                candidate = (qs.get("u") or [""])[0]
+                if candidate.startswith("a1"):
+                    try:
+                        import base64
+                        unwrapped = base64.urlsafe_b64decode(candidate[2:] + "=" * (-len(candidate[2:]) % 4)).decode("utf-8", "ignore")
+                    except Exception:
+                        unwrapped = ""
+                elif candidate.startswith("http"):
+                    unwrapped = candidate
+            if not unwrapped or unwrapped == raw:
+                break
+            raw = urllib.parse.unquote(unwrapped)
             p = urllib.parse.urlparse(raw)
         host = p.netloc.lower().split(":")[0]
         if host.startswith("www."):
@@ -134,7 +158,7 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
     errors = []
     for query in variants:
         with ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {pool.submit(request_source, provider, query): provider for provider in ("Bing RSS", "DuckDuckGo", "Yahoo")}
+            futures = {pool.submit(request_source, provider, query): provider for provider in ("Bing RSS", "DuckDuckGo", "Yahoo", "Google")}
             found = []
             for future in as_completed(futures):
                 provider = futures[future]
@@ -173,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
     def do_GET(self):
         if self.path.rstrip("/") in ("", "/health"):
-            return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Bing public web index", "DuckDuckGo public web index", "Yahoo public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
+            return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Bing public web index", "DuckDuckGo public web index", "Yahoo public web index", "Google public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
         return self._send(404, {"error":"Not found"})
     def do_POST(self):
         if self.path.rstrip("/") != "/api/search":
@@ -221,7 +245,7 @@ class Handler(BaseHTTPRequestHandler):
         unique.sort(key=lambda g: (g["postsPerDay"] is not None, g["postsPerDay"] or -1, g["members"] is not None, g["members"] or -1), reverse=True)
         print("SEARCH_COMPLETE", "processed", len(keywords), "results", len(unique), "errors", len(errors), flush=True)
         return self._send(200, {
-            "ok": True, "source": "Bing, DuckDuckGo and Yahoo public web indexes",
+            "ok": True, "source": "Bing, DuckDuckGo, Yahoo and Google public web indexes",
             "keywordsProcessed": len(keywords), "resultCount": len(unique), "groups": unique, "errors": errors,
             "notice": "These are public indexed search candidates, not a complete Facebook directory. Facebook may hide group details; member counts and posts/day are only shown when the source explicitly exposes them. No estimated or invented metrics are used."
         })
