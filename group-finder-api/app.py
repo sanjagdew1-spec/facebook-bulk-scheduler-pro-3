@@ -31,6 +31,15 @@ def normalize_group_url(raw):
         raw = html.unescape(raw.strip())
         if raw.startswith("//"):
             raw = "https:" + raw
+        # Search engines sometimes HTML/percent-encode the destination URL inside
+        # their result href or embedded JSON. Decode only until a URL is visible.
+        for _ in range(3):
+            if re.match(r"^https?://", raw, re.I) or raw.startswith("//"):
+                break
+            decoded = urllib.parse.unquote(raw)
+            if decoded == raw:
+                break
+            raw = decoded
         p = urllib.parse.urlparse(raw)
         # Unwrap common search-engine redirect URLs before validating Facebook links.
         for _ in range(3):
@@ -103,6 +112,16 @@ def parse_results(provider, raw, query):
             for href, label in parser.links:
                 # Get nearby anchor text from source for the name/snippet where possible.
                 entries.append((label, href, ""))
+        # Some engines embed Facebook destinations in JSON/script markup instead
+        # of ordinary result anchors. Scan those URLs too, including escaped forms.
+        raw_text = raw.decode("utf-8", "ignore") if isinstance(raw, bytes) else str(raw)
+        raw_text = html.unescape(raw_text).replace(r"\\u002F", "/").replace(r"\\/", "/")
+        embedded = re.findall(
+            r"(?:https?:)?(?:%3A)?(?:%2F|/){2}(?:www\.)?facebook\.com(?:%2F|/)groups(?:%2F|/)[A-Za-z0-9_.%-]+",
+            raw_text, re.I
+        )
+        for candidate in embedded:
+            entries.append(("", urllib.parse.unquote(candidate), ""))
         for title, raw_url, description in entries:
             # Google and some HTML search results use relative redirect paths.
             if raw_url.startswith("/"):
