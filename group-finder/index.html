@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Top Facebook Group Finder</title>
+<style>
+:root{--bg:#0a1020;--panel:#111b30;--panel2:#15223b;--line:#263653;--muted:#9aa9c4;--text:#f4f7ff;--blue:#6d8cff;--cyan:#56d9e8;--green:#57d6a0;--gold:#f2c66d}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1000px 500px at 80% -10%,#233c71 0%,transparent 60%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text)}button,input,select{font:inherit}button{cursor:pointer}
+.app{display:grid;grid-template-columns:245px minmax(0,1fr);min-height:100vh}.sidebar{padding:26px 16px;border-right:1px solid var(--line);background:#0b1325e8}.brand{display:flex;gap:12px;align-items:center;padding:0 8px 28px}.logo{width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,#6c8dff,#56d9e8);display:grid;place-items:center;color:#071226;font-weight:900;font-size:20px}.brand b{display:block;font-size:15px;letter-spacing:.1px}.brand small{color:var(--muted);font-size:11px}.navlabel{font-size:10px;letter-spacing:1.8px;color:#7183a4;padding:12px 12px 8px}.nav{display:flex;gap:12px;align-items:center;padding:12px;border-radius:11px;color:#b7c5df;font-size:13px;margin:4px 0}.nav.active{background:linear-gradient(90deg,#253c70,#192c50);color:white;border:1px solid #3a5488}.nav .ico{width:20px;text-align:center;font-size:16px}.side-note{margin:28px 6px 0;padding:14px;border:1px solid var(--line);border-radius:14px;background:#111b30}.side-note strong{font-size:12px}.side-note p{font-size:11px;line-height:1.6;color:var(--muted);margin:7px 0 0}
+main{padding:30px clamp(18px,3vw,42px) 48px;max-width:1600px;width:100%;margin:auto}.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:28px}.eyebrow{color:var(--cyan);font-size:11px;letter-spacing:1.6px;font-weight:800;text-transform:uppercase}.topbar h1{font-size:clamp(25px,3vw,34px);letter-spacing:-.9px;margin:7px 0}.sub{color:var(--muted);font-size:13px;line-height:1.6;max-width:760px}.status{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid #27534d;background:#112a2b;border-radius:999px;color:#8ce7c2;font-size:11px;white-space:nowrap}.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px #57d6a01c}
+.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:18px}.panel{border:1px solid var(--line);background:linear-gradient(180deg,#131f35f5,#10192af5);border-radius:18px;padding:22px;box-shadow:0 14px 40px #00000018}.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}.panel h2{font-size:16px;margin:0 0 6px}.panel-head p{font-size:12px;color:var(--muted);margin:0;line-height:1.5}.pill{border:1px solid #344765;border-radius:999px;padding:6px 9px;color:#bdcbea;font-size:10px;white-space:nowrap}.field-label{display:block;color:#cbd6ea;font-size:12px;font-weight:650;margin:0 0 8px}.field{width:100%;border:1px solid #30425f;background:#0b1426;color:#f4f7ff;padding:12px 13px;border-radius:10px;outline:none}.field:focus{border-color:var(--blue);box-shadow:0 0 0 3px #6d8cff22}.formrow{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:17px}.fieldwrap{margin-bottom:17px}.hint{font-size:10px;color:#8091af;line-height:1.5;margin-top:7px}.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{padding:8px 11px;border:1px solid #30425f;background:#0b1426;color:#bdcbea;border-radius:9px;font-size:11px}.chip:hover,.chip.selected{border-color:#6487ff;background:#1a2b50;color:white}.usa-box{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border:1px solid #344765;background:#0c172b;border-radius:12px;margin-bottom:17px}.usa-left{display:flex;align-items:center;gap:11px}.flag{font-size:22px}.usa-left strong{display:block;font-size:12px}.usa-left small{display:block;color:var(--muted);font-size:10px;margin-top:4px}.switch{position:relative;width:42px;height:24px;flex-shrink:0}.switch input{opacity:0;width:0;height:0}.slider{position:absolute;inset:0;background:#34425b;border-radius:30px;transition:.2s}.slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:white;border-radius:50%;transition:.2s}.switch input:checked+.slider{background:#567bff}.switch input:checked+.slider:before{transform:translateX(18px)}.range-row{display:flex;align-items:center;gap:12px}.range-row input{width:100%;accent-color:var(--blue)}.range-value{color:#dce5ff;font-size:12px;min-width:64px;text-align:right}.primary{border:0;color:#071226;font-weight:850;background:linear-gradient(100deg,#86a0ff,#56d9e8);padding:13px 18px;border-radius:11px;box-shadow:0 8px 20px #577aff22}.primary:hover{filter:brightness(1.06);transform:translateY(-1px)}.secondary{border:1px solid #344765;background:#111d32;color:#dce6fa;padding:11px 14px;border-radius:10px;font-size:12px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.right-stack{display:flex;flex-direction:column;gap:18px}.metric{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #23324c}.metric:last-child{border:0;padding-bottom:0}.metric-icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:#1c2e50;font-size:17px}.metric strong{font-size:13px;display:block}.metric small{font-size:10px;color:var(--muted);display:block;margin-top:4px}.metric b{margin-left:auto;color:#c6d5f7;font-size:11px}.logic-list{display:grid;gap:12px}.logic{display:flex;gap:10px;font-size:11px;line-height:1.55;color:#c1cee4}.num{width:23px;height:23px;flex-shrink:0;border-radius:7px;background:#243a67;color:#b8caff;display:grid;place-items:center;font-size:10px;font-weight:800}.results{margin-top:20px}.results-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.results-top h2{font-size:16px;margin:0}.results-top p{color:var(--muted);font-size:11px;margin:5px 0 0}.result-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.source-card{border:1px solid var(--line);border-radius:14px;background:#111b30;padding:17px;min-width:0}.source-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.source-icon{width:36px;height:36px;border-radius:10px;background:#1c2e50;display:grid;place-items:center;font-size:17px}.source-tag{font-size:9px;padding:5px 7px;border:1px solid #354966;border-radius:999px;color:#b9c9e6}.source-card h3{font-size:13px;margin:0 0 7px}.source-card p{font-size:11px;line-height:1.55;color:var(--muted);min-height:50px;margin:0 0 15px}.source-card a{display:block;text-decoration:none;text-align:center;color:#e9efff;background:#1c2d4d;border:1px solid #3a527a;padding:10px;border-radius:9px;font-size:11px;font-weight:700}.source-card a:hover{background:#263f6c}.notice{display:flex;gap:10px;padding:13px 15px;background:#2a2417;border:1px solid #5a4a29;border-radius:12px;color:#f3dca5;font-size:11px;line-height:1.55;margin-top:14px}.notice span{font-size:16px}.footer{color:#7183a2;font-size:10px;text-align:center;margin-top:25px}.toast{display:none;margin-top:12px;padding:10px 12px;border-radius:9px;background:#132b2b;border:1px solid #2e6559;color:#a6f0d1;font-size:11px}.toast.show{display:block}
+@media(max-width:1000px){.app{grid-template-columns:76px minmax(0,1fr)}.sidebar{padding:22px 10px}.brand{padding:0 7px 25px}.brand-text,.navlabel,.nav span:not(.ico),.side-note{display:none}.nav{justify-content:center;padding:13px 8px}.grid{grid-template-columns:1fr}.right-stack{display:grid;grid-template-columns:1fr 1fr}.result-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.app{grid-template-columns:1fr}.sidebar{display:none}main{padding:22px 14px 34px}.topbar{align-items:flex-start}.status{font-size:0;padding:10px}.status .dot{margin:0}.panel{padding:17px}.formrow{grid-template-columns:1fr;gap:0}.right-stack{grid-template-columns:1fr}.result-grid{grid-template-columns:1fr}.source-card p{min-height:0}.actions>*{flex:1}.topbar h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+ <div class="brand"><div class="logo">G</div><div class="brand-text"><b>Group Finder</b><small>DISCOVERY STUDIO</small></div></div>
+ <div class="navlabel">WORKSPACE</div>
+ <div class="nav active"><span class="ico">⌕</span><span>Discover Groups</span></div>
+ <div class="nav"><span class="ico">▤</span><span>Saved Groups</span></div>
+ <div class="nav"><span class="ico">◷</span><span>Recent Searches</span></div>
+ <div class="navlabel" style="margin-top:22px">TOOLS</div>
+ <div class="nav"><span class="ico">◎</span><span>Activity Checklist</span></div>
+ <div class="nav"><span class="ico">⚙</span><span>Search Settings</span></div>
+ <div class="side-note"><strong>Independent preview</strong><p>This Group Finder is a separate project. It does not change or connect to your existing Scheduler.</p></div>
+</aside>
+<main>
+ <div class="topbar"><div><div class="eyebrow">Research • Discover • Compare</div><h1>Top Facebook Group Finder</h1><div class="sub">Find public Facebook Group discovery paths by country and niche, then evaluate which communities look most active. Built as a separate preview for testing before any Scheduler integration.</div></div><div class="status"><span class="dot"></span> Standalone preview</div></div>
+ <div class="grid">
+  <section class="panel">
+   <div class="panel-head"><div><h2>Build your search</h2><p>Choose a market and topic. USA-only overrides the country selector.</p></div><span class="pill">STEP 01 / FILTERS</span></div>
+   <form id="searchForm">
+    <div class="formrow">
+     <div><label class="field-label" for="country">Target country</label><select id="country" class="field"><option value="United States">United States</option><option value="United Kingdom">United Kingdom</option><option value="Canada">Canada</option><option value="Australia">Australia</option><option value="India">India</option><option value="Germany">Germany</option><option value="France">France</option><option value="Italy">Italy</option><option value="Brazil">Brazil</option><option value="Mexico">Mexico</option><option value="Worldwide">Worldwide</option></select></div>
+     <div><label class="field-label" for="topic">Topic / niche</label><input id="topic" class="field" value="classic car restoration" placeholder="e.g. classic cars, gardening"></div>
+    </div>
+    <div class="usa-box"><div class="usa-left"><span class="flag">🇺🇸</span><div><strong>Only USA</strong><small>Focus all discovery searches on United States groups</small></div></div><label class="switch" aria-label="Only USA"><input id="onlyUsa" type="checkbox"><span class="slider"></span></label></div>
+    <div class="fieldwrap"><label class="field-label">Activity level to prioritize</label><div class="chips" id="activityChips"><button type="button" class="chip" data-value="high">High activity</button><button type="button" class="chip selected" data-value="very high">Very high activity</button><button type="button" class="chip" data-value="largest communities">Largest communities</button><button type="button" class="chip" data-value="recent posts">Recent posts</button></div><div class="hint">Activity preference guides the search terms. Exact daily post counts may not be publicly visible.</div></div>
+    <div class="fieldwrap"><label class="field-label" for="minimum">Minimum member size target</label><div class="range-row"><input id="minimum" type="range" min="1000" max="1000000" step="1000" value="50000"><span class="range-value" id="minimumLabel">50,000+</span></div><div class="hint">This is a search target, not a verified filter unless a source displays member counts.</div></div>
+    <div class="fieldwrap"><label class="field-label" for="extra">Optional extra keywords</label><input id="extra" class="field" placeholder="e.g. USA, daily posts, buy sell trade"></div>
+    <div class="actions"><button class="primary" type="submit">⌕ Generate Group Searches</button><button class="secondary" type="button" id="resetBtn">Reset filters</button></div>
+    <div class="toast" id="toast" role="status"></div>
+   </form>
+  </section>
+  <div class="right-stack">
+   <section class="panel"><div class="panel-head"><div><h2>Ranking signals</h2><p>What we should verify before calling a Group “top”.</p></div></div>
+    <div class="metric"><div class="metric-icon">👥</div><div><strong>Member count</strong><small>When visible on the public page</small></div><b>Signal 01</b></div>
+    <div class="metric"><div class="metric-icon">⚡</div><div><strong>Recent activity</strong><small>New posts and recent dates</small></div><b>Signal 02</b></div>
+    <div class="metric"><div class="metric-icon">💬</div><div><strong>Engagement</strong><small>Visible comments and reactions</small></div><b>Signal 03</b></div>
+    <div class="metric"><div class="metric-icon">🛡️</div><div><strong>Public accessibility</strong><small>Prefer public, discoverable groups</small></div><b>Signal 04</b></div>
+   </section>
+   <section class="panel"><div class="panel-head"><div><h2>How it works</h2><p>Discovery workflow</p></div></div>
+    <div class="logic-list"><div class="logic"><span class="num">1</span><span>Set a country or turn on <b>Only USA</b>.</span></div><div class="logic"><span class="num">2</span><span>Choose a niche and activity priority.</span></div><div class="logic"><span class="num">3</span><span>Open public search sources and review actual results.</span></div><div class="logic"><span class="num">4</span><span>Save promising Group links for a later verified ranking workflow.</span></div></div>
+   </section>
+  </div>
+ </div>
+ <section class="results">
+  <div class="results-top"><div><h2>Discovery sources</h2><p id="resultSubtitle">Set your filters and generate searches to start exploring public Groups.</p></div><span class="pill">NO FAKE GROUP DATA</span></div>
+  <div class="result-grid">
+   <article class="source-card"><div class="source-head"><div class="source-icon">f</div><span class="source-tag">FACEBOOK</span></div><h3>Facebook Group Search</h3><p>Search Facebook’s discoverable Group results for your selected topic and country.</p><a id="facebookLink" href="https://www.facebook.com/groups/" target="_blank" rel="noopener">Open Group Search ↗</a></article>
+   <article class="source-card"><div class="source-head"><div class="source-icon">G</div><span class="source-tag">WEB SEARCH</span></div><h3>Public web results</h3><p>Find publicly indexed Facebook Group pages using country and niche keywords.</p><a id="googleLink" href="https://www.google.com/search?q=Facebook+groups" target="_blank" rel="noopener">Search public results ↗</a></article>
+   <article class="source-card"><div class="source-head"><div class="source-icon">⌕</div><span class="source-tag">ACTIVITY CHECK</span></div><h3>Recent activity signals</h3><p>Look for public discussions and recent posts. Verify activity manually before ranking.</p><a id="bingLink" href="https://www.bing.com/search?q=Facebook+groups" target="_blank" rel="noopener">Check activity clues ↗</a></article>
+  </div>
+  <div class="notice"><span>ⓘ</span><div><b>Important preview limitation:</b> This first version creates useful search paths; it does not claim to fetch or rank live Group metrics automatically. Facebook restricts access to Group data, so verified automatic rankings need a compliant data source. We will not invent member counts or daily-post numbers.</div></div>
+ </section>
+ <div class="footer">TOP FACEBOOK GROUP FINDER • SEPARATE TEST PROJECT • NOT CONNECTED TO THE SCHEDULER</div>
+</main>
+</div>
+<script>
+const country=document.getElementById('country'), topic=document.getElementById('topic'), onlyUsa=document.getElementById('onlyUsa'), minimum=document.getElementById('minimum'), minimumLabel=document.getElementById('minimumLabel'), extra=document.getElementById('extra'), toast=document.getElementById('toast');
+let activity='very high';
+function countryValue(){return onlyUsa.checked?'United States':country.value}
+function fmt(n){return Number(n).toLocaleString('en-US')}
+minimum.addEventListener('input',()=>minimumLabel.textContent=fmt(minimum.value)+'+');
+onlyUsa.addEventListener('change',()=>{country.disabled=onlyUsa.checked;if(onlyUsa.checked)country.value='United States';country.style.opacity=onlyUsa.checked?'.6':'1';});
+document.querySelectorAll('#activityChips .chip').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');activity=b.dataset.value;}));
+function buildLinks(){
+ const c=countryValue(), t=(topic.value.trim()||'general interest'), e=extra.value.trim(), m=fmt(minimum.value);
+ const terms=[t,c,e].filter(Boolean).join(' ');
+ const fb='https://www.facebook.com/search/groups/?q='+encodeURIComponent(terms);
+ const q1='site:facebook.com/groups '+terms+' '+activity+' active members '+m;
+ const q2='site:facebook.com/groups '+terms+' recent posts discussions';
+ document.getElementById('facebookLink').href=fb;
+ document.getElementById('googleLink').href='https://www.google.com/search?q='+encodeURIComponent(q1);
+ document.getElementById('bingLink').href='https://www.bing.com/search?q='+encodeURIComponent(q2);
+ document.getElementById('resultSubtitle').textContent='Searches prepared for '+c+' • '+t+' • priority: '+activity+' • member target: '+m+'+';
+ toast.textContent='Search links updated. Open a source above to review real results; member counts and activity must be verified on the source.';
+ toast.classList.add('show');
+}
+document.getElementById('searchForm').addEventListener('submit',e=>{e.preventDefault();buildLinks();document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});});
+document.getElementById('resetBtn').addEventListener('click',()=>{country.value='United States';country.disabled=false;country.style.opacity='1';topic.value='classic car restoration';onlyUsa.checked=false;minimum.value='50000';minimumLabel.textContent='50,000+';extra.value='';activity='very high';document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.toggle('selected',x.dataset.value==='very high'));toast.classList.remove('show');document.getElementById('resultSubtitle').textContent='Set your filters and generate searches to start exploring public Groups.';document.getElementById('facebookLink').href='https://www.facebook.com/groups/';document.getElementById('googleLink').href='https://www.google.com/search?q=Facebook+groups';document.getElementById('bingLink').href='https://www.bing.com/search?q=Facebook+groups';});
+</script>
+</body></html>
