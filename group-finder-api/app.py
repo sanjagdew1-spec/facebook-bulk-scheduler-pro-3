@@ -141,8 +141,11 @@ def request_source(provider, query):
     elif provider == "DuckDuckGo":
         url = "https://html.duckduckgo.com/html/?q=" + encoded
         accept = "text/html,application/xhtml+xml"
-    else:
+    elif provider == "Yahoo":
         url = "https://search.yahoo.com/search?p=" + encoded
+        accept = "text/html,application/xhtml+xml"
+    else:
+        url = "https://www.google.com/search?num=30&q=" + encoded
         accept = "text/html,application/xhtml+xml"
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": accept, "Accept-Language": "en-US,en;q=0.9"})
     with urllib.request.urlopen(req, timeout=9) as response:
