@@ -73,7 +73,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
     def do_OPTIONS(self):
-        self._send(204, {})
+        self._send(200, {"ok": True})
     def do_GET(self):
         if self.path.rstrip("/") in ("", "/health"):
             return self._send(200, {"ok": True, "service": "group-finder-search-api", "source": "Bing public web index", "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
