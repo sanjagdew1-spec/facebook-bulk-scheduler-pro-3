@@ -1,5 +1,7 @@
 const JOB_KEY = "gfpJob";
 const RESULTS_KEY = "gfpResults";
+const ACTIVITY_KEY = "gfpActivityReport";
+const ACTIVITY_JOB_KEY = "gfpActivityJob";
 async function getJob(){ return (await chrome.storage.local.get(JOB_KEY))[JOB_KEY] || null; }
 async function setJob(job){ await chrome.storage.local.set({[JOB_KEY]:job}); }
 async function setStatus(status, extra={}) { const job=await getJob(); if(job) await setJob({...job,status,...extra,updatedAt:Date.now()}); }
@@ -30,11 +32,45 @@ async function finish(job){
  await setStatus("complete",{phase:"complete",message:"Search complete. Showing the top "+ranked.length+" unique group candidates (maximum 50), ranked by visible relevance, member-size, engagement, and recency signals. Higher evidence scores appear first; hidden Public/member/posts-per-day details are not guessed. No group pages were opened."});
 }
 chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
+ if(msg.type==="START_ACTIVITY_CHECK"){
+  const url=String(msg.group?.url||"");
+  if(!/^https:\/\/www\\.facebook\\.com\/groups\/[A-Za-z0-9._-]+\/?(?:[?#].*)?$/i.test(url)){sendResponse({ok:false,error:"This group does not have a supported Facebook group URL."});return;}
+  const job=await getJob();
+  let fbTabId=job?.tabId;
+  if(fbTabId){try{await chrome.tabs.get(fbTabId)}catch{fbTabId=null}}
+  if(!fbTabId){sendResponse({ok:false,error:"Run a Facebook group search first so the extension has its logged-in Facebook tab. No extra tab will be created."});return;}
+  const activityJob={group:{name:String(msg.group?.name||"Selected group"),url},websiteTabId:sender.tab?.id||null,fbTabId,startedAt:Date.now(),status:"checking"};
+  await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
+  await chrome.tabs.update(fbTabId,{url,active:true});
+  sendResponse({ok:true,message:"Opening the selected Facebook group and checking visible posts from the last 24 hours."});return;
+ }
+ if(msg.type==="PAGE_DETAILS"){
+  const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
+  if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
+  if(msg.blocked){await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:{...a,status:"blocked",error:"Facebook login/checkpoint or restricted content blocked the activity scan."}});if(a.websiteTabId)try{await chrome.tabs.update(a.websiteTabId,{active:true})}catch{}sendResponse({ok:true,blocked:true});return;}
+  const posts=Array.isArray(msg.recentPosts)?msg.recentPosts:[];
+  const countKnown=key=>posts.filter(p=>p[key]!=null).length;
+  const sum=key=>posts.reduce((n,p)=>n+(Number(p[key])||0),0);
+  const postScore=Math.min(100,posts.length*12);
+  const reactionScore=countKnown("reactions")?Math.min(100,Math.round(Math.log10(sum("reactions")+1)*25)):null;
+  const commentScore=countKnown("comments")?Math.min(100,Math.round(Math.log10(sum("comments")+1)*30)):null;
+  const shareScore=countKnown("shares")?Math.min(100,Math.round(Math.log10(sum("shares")+1)*35)):null;
+  const knownScores=[postScore,reactionScore,commentScore,shareScore].filter(v=>v!=null);
+  const activityScore=knownScores.length?Math.round(knownScores.reduce((x,y)=>x+y,0)/knownScores.length):null;
+  const completeness=Math.round((Math.min(1,posts.length/5)*40)+(countKnown("reactions")?20:0)+(countKnown("comments")?20:0)+(countKnown("shares")?20:0));
+  const report={...msg,groupName:a.group.name||msg.groupName,url:a.group.url,activityScore,evidenceScore:completeness,checkedAt:msg.checkedAt||new Date().toISOString(),status:"complete",note:"Only visible posts and counts were inspected. Facebook may hide older posts and share counts; this is not a complete private/API export."};
+  await chrome.storage.local.set({[ACTIVITY_KEY]:report,[ACTIVITY_JOB_KEY]:{...a,status:"complete",finishedAt:Date.now()}});
+  const results=(await chrome.storage.local.get(RESULTS_KEY))[RESULTS_KEY]||[];
+  const updated=results.map(g=>g.url===report.url?{...g,activityReport:report,activityScore:report.activityScore,activityEvidenceScore:report.evidenceScore,score:report.evidenceScore}:g);
+  await chrome.storage.local.set({[RESULTS_KEY]:updated});
+  if(a.websiteTabId)try{await chrome.tabs.update(a.websiteTabId,{active:true})}catch{}
+  sendResponse({ok:true,report});return;
+ }
  if(msg.type==="START_SCAN"){const active=await getJob();if(active&&["starting","searching","checking-details"].includes(active.status)){sendResponse({ok:false,error:"A search is already running. Stop it or wait for it to finish before starting another."});return;}const queries=String(msg.keywords||"").split(/\n+/).map(s=>s.trim()).filter(Boolean);if(!queries.length)queries.push("");const job={queries,country:msg.country||"Any country",onlyUSA:Boolean(msg.onlyUSA),minimumMembers:Number(msg.minimumMembers)||0,minimumScore:Number(msg.minimumScore)||0,activityPriorities:Array.isArray(msg.activityPriorities)?msg.activityPriorities:[],extraKeywords:String(msg.extraKeywords||""),phase:"search",index:0,tabId:null,status:"starting",message:"Starting Chrome search",startedAt:Date.now()};await chrome.storage.local.set({[RESULTS_KEY]:[]});await setJob(job);await openCurrent(job);sendResponse({ok:true,count:queries.length});return;}
  if(msg.type==="PAGE_RESULTS"){const job=await getJob();if(!job||job.phase!=="search"||job.status!=="searching"||sender.tab?.id!==job.tabId){sendResponse({ok:false});return;}if(msg.blocked){await setStatus("paused",{message:"Facebook login, checkpoint, CAPTCHA, or restricted page detected. Complete any normal check yourself, then restart."});sendResponse({ok:true,paused:true});return;}const incoming=Array.isArray(msg.results)?msg.results:[];const old=(await chrome.storage.local.get(RESULTS_KEY))[RESULTS_KEY]||[];const byUrl=new Map(old.map(x=>[x.url,x]));for(const item of incoming){if(!item?.url||!item?.name)continue;const prior=byUrl.get(item.url);byUrl.set(item.url,{...prior,...item,keywords:[...new Set([...(prior?.keywords||[]),job.queries[job.index]])]});}await chrome.storage.local.set({[RESULTS_KEY]:[...byUrl.values()]});const next={...job,index:job.index+1};await setJob(next);await openCurrent(next);sendResponse({ok:true,added:incoming.length});return;}
 
  if(msg.type==="STOP_SCAN"){await setStatus("stopped",{message:"Search stopped by user. Current tab remains open."});sendResponse({ok:true});return;}
- if(msg.type==="GET_STATE"){const d=await chrome.storage.local.get([JOB_KEY,RESULTS_KEY]);sendResponse({job:d[JOB_KEY]||null,results:d[RESULTS_KEY]||[]});return;}
+ if(msg.type==="GET_STATE"){const d=await chrome.storage.local.get([JOB_KEY,RESULTS_KEY,ACTIVITY_KEY,ACTIVITY_JOB_KEY]);sendResponse({job:d[JOB_KEY]||null,results:d[RESULTS_KEY]||[],activityReport:d[ACTIVITY_KEY]||null,activityJob:d[ACTIVITY_JOB_KEY]||null});return;}
  if(msg.type==="CLEAR_RESULTS"){await chrome.storage.local.set({[RESULTS_KEY]:[]});sendResponse({ok:true});return;}
  if(msg.type==="EXPORT_RESULTS"){const d=await chrome.storage.local.get(RESULTS_KEY);sendResponse({results:d[RESULTS_KEY]||[]});return;}
 })().catch(err=>sendResponse({ok:false,error:String(err)}));return true;});
