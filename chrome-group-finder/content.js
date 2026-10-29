@@ -56,7 +56,7 @@
     let node=anchor;
     for(let depth=0;depth<8&&node;depth++,node=node.parentElement){
       const t=(node.innerText||"").trim();
-      if(t.length<12||t.length>1800)continue;
+      if(t.length<12||t.length>900)continue;
       const signals=[
         /\bpublic(?:\s+group)?\b|\bprivate(?:\s+group)?\b/i.test(t),
         /[\d,.]+\s*[KMB]?\s+(?:members|people in this group|group members)\b/i.test(t),
