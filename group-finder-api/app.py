@@ -153,6 +153,8 @@ def parse_results(provider, raw, query):
                     "Brave Search": "https://search.brave.com",
                     "Mojeek": "https://www.mojeek.com",
                     "DuckDuckGo": "https://html.duckduckgo.com",
+                    "DuckDuckGo Lite": "https://lite.duckduckgo.com",
+                    "Startpage": "https://www.startpage.com",
                     "Yahoo": "https://search.yahoo.com"
                 }.get(provider, "")
                 raw_url = base_host + raw_url
@@ -208,6 +210,12 @@ def request_source(provider, query):
         # text/Markdown representation when direct HTML scraping is blocked.
         url = "https://r.jina.ai/http://www.google.com/search?q=" + encoded + "&num=20"
         accept = "text/plain,text/markdown,*/*"
+    elif provider == "DuckDuckGo Lite":
+        url = "https://lite.duckduckgo.com/lite/?q=" + encoded
+        accept = "text/html,application/xhtml+xml"
+    elif provider == "Startpage":
+        url = "https://www.startpage.com/sp/search?query=" + encoded
+        accept = "text/html,application/xhtml+xml"
     elif provider == "DuckDuckGo":
         url = "https://html.duckduckgo.com/html/?q=" + encoded
         accept = "text/html,application/xhtml+xml"
@@ -246,7 +254,7 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
         (base + " groups").strip(),
     ]
     errors = []
-    providers = ("SearXNG", "Bing RSS", "Google", "Jina Google")
+    providers = ("DuckDuckGo Lite", "Startpage", "Bing RSS", "Google")
     for batch in (variants[:2], variants[2:]):
         found = []
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -350,7 +358,7 @@ if __name__ == "__main__":
     # One deploy-time smoke test verifies that the upstream metasearch can return
     # real Facebook group candidates; it is not run on later restarts.
     if os.environ.get("GROUP_FINDER_SEARCH_SMOKE") == "1":
-        for smoke_provider in ("Mojeek", "Bing RSS", "Google", "Jina Google"):
+        for smoke_provider in ("DuckDuckGo Lite", "Startpage", "Bing RSS", "Google"):
             try:
                 smoke_rows = request_source(smoke_provider, "site:facebook.com/groups classic cars")
                 print("SEARCH_SMOKE_TEST", smoke_provider, "classic cars", "results", len(smoke_rows), json.dumps(smoke_rows[:3], ensure_ascii=False), flush=True)
