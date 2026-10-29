@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Group Finder Pro — Chrome Helper",
-  "version": "0.3.0",
-  "description": "Find visible public Facebook Group search results in your already logged-in Chrome tab. Does not join groups or post.",
+  "version": "0.4.0",
+  "description": "Find visible public Facebook Groups and inspect visible last-24-hour activity. Does not join groups or post.",
   "permissions": [
     "tabs",
     "storage"
