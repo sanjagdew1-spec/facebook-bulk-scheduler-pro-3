@@ -71,6 +71,38 @@ const country=document.getElementById('country'), topic=document.getElementById(
 const API='https://group-finder-search-api.onrender.com';
 let activity='very high', busy=false;
 function countryValue(){return onlyUsa.checked?'United States':country.value}
+
+const GFP_BRIDGE_SOURCE='top-facebook-group-finder';
+let gfpPending=null;
+window.addEventListener('message',event=>{
+ if(event.source!==window||event.origin!==location.origin||event.data?.source!=='gfp-chrome-helper'||event.data?.type!=='STATE')return;
+ const state=event.data.state||{},job=state.job,rows=state.results||[];
+ const status=document.getElementById('searchStatus');
+ if(job?.message&&status)status.innerHTML='<span>⌕</span><div>'+escapeHtml(job.message)+'</div>';
+ if(gfpPending&&job&&['complete','paused','stopped'].includes(job.status)){
+   const pending=gfpPending;gfpPending=null;clearTimeout(pending.timer);
+   window.removeEventListener('message',pending.listener);
+   if(job.status==='complete')pending.resolve({groups:rows.map(r=>({...r,keyword:(r.keywords||[]).join(', '),members:null,postsPerDay:null,activityClues:[],verifiedLive:true})),resultCount:rows.length,keywordsProcessed:pending.count,notice:'Collected from visible Facebook Group results in your logged-in Chrome session. Counts/activity are shown only when Facebook visibly exposes them.',errors:[]});
+   else pending.reject(new Error(job.message||'Facebook search paused. Check Facebook in Chrome and try again.'));
+ }
+});
+function startChromeBridgeSearch(payload){
+ return new Promise((resolve,reject)=>{
+  if(gfpPending){reject(new Error('A Chrome search is already running.'));return;}
+  const listener=event=>{
+   if(event.source!==window||event.origin!==location.origin||event.data?.source!=='gfp-chrome-helper'||event.data?.type!=='READY')return;
+   window.removeEventListener('message',listener);
+   if(!event.data.available){reject(new Error('Chrome Helper is not connected. Install/update the Group Finder Pro extension, then reload this website.'));return;}
+   const timer=setTimeout(()=>{if(gfpPending){gfpPending=null;reject(new Error('Chrome search timed out. Check the Facebook tab in Chrome and try again.'));}},240000);
+   gfpPending={resolve,reject,timer,listener:()=>{},count:payload.keywords.length};
+   window.postMessage({source:GFP_BRIDGE_SOURCE,type:'START_SCAN',payload},location.origin);
+  };
+  window.addEventListener('message',listener);
+  window.postMessage({source:GFP_BRIDGE_SOURCE,type:'PING'},location.origin);
+  setTimeout(()=>{window.removeEventListener('message',listener);if(!gfpPending)reject(new Error('Chrome Helper did not respond. Make sure the extension is enabled and this page was reloaded after installation.'));},1800);
+ });
+}
+
 function fmt(n){return Number(n).toLocaleString('en-US')}
 function keywords(){return [...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -100,9 +132,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  subtitle.textContent='Searching '+list.length+' keyword phrases for '+countryValue()+'.';
  status.innerHTML='<span>⌕</span><div>Contacting public search index. This may take a little longer when you enter many keywords.</div>';
  try{
-  const response=await fetch(API+'/api/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keywords:list,country:countryValue(),minimumMembers:Number(minimum.value),activityPriority:activity,extraKeywords:extra.value.trim()})});
-  const data=await response.json();
-  if(!response.ok)throw new Error(data.error||'Search request failed');
+  const data=await startChromeBridgeSearch({keywords:list,country:countryValue(),onlyUSA:onlyUsa.checked,minimumMembers:Number(minimum.value),activityPriority:activity,extraKeywords:extra.value.trim()});
   const rows=data.groups||[];
   host.innerHTML=rows.length?rows.map(groupCard).join('')+'<div class="source-card"><h3>Save your picks</h3><p>Selected groups are saved in this browser only.</p><button class="primary" id="saveSelected" type="button">Save selected groups</button></div>':'<article class="source-card"><h3>No indexed Facebook Group results found</h3><p>Try a broader keyword or another country. This is a public index limitation, not proof that no groups exist.</p></article>';
   document.getElementById('saveSelected')?.addEventListener('click',()=>{
