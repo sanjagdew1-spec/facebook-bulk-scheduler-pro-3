@@ -5,7 +5,7 @@ function render(state){
  const job=state.job,results=state.results||[];
  $("count").textContent=results.length;
  $("status").textContent=job?.message||(job?.status==="complete"?"Search complete.":job?.status==="paused"?"Paused by Facebook security check.":"Ready. Keep Facebook logged in in Chrome.");
- $("results").innerHTML=results.length?results.map(r=>`<article class="result"><a href="${esc(r.url)}" target="_blank" rel="noreferrer">${esc(r.name)}</a><p>${esc(r.url)}</p><p>${esc(r.snippet||"")}</p><p class="keywords">Keyword: ${esc((r.keywords||[]).join(", "))}</p></article>`).join(""):'<p class="muted">No results collected yet. Start a search; only groups visible on Facebook will be listed.</p>';
+ $("results").innerHTML=results.length?results.map(r=>`<article class="result"><a href="${esc(r.url)}" target="_blank" rel="noreferrer">${esc(r.name)}</a><p>${esc(r.url)}</p><p>${esc(r.snippet||"")}</p><p>Evidence score: ${esc(r.score==null?"Not enough evidence":r.score+"/100")} · Members: ${esc(r.members==null?"not shown":Number(r.members).toLocaleString())} · Avg visible reactions: ${esc(r.averageVisibleLikes==null?"not shown":Number(r.averageVisibleLikes).toLocaleString())}</p><p class="keywords">Keyword: ${esc((r.keywords||[]).join(", "))}</p></article>`).join(""):'<p class="muted">No results collected yet. Start a search; only groups visible on Facebook will be listed.</p>';
 }
 async function refresh(){try{render(await send({type:"GET_STATE"}))}catch(e){$("status").textContent="Could not read extension state: "+e}}
 $("start").addEventListener("click",async()=>{
@@ -23,7 +23,7 @@ $("clear").addEventListener("click",async()=>{await send({type:"CLEAR_RESULTS"})
 $("export").addEventListener("click",async()=>{
  const r=await send({type:"EXPORT_RESULTS"}),rows=r.results||[];
  const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
- const csv=["Group Name,URL,Keywords,Visible Snippet",...rows.map(x=>[x.name,x.url,(x.keywords||[]).join("; "),x.snippet].map(q).join(","))].join("\r\n");
+ const csv=["Group Name,URL,Keywords,Evidence Score,Members,Average Visible Likes,Visible Reaction Counts,Visible Comment Counts,Recent Labels,Visible Snippet",...rows.map(x=>[x.name,x.url,(x.keywords||[]).join("; "),x.score,x.members,x.averageVisibleLikes,(x.visibleReactionCounts||[]).join("; "),(x.visibleCommentCounts||[]).join("; "),(x.recentTimeLabels||[]).join("; "),x.snippet].map(q).join(","))].join("\r\n");
  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
  a.href=url;a.download="group-finder-results.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
