@@ -19,7 +19,7 @@
         const p = msg.payload || {};
         const keywords = Array.isArray(p.keywords) ? p.keywords.join("\n") : "";
         try {
-          const response = await chrome.runtime.sendMessage({type:"START_SCAN",keywords,country:p.country||"Any country",onlyUSA:Boolean(p.onlyUSA)});
+          const response = await chrome.runtime.sendMessage({type:"START_SCAN",keywords,country:p.country||"Any country",onlyUSA:Boolean(p.onlyUSA),minimumMembers:Number(p.minimumMembers)||0,activityPriorities:Array.isArray(p.activityPriorities)?p.activityPriorities:[],minimumScore:Number(p.minimumScore)||0,extraKeywords:p.extraKeywords||""});
           if (!response?.ok) window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:response?.error||"Could not start Chrome search."},WEBSITE_ORIGIN);
           await sendState();
         } catch (error) {
@@ -60,12 +60,22 @@
   async function scan(){
     // Give Facebook's client-rendered search results time to load.
     await sleep(3500);
-    const pageText=(document.body?.innerText||"").slice(0,12000).toLowerCase();
+    const pageText=(document.body?.innerText||"").slice(0,30000);
+    const pageLow=pageText.toLowerCase();
     const blocked=location.pathname.startsWith("/login") ||
-      /checkpoint|confirm your identity|security check|enter the code|captcha/.test(location.pathname+" "+pageText) ||
+      /checkpoint|confirm your identity|security check|enter the code|captcha/.test(location.pathname+" "+pageLow) ||
       Boolean(document.querySelector('input[name="email"]'));
     if(blocked){chrome.runtime.sendMessage({type:"PAGE_RESULTS",results:[],blocked:true});return;}
-    // A small, normal page scroll allows additional already-rendered result cards to appear.
+    const isGroupPage=/^\\/groups\\/[^/]+\\/?$/.test(location.pathname);
+    function countValue(raw){const m=String(raw||"").replace(/,/g,"").match(/(\\d+(?:\\.\\d+)?)\\s*([KMB])?/i);if(!m)return null;return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));}
+    function evidence(text){
+      const member=text.match(/([\\d,.]+\\s*[KMB]?)\\s+(?:members|people in this group|group members)/i);
+      const reactions=[...text.matchAll(/([\\d,.]+\\s*[KMB]?)\\s+(?:likes?|reactions?)/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
+      const comments=[...text.matchAll(/([\\d,.]+\\s*[KMB]?)\\s+comments?/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
+      const times=[...text.matchAll(/\\b(just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?|d|days?|w|weeks?|months?|years?)\\s+ago|yesterday)\\b/gi)].map(m=>m[0]);
+      return {members:member?countValue(member[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?)\\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length)};
+    }
+    if(isGroupPage){chrome.runtime.sendMessage({type:"PAGE_DETAILS",url:groupUrl(location.href),evidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false});return;}
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
     await sleep(900);
     const found=new Map();
@@ -80,7 +90,7 @@
       name=name.replace(/\s+/g," ").trim();
       if(!name||/^(facebook|see all|view all|join group|group)$/i.test(name))continue;
       const old=found.get(url);
-      found.set(url,{name,url,snippet:text.slice(0,500),source:"Visible Facebook search result",...(old||{})});
+      found.set(url,{...(old||{}),name,url,snippet:text.slice(0,900),source:"Visible Facebook search result",...evidence(text)});
     }
     chrome.runtime.sendMessage({type:"PAGE_RESULTS",results:[...found.values()],blocked:false});
   }
