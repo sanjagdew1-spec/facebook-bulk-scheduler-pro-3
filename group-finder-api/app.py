@@ -139,6 +139,8 @@ def parse_results(provider, raw, query):
             if raw_url.startswith("/"):
                 base_host = {
                     "Google": "https://www.google.com",
+                    "Google Web": "https://www.google.com",
+                    "Brave Search": "https://search.brave.com",
                     "DuckDuckGo": "https://html.duckduckgo.com",
                     "Yahoo": "https://search.yahoo.com"
                 }.get(provider, "")
@@ -177,6 +179,12 @@ def request_source(provider, query):
     elif provider == "DuckDuckGo":
         url = "https://html.duckduckgo.com/html/?q=" + encoded
         accept = "text/html,application/xhtml+xml"
+    elif provider == "Brave Search":
+        url = "https://search.brave.com/search?q=" + encoded + "&source=web"
+        accept = "text/html,application/xhtml+xml"
+    elif provider == "Google Web":
+        url = "https://www.google.com/search?udm=14&num=30&q=" + encoded
+        accept = "text/html,application/xhtml+xml"
     elif provider == "Yahoo":
         url = "https://search.yahoo.com/search?p=" + encoded
         accept = "text/html,application/xhtml+xml"
@@ -203,7 +211,7 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
         (base + " groups").strip(),
     ]
     errors = []
-    providers = ("Jina Google", "Bing RSS", "DuckDuckGo", "Google", "Yahoo")
+    providers = ("Brave Search", "Google Web", "Bing RSS", "Jina Google", "DuckDuckGo", "Google", "Yahoo")
     for batch in (variants[:2], variants[2:]):
         found = []
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -248,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
     def do_GET(self):
         if self.path.rstrip("/") in ("", "/health"):
-            return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Google public web index via Jina Reader", "Bing public web index", "DuckDuckGo public web index", "Yahoo public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
+            return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Brave Search public web index", "Google public web index", "Bing public web index", "DuckDuckGo public web index", "Yahoo public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
         return self._send(404, {"error":"Not found"})
     def do_POST(self):
         if self.path.rstrip("/") != "/api/search":
@@ -296,7 +304,7 @@ class Handler(BaseHTTPRequestHandler):
         unique.sort(key=lambda g: (g["postsPerDay"] is not None, g["postsPerDay"] or -1, g["members"] is not None, g["members"] or -1), reverse=True)
         print("SEARCH_COMPLETE", "processed", len(keywords), "results", len(unique), "errors", len(errors), flush=True)
         return self._send(200, {
-            "ok": True, "source": "Google via Jina Reader, Bing, DuckDuckGo and Yahoo public web indexes",
+            "ok": True, "source": "Brave Search, Google, Bing, DuckDuckGo and Yahoo public web indexes",
             "keywordsProcessed": len(keywords), "resultCount": len(unique), "groups": unique, "errors": errors,
             "notice": "These are public indexed search candidates, not a complete Facebook directory. Facebook may hide group details; member counts and posts/day are only shown when the source explicitly exposes them. No estimated or invented metrics are used."
         })
