@@ -125,12 +125,20 @@
       };
       const isRecent24h=text=>{
         const t=String(text||"").toLowerCase();
-        if(/\\b(just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?)\\s+ago)\\b/.test(t)) {
-          const m=t.match(/(\\d+)\\s*(?:h|hr|hours?)\\s+ago/);
-          return !m||Number(m[1])<=24;
-        }
-        return /\\b(today|\\d+\\s*(?:m|min|minutes?)\\s+ago)\\b/.test(t);
+        if(/\\b(just now|today)\\b/.test(t))return true;
+        const m=t.match(/\\b(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours)\\b/);
+        if(m){const n=Number(m[1]),unit=m[2];return /^(?:h|hr|hrs|hour|hours)$/.test(unit)?n<=24:n<=1440;}
+        const parsed=new Date(t);if(!Number.isNaN(parsed.getTime())){const age=Date.now()-parsed.getTime();return age>=0&&age<=86400000;}
+        return false;
       };
+      // Scroll the same logged-in group tab in bounded steps to load more visible feed items.
+      // This does not like, comment, share, join, or submit anything.
+      for(let step=0;step<12;step++){
+        const before=window.scrollY;
+        window.scrollBy({top:Math.max(500,Math.floor(window.innerHeight*0.75)),behavior:"instant"});
+        await sleep(650);
+        if(window.scrollY===before||window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5)break;
+      }
       const articles=[...document.querySelectorAll('[role="article"]')].filter(visible);
       const recentPosts=[];
       for(const article of articles){
@@ -138,7 +146,7 @@
         if(text.length<20)continue;
         const timeEls=[...article.querySelectorAll('a[aria-label],abbr[title],time,[aria-label]')];
         const timeText=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(' ')).join(' ');
-        const combined=timeText+" "+text.slice(0,700);
+        const combined=timeText+" "+text.slice(0,120);
         if(!isRecent24h(combined))continue;
         const reactions=parseMetric(text,"reactions"),comments=parseMetric(text,"comments"),shares=parseMetric(text,"shares");
         recentPosts.push({time:timeText.trim().slice(0,120)||"Recent timestamp visible; exact time unavailable",reactions,comments,shares,snippet:text.slice(0,260)});
