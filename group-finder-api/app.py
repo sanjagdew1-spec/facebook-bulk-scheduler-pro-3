@@ -102,12 +102,20 @@ def parse_count(blob):
 def parse_results(provider, raw, query):
     rows = []
     try:
+        raw_text = raw.decode("utf-8", "ignore") if isinstance(raw, bytes) else str(raw)
         if provider == "Bing RSS":
             root = ET.fromstring(raw)
             entries = [(item.findtext("title") or "", item.findtext("link") or "", item.findtext("description") or "") for item in root.findall(".//item")]
+        elif provider == "Jina Google":
+            # Jina Reader returns search pages as Markdown/plain text, not HTML.
+            entries = []
+            for title, href in re.findall(r"\[([^\]]{1,240})\]\((https?://[^)\s]+)\)", raw_text):
+                entries.append((title, href, ""))
+            for href in re.findall(r"https?://(?:www\.)?facebook\.com/groups/[A-Za-z0-9_.%/?=&-]+", raw_text, re.I):
+                entries.append(("", href, ""))
         else:
             parser = AnchorParser()
-            parser.feed(raw.decode("utf-8", "ignore"))
+            parser.feed(raw_text)
             entries = []
             for href, label in parser.links:
                 # Get nearby anchor text from source for the name/snippet where possible.
@@ -161,6 +169,11 @@ def request_source(provider, query):
     if provider == "Bing RSS":
         url = "https://www.bing.com/search?format=rss&count=30&q=" + encoded
         accept = "application/rss+xml,application/xml,text/xml"
+    elif provider == "Jina Google":
+        # Read Google's public result page through Jina Reader, which returns a
+        # text/Markdown representation when direct HTML scraping is blocked.
+        url = "https://r.jina.ai/http://www.google.com/search?q=" + encoded + "&num=20"
+        accept = "text/plain,text/markdown,*/*"
     elif provider == "DuckDuckGo":
         url = "https://html.duckduckgo.com/html/?q=" + encoded
         accept = "text/html,application/xhtml+xml"
@@ -190,7 +203,7 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
         (base + " groups").strip(),
     ]
     errors = []
-    providers = ("Bing RSS", "DuckDuckGo", "Yahoo", "Google")
+    providers = ("Jina Google", "Bing RSS", "DuckDuckGo", "Google", "Yahoo")
     for batch in (variants[:2], variants[2:]):
         found = []
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -235,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
     def do_GET(self):
         if self.path.rstrip("/") in ("", "/health"):
-            return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Bing public web index", "DuckDuckGo public web index", "Yahoo public web index", "Google public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
+            return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Google public web index via Jina Reader", "Bing public web index", "DuckDuckGo public web index", "Yahoo public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
         return self._send(404, {"error":"Not found"})
     def do_POST(self):
         if self.path.rstrip("/") != "/api/search":
@@ -283,7 +296,7 @@ class Handler(BaseHTTPRequestHandler):
         unique.sort(key=lambda g: (g["postsPerDay"] is not None, g["postsPerDay"] or -1, g["members"] is not None, g["members"] or -1), reverse=True)
         print("SEARCH_COMPLETE", "processed", len(keywords), "results", len(unique), "errors", len(errors), flush=True)
         return self._send(200, {
-            "ok": True, "source": "Bing, DuckDuckGo, Yahoo and Google public web indexes",
+            "ok": True, "source": "Google via Jina Reader, Bing, DuckDuckGo and Yahoo public web indexes",
             "keywordsProcessed": len(keywords), "resultCount": len(unique), "groups": unique, "errors": errors,
             "notice": "These are public indexed search candidates, not a complete Facebook directory. Facebook may hide group details; member counts and posts/day are only shown when the source explicitly exposes them. No estimated or invented metrics are used."
         })
