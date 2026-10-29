@@ -58,9 +58,11 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   const knownScores=[postScore,reactionScore,commentScore,shareScore].filter(v=>v!=null);
   const activityScore=knownScores.length?Math.round(knownScores.reduce((x,y)=>x+y,0)/knownScores.length):null;
   const completeness=Math.round((Math.min(1,posts.length/5)*40)+(countKnown("reactions")?20:0)+(countKnown("comments")?20:0)+(countKnown("shares")?20:0));
-  const report={...msg,groupName:a.group.name||msg.groupName,url:a.group.url,activityScore,evidenceScore:completeness,checkedAt:msg.checkedAt||new Date().toISOString(),status:"complete",note:"Only visible posts and counts were inspected. Facebook may hide older posts and share counts; this is not a complete private/API export."};
-  await chrome.storage.local.set({[ACTIVITY_KEY]:report,[ACTIVITY_JOB_KEY]:{...a,status:"complete",finishedAt:Date.now()}});
   const results=(await chrome.storage.local.get(RESULTS_KEY))[RESULTS_KEY]||[];
+  const prior=results.find(g=>g.url===a.group.url);
+  const updatedEvidenceScore=prior?.score==null?completeness:Math.min(100,Math.round(prior.score+(100-prior.score)*(completeness/100)));
+  const report={...msg,groupName:a.group.name||msg.groupName,url:a.group.url,activityScore,evidenceCompleteness:completeness,baseEvidenceScore:prior?.score??null,evidenceScore:updatedEvidenceScore,checkedAt:msg.checkedAt||new Date().toISOString(),status:"complete",note:"Only visible posts and counts were inspected. Facebook may hide older posts and share counts; this is not a complete private/API export."};
+  await chrome.storage.local.set({[ACTIVITY_KEY]:report,[ACTIVITY_JOB_KEY]:{...a,status:"complete",finishedAt:Date.now()}});
   const updated=results.map(g=>g.url===report.url?{...g,activityReport:report,activityScore:report.activityScore,activityEvidenceScore:report.evidenceScore,score:report.evidenceScore}:g);
   await chrome.storage.local.set({[RESULTS_KEY]:updated});
   if(a.websiteTabId)try{await chrome.tabs.update(a.websiteTabId,{active:true})}catch{}
