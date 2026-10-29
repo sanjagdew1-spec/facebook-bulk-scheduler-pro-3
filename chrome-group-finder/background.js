@@ -42,8 +42,8 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   const activityJob={group:{name:String(msg.group?.name||"Selected group"),url},websiteTabId:sender.tab?.id||null,fbTabId,startedAt:Date.now(),status:"checking"};
   await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
   const tab=await chrome.tabs.get(fbTabId);
-  const current=String(tab.url||"").replace(/[?#].*$/,"").replace(/\\/$/,"");
-  const target=url.replace(/[?#].*$/,"").replace(/\\/$/,"");
+  const current=String(tab.url||"").split(/[?#]/)[0].replace(/\/+$/,"");
+  const target=url.split(/[?#]/)[0].replace(/\/+$/,"");
   if(current===target){await chrome.tabs.update(fbTabId,{active:true});await chrome.tabs.reload(fbTabId);}
   else{await chrome.tabs.update(fbTabId,{url,active:true});}
   sendResponse({ok:true,message:"Opening/reloading the selected Facebook group and checking visible posts from the last 24 hours."});return;
