@@ -32,7 +32,7 @@ async function openCurrent(job) {
 chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{
   (async()=>{
     if(msg.type==="START_SCAN"){
-      const queries=String(msg.keywords||"").split(/[\\n,;]+/).map(s=>s.trim()).filter(Boolean);
+      const queries=String(msg.keywords||"").split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
       if(!queries.length){sendResponse({ok:false,error:"Enter at least one keyword."});return;}
       const job={queries,country:msg.country||"Any country",onlyUSA:Boolean(msg.onlyUSA),index:0,tabId:null,status:"starting",message:"Starting Chrome search",startedAt:Date.now()};
       await chrome.storage.local.set({[RESULTS_KEY]:[]});
