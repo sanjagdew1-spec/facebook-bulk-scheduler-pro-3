@@ -66,14 +66,14 @@
       /checkpoint|confirm your identity|security check|enter the code|captcha/.test(location.pathname+" "+pageLow) ||
       Boolean(document.querySelector('input[name="email"]'));
     if(blocked){chrome.runtime.sendMessage({type:"PAGE_RESULTS",results:[],blocked:true});return;}
-    const isGroupPage=/^\\/groups\\/[^/]+\\/?$/.test(location.pathname);
-    function countValue(raw){const m=String(raw||"").replace(/,/g,"").match(/(\\d+(?:\\.\\d+)?)\\s*([KMB])?/i);if(!m)return null;return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));}
+    const isGroupPage=/^\/groups\/[^/]+\/?$/.test(location.pathname);
+    function countValue(raw){const m=String(raw||"").replace(/,/g,"").match(/(\d+(?:\.\d+)?)\s*([KMB])?/i);if(!m)return null;return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));}
     function evidence(text){
-      const member=text.match(/([\\d,.]+\\s*[KMB]?)\\s+(?:members|people in this group|group members)/i);
-      const reactions=[...text.matchAll(/([\\d,.]+\\s*[KMB]?)\\s+(?:likes?|reactions?)/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
-      const comments=[...text.matchAll(/([\\d,.]+\\s*[KMB]?)\\s+comments?/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
-      const times=[...text.matchAll(/\\b(just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?|d|days?|w|weeks?|months?|years?)\\s+ago|yesterday)\\b/gi)].map(m=>m[0]);
-      return {members:member?countValue(member[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?)\\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length)};
+      const member=text.match(/([\d,.]+\s*[KMB]?)\s+(?:members|people in this group|group members)/i);
+      const reactions=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+(?:likes?|reactions?)/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
+      const comments=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+comments?/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
+      const times=[...text.matchAll(/\b(just now|\d+\s*(?:m|min|minutes?|h|hr|hours?|d|days?|w|weeks?|months?|years?)\s+ago|yesterday)\b/gi)].map(m=>m[0]);
+      return {members:member?countValue(member[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length)};
     }
     if(isGroupPage){chrome.runtime.sendMessage({type:"PAGE_DETAILS",url:groupUrl(location.href),evidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false});return;}
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
