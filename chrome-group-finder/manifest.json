@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Group Finder Pro — Chrome Helper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Find visible public Facebook Group search results in your already logged-in Chrome tab. Does not join groups or post.",
   "permissions": [
     "tabs",
     "storage"
   ],
   "host_permissions": [
-    "https://www.facebook.com/*"
+    "https://www.facebook.com/*",
+    "https://top-facebook-group-finder-preview.onrender.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -21,7 +22,8 @@
     {
       "matches": [
         "https://www.facebook.com/search/groups/*",
-        "https://www.facebook.com/groups/*"
+        "https://www.facebook.com/groups/*",
+        "https://top-facebook-group-finder-preview.onrender.com/*"
       ],
       "js": [
         "content.js"

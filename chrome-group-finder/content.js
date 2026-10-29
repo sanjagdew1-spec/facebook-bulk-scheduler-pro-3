@@ -1,4 +1,36 @@
 (() => {
+  const WEBSITE_ORIGIN = "https://top-facebook-group-finder-preview.onrender.com";
+  if (location.origin === WEBSITE_ORIGIN) {
+    if (window.__gfpWebsiteBridge) return;
+    window.__gfpWebsiteBridge = true;
+    const sendState = async () => {
+      try {
+        const state = await chrome.runtime.sendMessage({type:"GET_STATE"});
+        window.postMessage({source:"gfp-chrome-helper",type:"STATE",state},WEBSITE_ORIGIN);
+      } catch {}
+    };
+    window.addEventListener("message", async event => {
+      if (event.source !== window || event.origin !== WEBSITE_ORIGIN) return;
+      const msg = event.data;
+      if (!msg || msg.source !== "top-facebook-group-finder") return;
+      if (msg.type === "PING") {
+        window.postMessage({source:"gfp-chrome-helper",type:"READY",available:true},WEBSITE_ORIGIN);
+      } else if (msg.type === "START_SCAN") {
+        const p = msg.payload || {};
+        const keywords = Array.isArray(p.keywords) ? p.keywords.join("\n") : "";
+        try {
+          const response = await chrome.runtime.sendMessage({type:"START_SCAN",keywords,country:p.country||"Any country",onlyUSA:Boolean(p.onlyUSA)});
+          if (!response?.ok) window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:response?.error||"Could not start Chrome search."},WEBSITE_ORIGIN);
+          await sendState();
+        } catch (error) {
+          window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:String(error)},WEBSITE_ORIGIN);
+        }
+      }
+    });
+    sendState();
+    setInterval(sendState,1000);
+    return;
+  }
   if (window.__gfpScanStarted) return;
   window.__gfpScanStarted = true;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
