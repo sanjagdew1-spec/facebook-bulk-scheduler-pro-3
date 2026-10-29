@@ -103,7 +103,10 @@ def parse_results(provider, raw, query):
     rows = []
     try:
         raw_text = raw.decode("utf-8", "ignore") if isinstance(raw, bytes) else str(raw)
-        if provider == "Bing RSS":
+        if provider == "SearXNG":
+            payload = json.loads(raw_text)
+            entries = [(str(item.get("title") or ""), str(item.get("url") or ""), str(item.get("content") or item.get("snippet") or "")) for item in payload.get("results", []) if isinstance(item, dict)]
+        elif provider == "Bing RSS":
             root = ET.fromstring(raw)
             entries = [(item.findtext("title") or "", item.findtext("link") or "", item.findtext("description") or "") for item in root.findall(".//item")]
         elif provider == "Jina Google":
@@ -169,7 +172,28 @@ def parse_results(provider, raw, query):
 
 def request_source(provider, query):
     encoded = urllib.parse.quote(query)
-    if provider == "Bing RSS":
+    if provider == "SearXNG":
+        endpoints = (("https://" + "search.jeremyh.xyz/search?q=" + encoded + "&format=json&language=en-US"), ("https://" + "searx.rhscz.eu/search?q=" + encoded + "&format=json&language=en-US"))
+        last_error = None
+        for endpoint in endpoints:
+            try:
+                req = urllib.request.Request(endpoint, headers={"User-Agent": UA, "Accept": "application/json", "Accept-Language": "en-US,en;q=0.9"})
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    raw = response.read(2_000_000)
+                payload = json.loads(raw.decode("utf-8", "ignore"))
+                if not isinstance(payload.get("results"), list):
+                    raise ValueError("Unexpected SearXNG JSON shape")
+                rows = parse_results(provider, raw, query)
+                print("SEARCH_SOURCE", provider, "endpoint", urllib.parse.urlparse(endpoint).netloc, "bytes", len(raw), "results", len(payload["results"]), "candidates", len(rows), flush=True)
+                if rows:
+                    return rows
+            except Exception as exc:
+                last_error = exc
+                print("SEARCH_PROVIDER_ERROR", provider, urllib.parse.urlparse(endpoint).netloc, type(exc).__name__, flush=True)
+        if last_error:
+            raise last_error
+        return []
+    elif provider == "Bing RSS":
         url = "https://www.bing.com/search?format=rss&count=30&q=" + encoded
         accept = "application/rss+xml,application/xml,text/xml"
     elif provider == "Jina Google":
@@ -215,7 +239,7 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
         (base + " groups").strip(),
     ]
     errors = []
-    providers = ("Mojeek", "Brave Search", "Google Web", "Bing RSS", "Jina Google", "DuckDuckGo", "Google", "Yahoo")
+    providers = ("SearXNG", "Bing RSS", "Google", "Jina Google")
     for batch in (variants[:2], variants[2:]):
         found = []
         with ThreadPoolExecutor(max_workers=8) as pool:
