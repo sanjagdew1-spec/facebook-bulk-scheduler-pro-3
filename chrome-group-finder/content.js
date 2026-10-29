@@ -90,7 +90,9 @@
       const reactions=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+(?:likes?|reactions?)/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
       const comments=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+comments?/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
       const times=[...text.matchAll(/\b(just now|\d+\s*(?:m|min|minutes?|h|hr|hours?|d|days?|w|weeks?|months?|years?)\s+ago|yesterday)\b/gi)].map(m=>m[0]);
-      return {members:member?countValue(member[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
+      const recentArticleTimes=[...document.querySelectorAll('div[role="article"]')].map(el=>(el.innerText||"").match(/\b(just now|\d+\s*(?:m|min|minutes?|h|hr|hours?|d|days?)\s+ago|yesterday)\b/i)?.[0]).filter(Boolean);
+      const postsLast24h=recentArticleTimes.filter(x=>/just now|yesterday|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago/i.test(x)&&!(/\d+\s*(?:d|days?)\s+ago/i.test(x))).length;
+      return {members:member?countValue(member[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),postsLast24h,detailsChecked:true,...countryEvidence(text)};
     }
     if(isGroupPage){chrome.runtime.sendMessage({type:"PAGE_DETAILS",url:groupUrl(location.href),evidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false});return;}
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
