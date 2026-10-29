@@ -34,7 +34,7 @@ async function finish(job){
 chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
  if(msg.type==="START_ACTIVITY_CHECK"){
   const url=String(msg.group?.url||"");
-  if(!/^https:\/\/www\\.facebook\\.com\/groups\/[A-Za-z0-9._-]+\/?(?:[?#].*)?$/i.test(url)){sendResponse({ok:false,error:"This group does not have a supported Facebook group URL."});return;}
+  if(!/^https:\/\/www\.facebook\.com\/groups\/[A-Za-z0-9._-]+\/?(?:[?#].*)?$/i.test(url)){sendResponse({ok:false,error:"This group does not have a supported Facebook group URL."});return;}
   const job=await getJob();
   let fbTabId=job?.tabId;
   if(fbTabId){try{await chrome.tabs.get(fbTabId)}catch{fbTabId=null}}
