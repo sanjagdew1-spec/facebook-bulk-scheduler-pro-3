@@ -37,7 +37,7 @@ main{padding:30px clamp(18px,3vw,42px) 48px;max-width:1600px;width:100%;margin:a
      <div><label class="field-label" for="topic">Keywords / niches (unlimited)</label><textarea id="topic" class="field keywords" rows="4" placeholder="One keyword or phrase per line, or separate with commas">classic car restoration</textarea><div class="hint">Add as many as you want — 10, 20, 100+. Separate phrases with a new line or comma. No keyword-count limit in this page.</div></div>
     </div>
     <div class="usa-box"><div class="usa-left"><span class="flag">🇺🇸</span><div><strong>Only USA</strong><small>Focus all discovery searches on United States groups</small></div></div><label class="switch" aria-label="Only USA"><input id="onlyUsa" type="checkbox"><span class="slider"></span></label></div>
-    <div class="fieldwrap"><label class="field-label">Activity level to prioritize</label><div class="chips" id="activityChips"><button type="button" class="chip" data-value="high">High activity</button><button type="button" class="chip selected" data-value="very high">Very high activity</button><button type="button" class="chip" data-value="largest communities">Largest communities</button><button type="button" class="chip" data-value="recent posts">Recent posts</button></div><div class="hint">Activity preference guides the search terms. Exact daily post counts may not be publicly visible.</div></div>
+    <div class="fieldwrap"><label class="field-label">Activity level to prioritize</label><div class="chips" id="activityChips"><button type="button" class="chip" data-value="high">High activity</button><button type="button" class="chip selected" data-value="very high">Very high activity</button><button type="button" class="chip" data-value="largest communities">Largest communities</button><button type="button" class="chip" data-value="recent posts">Recent posts</button><button type="button" class="chip" data-value="most likes">❤️ Most Likes</button></div><div class="hint">Select one or more ranking priorities. Likes means visible post reactions, not likes on the group itself. Hidden metrics remain unknown.</div></div><div class="fieldwrap"><label class="field-label" for="minimumScore">Minimum evidence score</label><div class="range-row"><input id="minimumScore" type="range" min="0" max="100" step="5" value="0"><span class="range-value" id="minimumScoreLabel">Any score</span></div><div class="hint">Group Finder Pro’s own evidence-based score, not an official Facebook score. 90+ may return few results when public evidence is limited.</div></div>
     <div class="fieldwrap"><label class="field-label" for="minimum">Minimum member size target</label><div class="range-row"><input id="minimum" type="range" min="1000" max="1000000" step="1000" value="50000"><span class="range-value" id="minimumLabel">50,000+</span></div><div class="hint">This is a search target, not a verified filter unless a source displays member counts.</div></div>
     <div class="fieldwrap"><label class="field-label" for="extra">Optional extra keywords</label><input id="extra" class="field" placeholder="e.g. USA, daily posts, buy sell trade"></div>
     <div class="actions"><button class="primary" type="submit">⌕ Find Real Group Candidates</button><button class="secondary" type="button" id="resetBtn">Reset filters</button></div>
@@ -67,9 +67,9 @@ main{padding:30px clamp(18px,3vw,42px) 48px;max-width:1600px;width:100%;margin:a
 </main>
 </div>
 <script>
-const country=document.getElementById('country'), topic=document.getElementById('topic'), onlyUsa=document.getElementById('onlyUsa'), minimum=document.getElementById('minimum'), minimumLabel=document.getElementById('minimumLabel'), extra=document.getElementById('extra'), toast=document.getElementById('toast');
+const country=document.getElementById('country'), topic=document.getElementById('topic'), onlyUsa=document.getElementById('onlyUsa'), minimum=document.getElementById('minimum'), minimumLabel=document.getElementById('minimumLabel'), extra=document.getElementById('extra'), toast=document.getElementById('toast'), minimumScore=document.getElementById('minimumScore'), minimumScoreLabel=document.getElementById('minimumScoreLabel');
 const API='https://group-finder-search-api.onrender.com';
-let activity='very high', busy=false;
+let activityPriorities=['very high'], busy=false;
 function countryValue(){return onlyUsa.checked?'United States':country.value}
 
 const GFP_BRIDGE_SOURCE='top-facebook-group-finder';
@@ -87,7 +87,7 @@ window.addEventListener('message',event=>{
  if(gfpPending&&job&&['complete','paused','stopped'].includes(job.status)){
    const pending=gfpPending;gfpPending=null;clearTimeout(pending.timer);
    window.removeEventListener('message',pending.listener);
-   if(job.status==='complete')pending.resolve({groups:rows.map(r=>({...r,keyword:(r.keywords||[]).join(', '),members:null,postsPerDay:null,activityClues:[],verifiedLive:true})),resultCount:rows.length,keywordsProcessed:pending.count,notice:'Collected from visible Facebook Group results in your logged-in Chrome session. Counts/activity are shown only when Facebook visibly exposes them.',errors:[]});
+   if(job.status==='complete')pending.resolve({groups:rows.filter(r=>r.score==null||r.score>=((gfpPending&&gfpPending.minimumScore)||0)).map(r=>({...r,keyword:(r.keywords||[]).join(', '),postsPerDay:null,activityClues:r.recentTimeLabels||[],verifiedLive:true})),resultCount:rows.length,keywordsProcessed:pending.count,notice:'Collected from visible Facebook Group results in your logged-in Chrome session. Counts/activity are shown only when Facebook visibly exposes them.',errors:[]});
    else pending.reject(new Error(job.message||'Facebook search paused. Check Facebook in Chrome and try again.'));
  }
 });
@@ -99,7 +99,7 @@ function startChromeBridgeSearch(payload){
    window.removeEventListener('message',listener);
    if(!event.data.available){reject(new Error('Chrome Helper is not connected. Install/update the Group Finder Pro extension, then reload this website.'));return;}
    const timer=setTimeout(()=>{if(gfpPending){gfpPending=null;reject(new Error('Chrome search timed out. Check the Facebook tab in Chrome and try again.'));}},240000);
-   gfpPending={resolve,reject,timer,listener:()=>{},count:payload.keywords.length};
+   gfpPending={resolve,reject,timer,listener:()=>{},count:payload.keywords.length,minimumScore:payload.minimumScore};
    window.postMessage({source:GFP_BRIDGE_SOURCE,type:'START_SCAN',payload},location.origin);
   };
   window.addEventListener('message',listener);
@@ -120,12 +120,15 @@ function renderSaved(){
  host.querySelectorAll('.removeSaved').forEach(b=>b.addEventListener('click',()=>{const rows=saved();rows.splice(Number(b.dataset.i),1);saveAll(rows)}))
 }
 function groupCard(g,i){
- const activityInfo=g.postsPerDay!=null?fmt(g.postsPerDay)+' posts/day (source snippet)':(g.activityClues?.length?'Activity words in snippet: '+g.activityClues.join(', '):'No reliable daily activity count found');
- return '<article class="source-card"><div class="source-head"><label><input class="pickGroup" type="checkbox" data-i="'+i+'"> Select</label><span class="source-tag">PUBLIC INDEX RESULT</span></div><h3>'+escapeHtml(g.name)+'</h3><p><b>Keyword:</b> '+escapeHtml(g.keyword)+'</p><p><b>Members:</b> '+(g.members==null?'Not shown by source':fmt(g.members))+'</p><p><b>Activity:</b> '+escapeHtml(activityInfo)+'</p><p class="hint">'+escapeHtml(g.snippet||'No public snippet available.')+'</p><a href="'+escapeHtml(g.url)+'" target="_blank" rel="noopener">Open Facebook Group ↗</a></article>'
+ const activityInfo=g.visiblePostSignals?g.visiblePostSignals+' visible post signals':'No recent-post signal exposed';
+ const likes=g.averageVisibleLikes!=null?'~'+fmt(g.averageVisibleLikes)+' average visible reactions':'Likes not shown';
+ const score=g.score!=null?g.score+'/100':'Not enough public evidence';
+ return '<article class="source-card"><div class="source-head"><label><input class="pickGroup" type="checkbox" data-i="'+i+'"> Select</label><span class="source-tag">'+(g.score>=90?'90+ EVIDENCE SCORE':'PUBLIC GROUP RESULT')+'</span></div><h3>'+escapeHtml(g.name)+'</h3><p><b>Keyword:</b> '+escapeHtml(g.keyword)+'</p><p><b>Evidence score:</b> '+escapeHtml(score)+'</p><p><b>Members:</b> '+(g.members==null?'Not shown':fmt(g.members))+'</p><p><b>Post reactions:</b> '+escapeHtml(likes)+'</p><p><b>Recent activity:</b> '+escapeHtml(activityInfo)+'</p><p class="hint">'+escapeHtml(g.snippet||'No public snippet available.')+'</p><a href="'+escapeHtml(g.url)+'" target="_blank" rel="noopener">Open Facebook Group ↗</a></article>'
 }
 minimum.addEventListener('input',()=>minimumLabel.textContent=fmt(minimum.value)+'+');
 onlyUsa.addEventListener('change',()=>{country.disabled=onlyUsa.checked;if(onlyUsa.checked)country.value='United States';country.style.opacity=onlyUsa.checked?'.6':'1';});
-document.querySelectorAll('#activityChips .chip').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');activity=b.dataset.value;}));
+document.querySelectorAll('#activityChips .chip').forEach(b=>b.addEventListener('click',()=>{b.classList.toggle('selected');activityPriorities=[...document.querySelectorAll('#activityChips .chip.selected')].map(x=>x.dataset.value);}));
+minimumScore.addEventListener('input',()=>minimumScoreLabel.textContent=Number(minimumScore.value)===0?'Any score':minimumScore.value+'+');
 document.getElementById('searchForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const list=keywords();
@@ -137,7 +140,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  subtitle.textContent='Searching '+list.length+' keyword phrases for '+countryValue()+'.';
  status.innerHTML='<span>⌕</span><div>Connecting to your installed Chrome Helper and opening Facebook search. Keep this Chrome window open.</div>';
  try{
-  const data=await startChromeBridgeSearch({keywords:list,country:countryValue(),onlyUSA:onlyUsa.checked,minimumMembers:Number(minimum.value),activityPriority:activity,extraKeywords:extra.value.trim()});
+  const data=await startChromeBridgeSearch({keywords:list,country:countryValue(),onlyUSA:onlyUsa.checked,minimumMembers:Number(minimum.value),activityPriorities,minimumScore:Number(minimumScore.value),extraKeywords:extra.value.trim()});
   const rows=data.groups||[];
   host.innerHTML=rows.length?rows.map(groupCard).join('')+'<div class="source-card"><h3>Save your picks</h3><p>Selected groups are saved in this browser only.</p><button class="primary" id="saveSelected" type="button">Save selected groups</button></div>':'<article class="source-card"><h3>No indexed Facebook Group results found</h3><p>Try a broader keyword or another country. This is a public index limitation, not proof that no groups exist.</p></article>';
   document.getElementById('saveSelected')?.addEventListener('click',()=>{
@@ -158,7 +161,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});
 });
 document.getElementById('clearSaved').addEventListener('click',()=>{saveAll([])});
-document.getElementById('resetBtn').addEventListener('click',()=>{country.value='United States';country.disabled=false;country.style.opacity='1';topic.value='classic car restoration';onlyUsa.checked=false;minimum.value='50000';minimumLabel.textContent='50,000+';extra.value='';activity='very high';document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.toggle('selected',x.dataset.value==='very high'));toast.classList.remove('show');document.getElementById('resultSubtitle').textContent='Add any number of keywords, then find real public-index results.';document.getElementById('keywordResults').innerHTML='';});
+document.getElementById('resetBtn').addEventListener('click',()=>{country.value='United States';country.disabled=false;country.style.opacity='1';topic.value='classic car restoration';onlyUsa.checked=false;minimum.value='50000';minimumLabel.textContent='50,000+';extra.value='';activityPriorities=['very high'];document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.toggle('selected',x.dataset.value==='very high'));minimumScore.value='0';minimumScoreLabel.textContent='Any score';toast.classList.remove('show');document.getElementById('resultSubtitle').textContent='Add any number of keywords, then find real public-index results.';document.getElementById('keywordResults').innerHTML='';});
 renderSaved();
 </script>
 </body></html>
