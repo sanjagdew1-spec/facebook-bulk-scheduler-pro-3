@@ -173,7 +173,7 @@ def parse_results(provider, raw, query):
 def request_source(provider, query):
     encoded = urllib.parse.quote(query)
     if provider == "SearXNG":
-        endpoints = (("https://" + "search.jeremyh.xyz/search?q=" + encoded + "&format=json&language=en-US"), ("https://" + "searx.rhscz.eu/search?q=" + encoded + "&format=json&language=en-US"))
+        endpoints = (("https://" + "search.jeremyh.xyz/search?q=" + encoded + "&format=json&language=en-US"), ("https://" + "searx.rhscz.eu/search?q=" + encoded + "&format=json&language=en-US"), ("https://" + "searxng.buffon.cloud/search?q=" + encoded + "&format=json&language=en-US"), ("https://" + "search.liuzj.net/search?q=" + encoded + "&format=json&language=en-US"))
         last_error = None
         for endpoint in endpoints:
             try:
