@@ -50,12 +50,25 @@
     }catch{return null;}
   }
   function getCardText(anchor){
+    // The group title link is often only a few words; Public, member count,
+    // and activity sit in sibling elements in the same visible result card.
+    const candidates=[];
     let node=anchor;
-    for(let i=0;i<6&&node;i++,node=node.parentElement){
+    for(let depth=0;depth<8&&node;depth++,node=node.parentElement){
       const t=(node.innerText||"").trim();
-      if(t.length>=12&&t.length<1800)return t;
+      if(t.length<12||t.length>1800)continue;
+      const signals=[
+        /\\bpublic(?:\\s+group)?\\b|\\bprivate(?:\\s+group)?\\b/i.test(t),
+        /[\\d,.]+\\s*[KMB]?\\s+(?:members|people in this group|group members)\\b/i.test(t),
+        /[\\d,.]+\\s*[KMB]?\\+?\\s+(?:new\\s+)?posts?\\s+(?:a|per)\\s+day\\b/i.test(t),
+        /[\\d,.]+\\s*[KMB]?\\+?\\s+posts?\\s+(?:in|during)\\s+(?:the\\s+)?(?:last|past)\\s+24\\s+hours?\\b/i.test(t),
+        /\\bjoin\\b/i.test(t)
+      ].filter(Boolean).length;
+      candidates.push({text:t,signals,depth});
     }
-    return (anchor.innerText||"").trim();
+    if(!candidates.length)return (anchor.innerText||"").trim();
+    candidates.sort((x,y)=>y.signals-x.signals||x.text.length-y.text.length||x.depth-y.depth);
+    return candidates[0].text;
   }
   async function scan(){
     // Give Facebook's client-rendered search results time to load.
@@ -86,15 +99,15 @@
       return {country:null,countryEvidenceText:null,countryEvidenceType:"unknown"};
     }
     function evidence(text){
-      const member=text.match(/([\d,.]+\s*[KMB]?)\s+(?:members|people in this group|group members)/i);
-      const reactions=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+(?:likes?|reactions?)/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
-      const comments=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+comments?/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
-      const times=[...text.matchAll(/\b(just now|\d+\s*(?:m|min|minutes?|h|hr|hours?|d|days?|w|weeks?|months?|years?)\s+ago|yesterday)\b/gi)].map(m=>m[0]);
-      const recentArticleTimes=[...document.querySelectorAll('div[role="article"]')].map(el=>(el.innerText||"").match(/\b(just now|\d+\s*(?:m|min|minutes?|h|hr|hours?|d|days?)\s+ago|yesterday)\b/i)?.[0]).filter(Boolean);
-      const postsLast24h=recentArticleTimes.filter(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago/i.test(x)).length;
-      const dailyPosts=text.match(/(\d[\d,.]*\s*[KMB]?\+?)\s+posts?\s+(?:a|per)\s+day\b/i);
-      const isPublic=/\bpublic(?:\s+group)?\b/i.test(text);
-      return {isPublic,members:member?countValue(member[1]):null,postsPerDay:dailyPosts?countValue(dailyPosts[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
+      const member=text.match(/([\\d,.]+\\s*[KMB]?)\\s+(?:members|people in this group|group members)\\b/i);
+      const reactions=[...text.matchAll(/([\\d,.]+\\s*[KMB]?)\\s+(?:likes?|reactions?)\\b/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
+      const comments=[...text.matchAll(/([\\d,.]+\\s*[KMB]?)\\s+comments?\\b/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
+      const times=[...text.matchAll(/\\b(just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?|d|days?|w|weeks?|months?|years?)\\s+ago|yesterday)\\b/gi)].map(m=>m[0]);
+      const dailyPosts=text.match(/(\\d[\\d,.]*\\s*[KMB]?\\+?)\\s+(?:new\\s+)?posts?\\s+(?:a|per)\\s+day\\b/i)
+        ||text.match(/(\\d[\\d,.]*\\s*[KMB]?\\+?)\\s+posts?\\s+(?:in|during)\\s+(?:the\\s+)?(?:last|past)\\s+24\\s+hours?\\b/i);
+      const isPublic=/\\bpublic(?:\\s+group)?\\b/i.test(text);
+      const isPrivate=/\\bprivate(?:\\s+group)?\\b/i.test(text);
+      return {isPublic:isPublic?true:(isPrivate?false:null),members:member?countValue(member[1]):null,postsPerDay:dailyPosts?countValue(dailyPosts[1]):null,postsPerDayLabel:dailyPosts?dailyPosts[1].replace(/\\s+/g," ").trim()+" posts/day":null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?)\\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
     }
     if(isGroupPage){chrome.runtime.sendMessage({type:"PAGE_DETAILS",url:groupUrl(location.href),evidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false});return;}
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
