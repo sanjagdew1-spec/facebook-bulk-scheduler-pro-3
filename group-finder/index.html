@@ -82,7 +82,7 @@ function countryValue(){return onlyUsa.checked?'United States':country.value}
 
 const citySearch=document.getElementById('citySearch'),cityList=document.getElementById('cityList'),cityCount=document.getElementById('cityCount');
 const CITY_DATA={
- 'United States':['New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','San Diego','Dallas','Jacksonville','Austin','Fort Worth','San Jose','Columbus','Charlotte','Indianapolis','San Francisco','Seattle','Denver','Washington DC','Nashville','Oklahoma City','El Paso','Boston','Portland','Las Vegas','Detroit','Memphis','Louisville','Baltimore','Milwaukee','Albuquerque','Tucson','Fresno','Sacramento','Atlanta','Miami','Minneapolis','Tampa','Orlando'],
+ 'United States':['New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','San Diego','Dallas','Jacksonville','Austin','Fort Worth','San Jose','Columbus','Charlotte','Indianapolis','San Francisco','Seattle','Denver','Washington, D.C.','Nashville','Oklahoma City','El Paso','Boston','Portland','Las Vegas','Detroit','Memphis','Louisville','Baltimore','Milwaukee','Albuquerque','Tucson','Fresno','Sacramento','Atlanta','Miami','Minneapolis','Tampa','Orlando','Cleveland','Raleigh','Omaha','Colorado Springs','Virginia Beach','Long Beach','Oakland','Mesa','Tulsa','Arlington','New Orleans','Wichita','Bakersfield','Aurora','Honolulu','Anaheim','Santa Ana','Riverside','Corpus Christi','Lexington','Stockton','Henderson','Saint Paul','St. Louis','Pittsburgh','Cincinnati','Greensboro','Plano','Lincoln','Irvine','Newark','Toledo','Durham','Chula Vista','Fort Wayne','Jersey City','St. Petersburg','Laredo','Madison','Chandler','Buffalo','Lubbock','Scottsdale','Reno','Glendale','Gilbert','Winston-Salem','North Las Vegas','Norfolk','Chesapeake','Garland','Irving','Hialeah','Fremont','Boise','Richmond','Baton Rouge','Spokane','Des Moines','Tacoma'],
  'India':['Mumbai','Delhi','Bengaluru','Hyderabad','Ahmedabad','Chennai','Kolkata','Pune','Jaipur','Surat','Lucknow','Kanpur','Nagpur','Indore','Thane','Bhopal','Visakhapatnam','Pimpri-Chinchwad','Patna','Vadodara','Ghaziabad','Ludhiana','Agra','Nashik','Faridabad','Meerut','Rajkot','Varanasi','Srinagar','Aurangabad','Dhanbad','Amritsar','Navi Mumbai','Prayagraj','Ranchi','Howrah','Coimbatore','Jabalpur','Gwalior','Vijayawada'],
  'Canada':['Toronto','Montreal','Vancouver','Calgary','Edmonton','Ottawa','Winnipeg','Quebec City','Hamilton','Kitchener','London','Victoria','Halifax','Oshawa','Windsor','Saskatoon','Regina','St. John’s','Kelowna','Barrie','Abbotsford','Kingston','Sherbrooke','Guelph','Moncton','Brantford','Sudbury','Peterborough','Lethbridge','Nanaimo','Kamloops','Red Deer','Thunder Bay','Saint John','Fredericton','Charlottetown','Whitehorse','Yellowknife'],
  'Australia':['Sydney','Melbourne','Brisbane','Perth','Adelaide','Gold Coast','Canberra','Newcastle','Wollongong','Logan City','Geelong','Hobart','Townsville','Cairns','Darwin','Toowoomba','Ballarat','Bendigo','Albury','Launceston','Mackay','Rockhampton','Bunbury','Bundaberg','Hervey Bay','Wagga Wagga','Shepparton','Port Macquarie','Coffs Harbour','Gladstone','Mildura','Tamworth','Traralgon','Orange','Geraldton','Whyalla','Alice Springs','Broome'],
@@ -144,7 +144,7 @@ function startChromeBridgeSearch(payload){
 }
 
 function fmt(n){return Number(n).toLocaleString('en-US')}
-function keywords(){const base=[...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))],cities=[...selectedCities];return base.map(k=>cities.length?k+', '+cities.join(', '):k)}
+function keywords(){const base=[...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))],cities=[...selectedCities];if(base.length)return base.map(k=>cities.length?k+', '+cities.join(', '):k);return cities.length?[cities.join(', ')]:[]}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function saved(){try{return JSON.parse(localStorage.getItem('groupFinderSaved')||'[]')}catch{return []}}
 function saveAll(rows){localStorage.setItem('groupFinderSaved',JSON.stringify(rows));renderSaved()}
@@ -168,8 +168,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const baseKeywords=keywords();
  const cityChoices=[...selectedCities];
- const list=baseKeywords;
- if(!list.length){toast.textContent='Please enter at least one keyword or phrase.';toast.classList.add('show');topic.focus();return}
+ const list=baseKeywords.length?baseKeywords:[''];
  if(busy)return;
  busy=true;const submit=e.submitter||document.querySelector('#searchForm button[type="submit"]');submit.disabled=true;submit.textContent='Searching Facebook in Chrome…';
  const host=document.getElementById('keywordResults'), subtitle=document.getElementById('resultSubtitle'), status=document.getElementById('searchStatus');
