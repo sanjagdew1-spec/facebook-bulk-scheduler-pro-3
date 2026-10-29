@@ -75,7 +75,9 @@ function countryValue(){return onlyUsa.checked?'United States':country.value}
 const GFP_BRIDGE_SOURCE='top-facebook-group-finder';
 let gfpPending=null;
 window.addEventListener('message',event=>{
- if(event.source!==window||event.origin!==location.origin||event.data?.source!=='gfp-chrome-helper'||event.data?.type!=='STATE')return;
+ if(event.source!==window||event.origin!==location.origin||event.data?.source!=='gfp-chrome-helper')return;
+ if(event.data.type==='ERROR'&&gfpPending){const pending=gfpPending;gfpPending=null;clearTimeout(pending.timer);pending.reject(new Error(event.data.error||'Chrome search could not start.'));return;}
+ if(event.data.type!=='STATE')return;
  const state=event.data.state||{},job=state.job,rows=state.results||[];
  const status=document.getElementById('searchStatus');
  if(job?.message&&status)status.innerHTML='<span>⌕</span><div>'+escapeHtml(job.message)+'</div>';
