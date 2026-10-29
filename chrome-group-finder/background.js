@@ -41,8 +41,12 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   if(!fbTabId){sendResponse({ok:false,error:"Run a Facebook group search first so the extension has its logged-in Facebook tab. No extra tab will be created."});return;}
   const activityJob={group:{name:String(msg.group?.name||"Selected group"),url},websiteTabId:sender.tab?.id||null,fbTabId,startedAt:Date.now(),status:"checking"};
   await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
-  await chrome.tabs.update(fbTabId,{url,active:true});
-  sendResponse({ok:true,message:"Opening the selected Facebook group and checking visible posts from the last 24 hours."});return;
+  const tab=await chrome.tabs.get(fbTabId);
+  const current=String(tab.url||"").replace(/[?#].*$/,"").replace(/\\/$/,"");
+  const target=url.replace(/[?#].*$/,"").replace(/\\/$/,"");
+  if(current===target){await chrome.tabs.update(fbTabId,{active:true});await chrome.tabs.reload(fbTabId);}
+  else{await chrome.tabs.update(fbTabId,{url,active:true});}
+  sendResponse({ok:true,message:"Opening/reloading the selected Facebook group and checking visible posts from the last 24 hours."});return;
  }
  if(msg.type==="PAGE_DETAILS"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
