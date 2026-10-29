@@ -143,7 +143,7 @@ function startChromeBridgeSearch(payload){
 }
 
 function fmt(n){return Number(n).toLocaleString('en-US')}
-function keywords(){return [...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))]}
+function keywords(){const base=[...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))],cities=[...selectedCities];return base.length&&cities.length?base.flatMap(k=>cities.map(c=>k+' '+c)):base}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function saved(){try{return JSON.parse(localStorage.getItem('groupFinderSaved')||'[]')}catch{return []}}
 function saveAll(rows){localStorage.setItem('groupFinderSaved',JSON.stringify(rows));renderSaved()}
@@ -197,7 +197,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});
 });
 document.getElementById('clearSaved').addEventListener('click',()=>{saveAll([])});
-document.getElementById('resetBtn').addEventListener('click',()=>{selectedCities.clear();citySearch.value='';renderCities();country.value='United States';country.disabled=false;country.style.opacity='1';topic.value='classic car restoration';onlyUsa.checked=false;minimum.value='50000';minimumLabel.textContent='50,000+';extra.value='';activityPriorities=['very high'];document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.toggle('selected',x.dataset.value==='very high'));minimumScore.value='0';minimumScoreLabel.textContent='Any score';toast.classList.remove('show');document.getElementById('resultSubtitle').textContent='Add any number of keywords, then find real public-index results.';document.getElementById('keywordResults').innerHTML='';});
+document.getElementById('resetBtn').addEventListener('click',()=>{selectedCities.clear();citySearch.value='';country.value='United States';renderCities();country.disabled=false;country.style.opacity='1';topic.value='classic car restoration';onlyUsa.checked=false;minimum.value='50000';minimumLabel.textContent='50,000+';extra.value='';activityPriorities=['very high'];document.querySelectorAll('#activityChips .chip').forEach(x=>x.classList.toggle('selected',x.dataset.value==='very high'));minimumScore.value='0';minimumScoreLabel.textContent='Any score';toast.classList.remove('show');document.getElementById('resultSubtitle').textContent='Add any number of keywords, then find real public-index results.';document.getElementById('keywordResults').innerHTML='';});
 renderSaved();
 </script>
 </body></html>
