@@ -68,12 +68,29 @@
     if(blocked){chrome.runtime.sendMessage({type:"PAGE_RESULTS",results:[],blocked:true});return;}
     const isGroupPage=/^\/groups\/[^/]+\/?$/.test(location.pathname);
     function countValue(raw){const m=String(raw||"").replace(/,/g,"").match(/(\d+(?:\.\d+)?)\s*([KMB])?/i);if(!m)return null;return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));}
+    function countryEvidence(text){
+      const lines=String(text||"").split(/\n+/).map(s=>s.trim()).filter(Boolean);
+      const countryNames={
+        "United States":["united states","usa","u.s.a."],"Canada":["canada"],"India":["india"],"Brazil":["brazil","brasil"],
+        "United Kingdom":["united kingdom","england","scotland","wales","northern ireland"],"Australia":["australia"],
+        "Germany":["germany","deutschland"],"France":["france"],"Italy":["italy","italia"],"Mexico":["mexico","méxico"]
+      };
+      for(let i=0;i<lines.length;i++){
+        const line=lines[i];
+        if(!/\b(location|located|based in|country|headquarters|headquartered)\b/i.test(line))continue;
+        const context=(line+" "+(lines[i+1]||"")).toLowerCase();
+        for(const [country,names] of Object.entries(countryNames)){
+          if(names.some(n=>context.includes(n)))return {country,countryEvidenceText:line.slice(0,180),countryEvidenceType:"explicit-location-text"};
+        }
+      }
+      return {country:null,countryEvidenceText:null,countryEvidenceType:"unknown"};
+    }
     function evidence(text){
       const member=text.match(/([\d,.]+\s*[KMB]?)\s+(?:members|people in this group|group members)/i);
       const reactions=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+(?:likes?|reactions?)/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
       const comments=[...text.matchAll(/([\d,.]+\s*[KMB]?)\s+comments?/gi)].map(m=>countValue(m[1])).filter(Number.isFinite).slice(0,12);
       const times=[...text.matchAll(/\b(just now|\d+\s*(?:m|min|minutes?|h|hr|hours?|d|days?|w|weeks?|months?|years?)\s+ago|yesterday)\b/gi)].map(m=>m[0]);
-      return {members:member?countValue(member[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length)};
+      return {members:member?countValue(member[1]):null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
     }
     if(isGroupPage){chrome.runtime.sendMessage({type:"PAGE_DETAILS",url:groupUrl(location.href),evidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false});return;}
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
