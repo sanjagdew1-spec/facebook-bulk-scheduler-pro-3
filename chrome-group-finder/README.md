@@ -1,28 +1,34 @@
-# Group Finder Pro — Chrome Helper (prototype)
+# Group Finder Pro — Chrome Helper
 
-This is an isolated Chrome extension prototype. It does not change the deployed Group Finder Pro website, Activity Lab, or Facebook Bulk Scheduler.
+A local Chrome extension that reads group names and links rendered visibly in Facebook's own group-search results. It does not join groups, post, message, save anything to Facebook, or bypass security checks.
 
 ## Install in Chrome (Windows)
-1. Download this folder from the repository as ZIP, then extract it.
-2. Open `chrome://extensions`.
-3. Turn on **Developer mode**.
-4. Choose **Load unpacked** and select the `chrome-group-finder` folder (the folder containing `manifest.json`).
-5. Open Facebook in the same Chrome profile and log in normally.
-6. Click the Group Finder Pro extension icon, enter keywords (one per line or separated by commas/semicolons), choose a country term, and click **Start search**.
+
+1. Open this branch folder on GitHub: https://github.com/sanjagdew1-spec/facebook-bulk-scheduler-pro-3/tree/prototype/chrome-group-finder-automation/chrome-group-finder
+2. Download the repository branch as a ZIP using **Code → Download ZIP**, then extract it.
+3. Open the extracted repository folder and then open `chrome-group-finder`.
+4. In Chrome, open `chrome://extensions` and turn on **Developer mode**.
+5. Click **Load unpacked** and select the `chrome-group-finder` folder containing `manifest.json`.
+6. Pin **Group Finder Pro** from Chrome's Extensions menu.
+7. In that same Chrome profile, sign in to Facebook normally. Open the extension.
+8. Enter keywords (one per line, comma, or semicolon), select a country or tick **Only USA**, then press **Start search**.
+9. Keep the Facebook search tab open while it processes keywords. Reopen the extension to review results or export CSV.
 
 ## What it does
-- Opens Facebook's own Groups search one keyword at a time in a Chrome tab.
-- Reads group links and text that are visible in the page DOM.
-- Deduplicates collected group URLs and keeps results in Chrome extension local storage.
-- Exports collected results to CSV.
-- Does not join groups, post, message, or save anything to the Facebook account.
+
+- Opens Facebook's group-search page for each keyword.
+- Extracts visible group names, URLs, and snippets; deduplicates by URL.
+- Stores results in Chrome extension local storage and exports CSV.
+- Stops if Facebook presents a login/checkpoint/CAPTCHA or security page.
 
 ## Important limitations
-- This is a first prototype and must be tested with your own logged-in Chrome session before it can be called working.
-- Country is appended as a search term, not a guaranteed geographic filter.
-- Facebook may change its page structure, show no results, ask for a checkpoint/CAPTCHA, or restrict automated browsing. The extension does not bypass those controls; stop and complete any legitimate checks manually.
-- Only visible Facebook search-result links are collected. Member counts and activity rates are not guessed or fabricated.
-- Use responsibly and follow Facebook's terms and rate limits.
 
-## Privacy
-The extension uses only the current Facebook page's visible group result text/links and stores its collected shortlist locally in Chrome. It does not ask for or read passwords, cookies, or access tokens.
+- The extension only reads what Facebook renders visibly. Facebook may change its page structure, so results can be incomplete.
+- It cannot guarantee that Facebook returns results for every keyword. No fake group names, member counts, or activity metrics are created.
+- The country selector adds the country to the search text; it is not a verified geographic filter.
+- This is a local Chrome extension, not a Render-hosted web app. That is what lets it use the Facebook session in the same Chrome profile.
+- The code has been reviewed and improved, but end-to-end testing must still happen in your logged-in Chrome session. Start with one keyword and confirm real results before using a large list.
+
+## Scope protection
+
+This extension is on the isolated `prototype/chrome-group-finder-automation` branch. It does not modify the deployed Group Finder Pro website, Activity Lab, or locked Facebook Bulk Scheduler features.
