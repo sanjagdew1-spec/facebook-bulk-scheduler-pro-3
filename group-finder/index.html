@@ -79,6 +79,9 @@ window.addEventListener('message',event=>{
  const state=event.data.state||{},job=state.job,rows=state.results||[];
  const status=document.getElementById('searchStatus');
  if(job?.message&&status)status.innerHTML='<span>⌕</span><div>'+escapeHtml(job.message)+'</div>';
+ if(gfpPending&&event.data?.type==='ERROR'){
+   const pending=gfpPending;gfpPending=null;clearTimeout(pending.timer);pending.reject(new Error(event.data.error||'Chrome search could not start.'));
+ }
  if(gfpPending&&job&&['complete','paused','stopped'].includes(job.status)){
    const pending=gfpPending;gfpPending=null;clearTimeout(pending.timer);
    window.removeEventListener('message',pending.listener);
@@ -126,7 +129,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  const list=keywords();
  if(!list.length){toast.textContent='Please enter at least one keyword or phrase.';toast.classList.add('show');topic.focus();return}
  if(busy)return;
- busy=true;const submit=e.submitter||document.querySelector('#searchForm button[type="submit"]');submit.disabled=true;submit.textContent='Searching public index…';
+ busy=true;const submit=e.submitter||document.querySelector('#searchForm button[type="submit"]');submit.disabled=true;submit.textContent='Searching Facebook in Chrome…';
  const host=document.getElementById('keywordResults'), subtitle=document.getElementById('resultSubtitle'), status=document.getElementById('searchStatus');
  host.innerHTML='<article class="source-card"><h3>Searching…</h3><p>Checking public indexed Facebook Group pages for '+list.length+' keyword phrases.</p></article>';
  subtitle.textContent='Searching '+list.length+' keyword phrases for '+countryValue()+'.';
@@ -149,7 +152,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
   host.innerHTML='<article class="source-card"><h3>Search service not reachable</h3><p>'+escapeHtml(err.message)+'</p><p>Try again after the search API is live.</p></article>';
   status.innerHTML='<span>!</span><div>The live search service could not be reached. No fake group results were generated.</div>';
   toast.textContent='Search failed. Please try again.';toast.classList.add('show');
- }finally{busy=false;submit.disabled=false;submit.textContent='⌕ Find Real Group Candidates'}
+ }finally{busy=false;submit.disabled=false;submit.textContent='⌕ Find Real Facebook Groups'}
  document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});
 });
 document.getElementById('clearSaved').addEventListener('click',()=>{saveAll([])});
