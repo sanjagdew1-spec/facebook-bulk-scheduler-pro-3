@@ -340,5 +340,13 @@ class Handler(BaseHTTPRequestHandler):
         print("%s - %s" % (self.address_string(), fmt % args), flush=True)
 
 if __name__ == "__main__":
+    # One deploy-time smoke test verifies that the upstream metasearch can return
+    # real Facebook group candidates; it is not run on later restarts.
+    if os.environ.get("GROUP_FINDER_SEARCH_SMOKE") == "1":
+        try:
+            smoke_rows = request_source("SearXNG", "site:facebook.com/groups classic cars")
+            print("SEARCH_SMOKE_TEST", "classic cars", "results", len(smoke_rows), json.dumps(smoke_rows[:3], ensure_ascii=False), flush=True)
+        except Exception as exc:
+            print("SEARCH_SMOKE_TEST_FAILED", type(exc).__name__, str(exc)[:200], flush=True)
     print("Group Finder API listening on", PORT, flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
