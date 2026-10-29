@@ -144,7 +144,7 @@ function startChromeBridgeSearch(payload){
 }
 
 function fmt(n){return Number(n).toLocaleString('en-US')}
-function keywords(){const base=[...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))],cities=[...selectedCities];return base.length&&cities.length?base.flatMap(k=>cities.map(c=>k+' '+c)):base}
+function keywords(){const base=[...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))],cities=[...selectedCities];return base.map(k=>cities.length?k+', '+cities.join(', '):k)}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function saved(){try{return JSON.parse(localStorage.getItem('groupFinderSaved')||'[]')}catch{return []}}
 function saveAll(rows){localStorage.setItem('groupFinderSaved',JSON.stringify(rows));renderSaved()}
@@ -168,7 +168,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const baseKeywords=keywords();
  const cityChoices=[...selectedCities];
- const list=baseKeywords.length&&cityChoices.length?baseKeywords.flatMap(k=>cityChoices.map(city=>k+" "+city)):baseKeywords;
+ const list=baseKeywords;
  if(!list.length){toast.textContent='Please enter at least one keyword or phrase.';toast.classList.add('show');topic.focus();return}
  if(busy)return;
  busy=true;const submit=e.submitter||document.querySelector('#searchForm button[type="submit"]');submit.disabled=true;submit.textContent='Searching Facebook in Chrome…';
