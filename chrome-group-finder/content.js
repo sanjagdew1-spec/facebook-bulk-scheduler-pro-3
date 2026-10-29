@@ -109,7 +109,37 @@
       const isPrivate=/\bprivate(?:\s+group)?\b/i.test(text);
       return {isPublic:isPublic?true:(isPrivate?false:null),members:member?countValue(member[1]):null,postsPerDay:dailyPosts?countValue(dailyPosts[1]):null,postsPerDayLabel:dailyPosts?dailyPosts[1].replace(/\s+/g," ").trim()+" posts/day":null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
     }
-    if(isGroupPage){chrome.runtime.sendMessage({type:"PAGE_DETAILS",url:groupUrl(location.href),evidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false});return;}
+    if(isGroupPage){
+      const parseMetric=(text,kind)=>{
+        const patterns=kind==="shares"?[/([\\d,.]+\\s*[KMB]?)\\s+shares?\\b/i]:kind==="comments"?[/([\\d,.]+\\s*[KMB]?)\\s+comments?\\b/i]:[/([\\d,.]+\\s*[KMB]?)\\s+(?:likes?|reactions?)\\b/i];
+        for(const re of patterns){const m=String(text||"").match(re);if(m)return countValue(m[1]);}
+        return null;
+      };
+      const isRecent24h=text=>{
+        const t=String(text||"").toLowerCase();
+        if(/\\b(just now|\\d+\\s*(?:m|min|minutes?|h|hr|hours?)\\s+ago)\\b/.test(t)) {
+          const m=t.match(/(\\d+)\\s*(?:h|hr|hours?)\\s+ago/);
+          return !m||Number(m[1])<=24;
+        }
+        return /\\b(today|\\d+\\s*(?:m|min|minutes?)\\s+ago)\\b/.test(t);
+      };
+      const articles=[...document.querySelectorAll('[role="article"]')].filter(visible);
+      const recentPosts=[];
+      for(const article of articles){
+        const text=(article.innerText||"").trim();
+        if(text.length<20)continue;
+        const timeEls=[...article.querySelectorAll('a[aria-label],abbr[title],time,[aria-label]')];
+        const timeText=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(' ')).join(' ');
+        const combined=timeText+" "+text.slice(0,700);
+        if(!isRecent24h(combined))continue;
+        const reactions=parseMetric(text,"reactions"),comments=parseMetric(text,"comments"),shares=parseMetric(text,"shares");
+        recentPosts.push({time:timeText.trim().slice(0,120)||"Recent timestamp visible; exact time unavailable",reactions,comments,shares,snippet:text.slice(0,260)});
+      }
+      const known=(key)=>recentPosts.filter(p=>p[key]!=null).length;
+      const sum=(key)=>recentPosts.reduce((n,p)=>n+(p[key]||0),0);
+      const report={url:groupUrl(location.href),groupName:document.title.replace(/\\s*\\|\\s*Facebook.*$/i,"").trim(),checkedAt:new Date().toISOString(),observedArticles:articles.length,recentPostsFound:recentPosts.length,reactionsTotal:known("reactions")?sum("reactions"):null,commentsTotal:known("comments")?sum("comments"):null,sharesTotal:known("shares")?sum("shares"):null,reactionsPostsCount:known("reactions"),commentsPostsCount:known("comments"),sharesPostsCount:known("shares"),recentPosts:recentPosts.slice(0,30),baseEvidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false};
+      chrome.runtime.sendMessage({type:"PAGE_DETAILS",...report});return;
+    }
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
     await sleep(900);
     const found=new Map();
