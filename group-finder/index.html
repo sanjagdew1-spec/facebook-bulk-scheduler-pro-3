@@ -131,9 +131,9 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
  if(busy)return;
  busy=true;const submit=e.submitter||document.querySelector('#searchForm button[type="submit"]');submit.disabled=true;submit.textContent='Searching Facebook in Chrome…';
  const host=document.getElementById('keywordResults'), subtitle=document.getElementById('resultSubtitle'), status=document.getElementById('searchStatus');
- host.innerHTML='<article class="source-card"><h3>Searching…</h3><p>Checking public indexed Facebook Group pages for '+list.length+' keyword phrases.</p></article>';
+ host.innerHTML='<article class="source-card"><h3>Searching…</h3><p>Searching visible Facebook Group results for '+list.length+' keyword phrases.</p></article>';
  subtitle.textContent='Searching '+list.length+' keyword phrases for '+countryValue()+'.';
- status.innerHTML='<span>⌕</span><div>Contacting public search index. This may take a little longer when you enter many keywords.</div>';
+ status.innerHTML='<span>⌕</span><div>Connecting to your installed Chrome Helper and opening Facebook search. Keep this Chrome window open.</div>';
  try{
   const data=await startChromeBridgeSearch({keywords:list,country:countryValue(),onlyUSA:onlyUsa.checked,minimumMembers:Number(minimum.value),activityPriority:activity,extraKeywords:extra.value.trim()});
   const rows=data.groups||[];
@@ -149,8 +149,8 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
   status.innerHTML='<span>ⓘ</span><div>'+escapeHtml(data.notice||'Results are from public indexed pages.')+(data.errors?.length?' Some keyword searches could not be completed: '+escapeHtml(data.errors.map(x=>x.keyword).join(', ')):'')+'</div>';
   toast.textContent='Search finished: '+data.resultCount+' group candidates found.';toast.classList.add('show');
  }catch(err){
-  host.innerHTML='<article class="source-card"><h3>Search service not reachable</h3><p>'+escapeHtml(err.message)+'</p><p>Try again after the search API is live.</p></article>';
-  status.innerHTML='<span>!</span><div>The live search service could not be reached. No fake group results were generated.</div>';
+  host.innerHTML='<article class="source-card"><h3>Chrome search could not start</h3><p>'+escapeHtml(err.message)+'</p><p>Make sure the Group Finder Pro Chrome Helper is enabled and Facebook is signed in.</p></article>';
+  status.innerHTML='<span>!</span><div>Chrome search did not start. No fake group results were generated.</div>';
   toast.textContent='Search failed. Please try again.';toast.classList.add('show');
  }finally{busy=false;submit.disabled=false;submit.textContent='⌕ Find Real Facebook Groups'}
  document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});
