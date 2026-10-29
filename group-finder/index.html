@@ -152,7 +152,7 @@ document.getElementById('searchForm').addEventListener('submit',async e=>{
   toast.textContent='Search finished: '+data.resultCount+' group candidates found.';toast.classList.add('show');
  }catch(err){
   host.innerHTML='<article class="source-card"><h3>Chrome search could not start</h3><p>'+escapeHtml(err.message)+'</p><p>Make sure the Group Finder Pro Chrome Helper is enabled and Facebook is signed in.</p></article>';
-  status.innerHTML='<span>!</span><div>Chrome search did not start. No fake group results were generated.</div>';
+  status.innerHTML='<span>!</span><div>'+escapeHtml(err.message||'Chrome search did not start.')+' No fake group results were generated.</div>';
   toast.textContent='Search failed. Please try again.';toast.classList.add('show');
  }finally{busy=false;submit.disabled=false;submit.textContent='⌕ Find Real Facebook Groups'}
  document.querySelector('.results').scrollIntoView({behavior:'smooth',block:'start'});
