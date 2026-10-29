@@ -139,6 +139,11 @@ def parse_results(provider, raw, query):
         )
         for slug in embedded:
             entries.append(("", "https://www.facebook.com/groups/" + slug + "/", ""))
+        debug_urls = [str(row[1])[:180] for row in entries if "facebook" in str(row[1]).lower()][:5]
+        print("PARSE_DIAG", provider, "entries", len(entries), "group_matches", len(embedded), "urls", repr(debug_urls), flush=True)
+        if provider in ("Bing RSS", "Jina Google"):
+            samples = [decoded_text[max(0, m.start()-50):m.start()+130] for m in list(re.finditer("facebook\\.com", decoded_text, re.I))[:3]]
+            print("SEARCH_LINK_SAMPLES", provider, repr(samples), flush=True)
         for title, raw_url, description in entries:
             # Google and some HTML search results use relative redirect paths.
             if raw_url.startswith("/"):
