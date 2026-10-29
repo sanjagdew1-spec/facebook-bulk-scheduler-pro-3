@@ -139,11 +139,6 @@ def parse_results(provider, raw, query):
         )
         for slug in embedded:
             entries.append(("", "https://www.facebook.com/groups/" + slug + "/", ""))
-        debug_urls = [str(row[1])[:180] for row in entries if "facebook" in str(row[1]).lower()][:5]
-        print("PARSE_DIAG", provider, "entries", len(entries), "group_matches", len(embedded), "urls", repr(debug_urls), flush=True)
-        if provider in ("Bing RSS", "Jina Google"):
-            samples = [decoded_text[max(0, m.start()-50):m.start()+130] for m in list(re.finditer("facebook\\.com", decoded_text, re.I))[:3]]
-            print("SEARCH_LINK_SAMPLES", provider, repr(samples), flush=True)
         for title, raw_url, description in entries:
             # Google and some HTML search results use relative redirect paths.
             if raw_url.startswith("/"):
@@ -254,7 +249,7 @@ def fetch_keyword(keyword, country, min_members, priority, extra):
         (base + " groups").strip(),
     ]
     errors = []
-    providers = ("DuckDuckGo Lite", "Startpage", "Bing RSS", "Google")
+    providers = ("Bing RSS", "Google")
     for batch in (variants[:2], variants[2:]):
         found = []
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -355,14 +350,5 @@ class Handler(BaseHTTPRequestHandler):
         print("%s - %s" % (self.address_string(), fmt % args), flush=True)
 
 if __name__ == "__main__":
-    # One deploy-time smoke test verifies that the upstream metasearch can return
-    # real Facebook group candidates; it is not run on later restarts.
-    if os.environ.get("GROUP_FINDER_SEARCH_SMOKE") == "1":
-        for smoke_provider in ("DuckDuckGo Lite", "Startpage", "Bing RSS", "Google"):
-            try:
-                smoke_rows = request_source(smoke_provider, "site:facebook.com/groups classic cars")
-                print("SEARCH_SMOKE_TEST", smoke_provider, "classic cars", "results", len(smoke_rows), json.dumps(smoke_rows[:3], ensure_ascii=False), flush=True)
-            except Exception as exc:
-                print("SEARCH_SMOKE_TEST_FAILED", smoke_provider, type(exc).__name__, str(exc)[:200], flush=True)
     print("Group Finder API listening on", PORT, flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
