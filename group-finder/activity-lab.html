@@ -274,8 +274,8 @@ if(activityGroupUrl){
  $('gurl').value=activityGroupUrl;
  if(existingActivitySessionId){
   activateActivitySession(existingActivitySessionId);
-  $('activityStatus').textContent='CHECKING';
-  $('activitySummary').textContent='Facebook Group tab opened. Waiting for visible feed data…';
+  $('activityStatus').textContent='WAITING FOR SCREENSHOT PERMISSION';
+  $('activitySummary').textContent='Facebook Group tab opened in a new tab. Click the Group Finder Pro extension icon once on that Facebook tab to enable temporary visual screenshots; scanning will begin after permission is granted.';
  }else if(activityParams.get('autostart')==='1')setTimeout(()=>$('startActivityScan').click(),250);
 }
 $('clear').onclick=()=>{if(confirm('Clear the saved Group list in this browser?')){localStorage.removeItem('gfp_shortlist');render();$('saveToast').textContent='Saved list cleared.';$('saveToast').classList.add('show')}};$('savedJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});$('activityJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});render();
