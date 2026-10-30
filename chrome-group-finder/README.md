@@ -34,7 +34,7 @@ A local Chrome extension that reads group names and links rendered visibly in Fa
 This extension is on the isolated `prototype/chrome-group-finder-automation` branch. It does not modify the deployed Group Finder Pro website, Activity Lab, or locked Facebook Bulk Scheduler features.
 
 
-## Activity Lab scan behavior (0.4.5)
+## Activity Lab scan behavior (0.4.6)
 - Opens the selected Facebook Group in a separate tab and inspects only information visible on that Group page.
 - Collects post time plus visible likes, comments, and shares for posts up to 24 hours old.
 - Separately records minimal engagement counts for visible posts older than 24 hours and up to 7 days old.
