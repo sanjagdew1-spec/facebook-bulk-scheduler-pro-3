@@ -176,6 +176,11 @@ function renderActivityReport(r){
  const rows=saved(),idx=rows.findIndex(x=>x.url===r.url);if(idx>=0){rows[idx]={...rows[idx],activityReport:r,score:r.evidenceScore,activityScore:r.activityScore};saveAll(rows);}
 }
 function openActivity(g){
+ // The standalone Activity Lab owns the temporary session and raw-data intake.
+ // Route the selected group there so the scan is visible and its batches are received.
+ const params=new URLSearchParams({groupName:String(g.name||'Selected Group'),groupUrl:String(g.url||''),keyword:String(g.keyword||''),autostart:'1'});
+ location.href='activity-lab.html?'+params.toString();
+ return;
  const host=document.getElementById('activityDetail');
  const fmtVal=n=>n==null||n===''?'Not shown by Facebook/source':fmt(n);
  const alreadySaved=saved().some(x=>x.url===g.url);
