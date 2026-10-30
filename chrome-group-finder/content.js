@@ -181,6 +181,24 @@
         }
         return null;
       };
+      const postAuthor=(article)=>{
+        // Read only the visible author label near the top of this post card.
+        // Never inspect commenter/reaction lists or open any post.
+        const top=article.getBoundingClientRect().top;
+        const candidates=[...article.querySelectorAll('[data-ad-rendering-role="profile_name"],h2 a,h3 a,strong a,a[href*="profile.php"],a[href*="/people/"]')].filter(visible);
+        const ranked=candidates.map(el=>{
+          const link=el.matches("a")?el:el.querySelector("a");
+          const href=link?.getAttribute("href")||"";
+          const rect=el.getBoundingClientRect();
+          const label=(el.innerText||el.getAttribute("aria-label")||link?.getAttribute("aria-label")||"").replace(/\\s+/g," ").trim();
+          const path=(()=>{try{return new URL(href,location.origin).pathname;}catch{return "";}})();
+          const profileLike=/profile\\.php|^\\/people\\//i.test(path)||(/^\\/[^/]+\\/?$/.test(path)&&!/^\\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\\//i.test(path));
+          if(!label||label.length<2||label.length>90||!profileLike||rect.top>top+220)return null;
+          if(/^(like|comment|share|see more|send|follow)$/i.test(label))return null;
+          return {label,top:rect.top,left:rect.left};
+        }).filter(Boolean).sort((a,b)=>a.top-b.top||a.left-b.left);
+        return ranked[0]?.label||"Not available";
+      };
       const collected=new Map();
       let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false;
@@ -218,6 +236,7 @@
           collected.set(key,{
             postId:key,
             postNumber:nextFeedOrder++,
+            author:postAuthor(article),
             time:timeLabel.trim().slice(0,180)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
             likes:metric(article,"likes"),
@@ -254,9 +273,9 @@
         groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),
         checkedAt:new Date().toISOString(),
         recentPostsFound:recentPosts.length,
-        recentPosts:recentPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        recentPosts:recentPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,author:p.author||"Not available",time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
         weekPostsFound:weekPosts.length,
-        weekPosts:weekPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        weekPosts:weekPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,author:p.author||"Not available",time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
         recentTopEngagement:maxEngagement(recentPosts),
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
