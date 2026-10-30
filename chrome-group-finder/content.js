@@ -182,22 +182,30 @@
         return null;
       };
       const postAuthor=(article)=>{
-        // Read only the visible author label near the top of this post card.
+        // Read the author only from the visible header area of this individual post card.
+        // Facebook changes its markup frequently: support semantic profile labels,
+        // profile links, role=link nodes and heading/strong wrappers.
         // Never inspect commenter/reaction lists or open any post.
-        const top=article.getBoundingClientRect().top;
-        const candidates=[...article.querySelectorAll('[data-ad-rendering-role="profile_name"],a[href]')].filter(visible);
+        const cardTop=article.getBoundingClientRect().top;
+        const selectors='[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i],[data-testid*="story-subtitle" i],a[href],[role="link"],h2,h3,strong';
+        const candidates=[...article.querySelectorAll(selectors)].filter(visible);
         const ranked=candidates.map(el=>{
-          const link=el.matches("a")?el:el.querySelector("a");
-          const href=link?.getAttribute("href")||"";
+          const link=el.matches("a")?el:el.querySelector("a[href]");
+          const href=link?.getAttribute("href")||el.getAttribute("href")||"";
           const rect=el.getBoundingClientRect();
           const label=(el.innerText||el.getAttribute("aria-label")||link?.getAttribute("aria-label")||"").replace(/\s+/g," ").trim();
-          const path=(()=>{try{return new URL(href,location.origin).pathname;}catch{return "";}})();
-          const semanticAuthor=el.matches('[data-ad-rendering-role="profile_name"]')||Boolean(el.closest('[data-ad-rendering-role="profile_name"]'));
+          let path="";
+          try{path=new URL(href,location.origin).pathname;}catch{}
+          const semanticAuthor=el.matches('[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i]')||Boolean(el.closest('[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i]'));
           const profileLike=semanticAuthor||/profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path));
-          if(!label||label.length<2||label.length>90||!profileLike||rect.top>top+220)return null;
-          if(/^(like|comment|share|see more|send|follow)$/i.test(label))return null;
-          return {label,top:rect.top,left:rect.left};
-        }).filter(Boolean).sort((a,b)=>a.top-b.top||a.left-b.left);
+          const inHeader=rect.top>=cardTop-8&&rect.top<=cardTop+190;
+          const looksLikeTime=/\b(just now|yesterday|\d+\s*(?:m|min|mins|h|hr|hrs|d|day|days|w|week|weeks))\b/i.test(label);
+          const looksLikeAction=/^(like|comment|share|see more|send|follow|sponsored|more)$/i.test(label);
+          if(!label||label.length<2||label.length>90||!inHeader||looksLikeTime||looksLikeAction)return null;
+          const rank=semanticAuthor?0:(profileLike?1:(el.matches("h2,h3,strong")?2:3));
+          if(rank===3&&!el.matches('[role="link"]'))return null;
+          return {label,top:rect.top,left:rect.left,rank};
+        }).filter(Boolean).sort((a,b)=>a.rank-b.rank||a.top-b.top||a.left-b.left);
         return ranked[0]?.label||"Not available";
       };
       const postPreview=(article)=>{
