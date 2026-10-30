@@ -202,5 +202,13 @@ window.addEventListener('message',async event=>{
   $('activitySummary').textContent=msg.payload?.error||'Facebook did not allow this visible scan.';
  }
 });
+const activityParams=new URLSearchParams(location.search);
+const activityGroupName=activityParams.get('groupName')||'';
+const activityGroupUrl=activityParams.get('groupUrl')||'';
+if(activityGroupUrl){
+ $('gname').value=activityGroupName;
+ $('gurl').value=activityGroupUrl;
+ if(activityParams.get('autostart')==='1')setTimeout(()=>$('startActivityScan').click(),250);
+}
 $('clear').onclick=()=>{if(confirm('Clear the saved Group list in this browser?')){localStorage.removeItem('gfp_shortlist');render();$('saveToast').textContent='Saved list cleared.';$('saveToast').classList.add('show')}};$('savedJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});$('activityJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});render();
 </script></body></html>
