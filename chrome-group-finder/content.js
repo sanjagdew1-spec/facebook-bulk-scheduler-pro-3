@@ -135,9 +135,9 @@
         const text=[article.innerText||"",...labels].join(" ").replace(/\s+/g," ");
         const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
         const patterns=[
-          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s*"+names+"\\\\b","i"),
-          new RegExp("\\\\b"+names+"\\\\s*(\\\\d[\\\\d,.]*\\\\s*[KMB]?)","i"),
-          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s+(?:people\\\\s+)?(?:like|comment|share)","i")
+          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
+          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i"),
+          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s+(?:people\\s+)?(?:like|comment|share)","i")
         ];
         for(const re of patterns){const m=text.match(re);if(m)return parseCount(m[1]);}
         return null;
