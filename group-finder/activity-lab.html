@@ -33,7 +33,7 @@ function renderActivityReport(report,job){
  $('activitySummary').innerHTML=identity+'<div class="activity-kpis"><div class="activity-kpi"><small>Posts · last 24 hours</small><b>'+Number(report.recentPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Posts · days 2–7</small><b>'+Number(report.weekPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Scroll steps</small><b>'+Number(report.scanDiagnostics?.scrollSteps||0).toLocaleString()+'</b></div></div><div class="hint">Post authors identified: <b>'+Number(report.scanDiagnostics?.authorsIdentified||0).toLocaleString()+'</b> · Author unavailable: <b>'+Number(report.scanDiagnostics?.authorsUnavailable||0).toLocaleString()+'</b> · Nested comment cards excluded: <b>'+Number(report.scanDiagnostics?.nestedArticlesExcluded||0).toLocaleString()+'</b> · Scan time: '+esc(report.checkedAt?new Date(report.checkedAt).toLocaleString():'Not available')+'</div><div class="activity-section-title">Last 24 hours · visible totals</div><div class="hint">Likes: '+metricText(r.likes?.total,'likes')+' · Comments: '+metricText(r.comments?.total,'comments')+' · Shares: '+metricText(r.shares?.total,'shares')+'</div>'+topLine('Highest 24-hour engagement',report.recentTopEngagement)+activityRows(report.recentPosts)+'<div class="activity-section-title">Older posts · days 2–7 · visible totals</div><div class="hint">Likes: '+metricText(w.likes?.total,'likes')+' · Comments: '+metricText(w.comments?.total,'comments')+' · Shares: '+metricText(w.shares?.total,'shares')+'</div>'+topLine('Highest days 2–7 engagement',report.weekTopEngagement)+activityRows(report.weekPosts)+'<div class="hint">'+esc(report.note||'Only visible information is reported.')+'</div>';
 }
 const ACTIVITY_API='https://group-finder-search-api.onrender.com';
-let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null,activityExpiresAt=0;
+let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null,activityNoDataTimer=null,activityExpiresAt=0;
 async function deleteActivitySession(keepalive=false){
  const id=activitySessionId;activitySessionId=null;activityExpiresAt=0;
  if(activityExpiryTimer){clearTimeout(activityExpiryTimer);activityExpiryTimer=null;}
@@ -55,6 +55,13 @@ async function createActivitySession(){
  const response=await fetch(ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
  const data=await response.json();if(!response.ok||!data.sessionId)throw new Error(data.error||'Could not create temporary Activity Lab session.');
  activitySessionId=data.sessionId;activityBatchCount=0;activityRawBytes=0;activityUploadQueue=Promise.resolve();activityExpiresAt=Date.now()+300000;
+ if(activityNoDataTimer)clearTimeout(activityNoDataTimer);
+ activityNoDataTimer=setTimeout(()=>{
+  if(activitySessionId===data.sessionId&&activityBatchCount===0){
+   $('activityStatus').textContent='NO DATA RECEIVED';
+   $('activitySummary').textContent='The Facebook tab opened, but no scan batch reached Activity Lab. Reload the Group Finder Pro extension (v0.5.13), refresh this website, and try again.';
+  }
+ },15000);
  activityExpiryTimer=setTimeout(expireActivityNow,300000);
  return data;
 }
@@ -66,6 +73,7 @@ function receiveRawActivityBatch(payload){
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary data upload failed.');
   if(id!==activitySessionId)return;
   activityBatchCount++;activityRawBytes+=new Blob([JSON.stringify(payload)]).size;
+  if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
   $('activityStatus').textContent='RECEIVING';
   $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' temporary raw-data batches ('+activityRawBytes.toLocaleString()+' bytes). Server expiry: maximum 5 minutes.';
  });
@@ -200,6 +208,11 @@ window.addEventListener('message',async event=>{
  if(msg.type==='ACTIVITY_RAW_ERROR'){
   $('activityStatus').textContent='SCAN BLOCKED';
   $('activitySummary').textContent=msg.payload?.error||'Facebook did not allow this visible scan.';
+  return;
+ }
+ if(msg.type==='ERROR'){
+  $('activityStatus').textContent='EXTENSION ERROR';
+  $('activitySummary').textContent=msg.error||'The Chrome extension could not start the scan.';
  }
 });
 const activityParams=new URLSearchParams(location.search);
