@@ -96,6 +96,9 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
       articlesObserved:Number(msg.scanDiagnostics?.articlesObserved)||0,
       uniqueArticleSamples:Number(msg.scanDiagnostics?.uniqueArticleSamples)||0,
       timestampedArticles:Number(msg.scanDiagnostics?.timestampedArticles)||0,
+      authorsIdentified:Number(msg.scanDiagnostics?.authorsIdentified)||0,
+      authorsUnavailable:Number(msg.scanDiagnostics?.authorsUnavailable)||0,
+      nestedArticlesExcluded:Number(msg.scanDiagnostics?.nestedArticlesExcluded)||0,
       recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,
       oldestAgeHours:Number(msg.scanDiagnostics?.oldestAgeHours)||0,
       olderThanSevenDaysSeen:Boolean(msg.scanDiagnostics?.olderThanSevenDaysSeen)
