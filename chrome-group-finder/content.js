@@ -232,9 +232,13 @@
           const timeMetaNodes=primaryTimeEl?[primaryTimeEl,primaryTimeEl.closest("a"),primaryTimeEl.parentElement,primaryTimeEl.parentElement?.parentElement].filter(Boolean):[];
           const absoluteLabel=[...new Set(timeMetaNodes.flatMap(el=>[el.getAttribute("title"),el.getAttribute("datetime"),el.getAttribute("aria-label"),el.getAttribute("data-tooltip-content")]).filter(Boolean).map(v=>v.replace(/\\s+/g," ").trim()).filter(v=>!/^\\d+\\s*(?:m|min|mins|h|hr|hrs|hour|hours|d|day|days)\\b/i.test(v)))].join(" · ").slice(0,220);
           const timeLabel=[relativeLabel,absoluteLabel].filter(Boolean).join(" · ");
-          // Use Facebook's exact timestamp for age buckets whenever it exists;
-          // relative labels are rounded and are only a fallback.
-          const age=parseAgeHours(absoluteLabel||relativeLabel,article,primaryTimeEl);
+          // Parse the calendar date embedded in Facebook's hover timestamp first.
+          // The hover aria-label can also contain "10h", so do not let that rounded
+          // fragment win over the exact date/time later in the same label.
+          const monthDate=absoluteLabel.match(/\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2},?\\s+\\d{4}(?:\\s+at\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?/i);
+          const absoluteStamp=monthDate?Date.parse(monthDate[0]):Date.parse(absoluteLabel);
+          const exactAgeHours=Number.isFinite(absoluteStamp)?(Date.now()-absoluteStamp)/3600000:null;
+          const age=exactAgeHours!=null&&exactAgeHours>=0?exactAgeHours:parseAgeHours(relativeLabel||timeLabel,article,primaryTimeEl);
           if(age==null)continue;
           timestampedArticles++;
           visibleTimestampAges.push(age);
