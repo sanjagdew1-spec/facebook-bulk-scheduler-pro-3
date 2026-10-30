@@ -59,6 +59,19 @@
   if (window.__gfpScanStarted) return;
   window.__gfpScanStarted = true;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let visualCaptureReady=false;
+  let initialVisualScreenshot="";
+  chrome.runtime.onMessage.addListener(message=>{
+    if(message?.type==="VISUAL_CAPTURE_READY"){
+      visualCaptureReady=true;
+      initialVisualScreenshot=String(message.screenshotDataUrl||"");
+    }
+  });
+  async function waitForVisualCapturePermission(timeoutMs=120000){
+    const started=Date.now();
+    while(!visualCaptureReady&&Date.now()-started<timeoutMs)await sleep(300);
+    return visualCaptureReady;
+  }
   const excluded = new Set(["feed","create","discover","joins","notifications","your_groups","requests","pending","search","member_requests","about"]);
   function visible(el){
     if(!el)return false;
@@ -140,6 +153,8 @@
       return {isPublic:isPublic?true:(isPrivate?false:null),members:member?countValue(member[1]):null,postsPerDay:dailyPosts?countValue(dailyPosts[1]):null,postsPerDayLabel:dailyPosts?dailyPosts[1].replace(/\s+/g," ").trim()+" posts/day":null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
     }
     if(isGroupPage){
+      // Wait for the user to click the extension icon on this Facebook tab. This grants narrow activeTab screenshot access without asking for all websites.
+      await waitForVisualCapturePermission();
       const parseCount=(raw)=>{
         const m=String(raw||"").replace(/,/g,"").match(/(\d+(?:\.\d+)?)\s*([KMB])?/i);
         if(!m)return null;
@@ -363,7 +378,8 @@
           const html=clone.outerHTML||'';
           if(html)snapshots.push({tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',html:html.slice(0,45000)});
         }
-        const payload={scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},rootCount:snapshots.length,snapshots};
+        const firstScreenshot=initialVisualScreenshot;initialVisualScreenshot="";
+        const payload={scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},rootCount:snapshots.length,snapshots,...(firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})};
         try{await chrome.runtime.sendMessage({type:'RAW_ACTIVITY_BATCH',payload});}catch{}
       };
       const collectVisiblePosts=()=>{
