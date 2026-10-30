@@ -3,6 +3,7 @@
   if (location.origin === WEBSITE_ORIGIN) {
     if (window.__gfpWebsiteBridge) return;
     window.__gfpWebsiteBridge = true;
+    chrome.runtime.sendMessage({type:"CLEAR_ACTIVITY_STORAGE"}).catch(()=>{});
     const sendState = async () => {
       try {
         const state = await chrome.runtime.sendMessage({type:"GET_STATE"});
