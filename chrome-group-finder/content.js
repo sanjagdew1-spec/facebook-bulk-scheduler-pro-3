@@ -165,7 +165,7 @@
         if(/\byesterday\b/.test(t)){
           const at=t.match(/yesterday(?:\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?/);
           const d=new Date();d.setDate(d.getDate()-1);
-          if(at&&at[1]){let h=Number(at[1]);if(at[3]==="pm"&&h<12)h+=12;if(at[3]==="am"&&h===12)h=0;d.setHours(h,Number(at[2]||0),0,0);}else d.setHours(12,0,0,0);
+          if(!at||!at[1])return null;let h=Number(at[1]);if(at[3]==="pm"&&h<12)h+=12;if(at[3]==="am"&&h===12)h=0;d.setHours(h,Number(at[2]||0),0,0);
           const age=(now-d.getTime())/3600000;if(age>=0)return age;
         }
         return null;
@@ -181,7 +181,7 @@
         for(const article of articles){
           const body=(article.innerText||"").trim();
           if(body.length<12)continue;
-          const timeEls=[...article.querySelectorAll('a[aria-label],abbr[title],time,[aria-label],[data-utime]')];
+          const timeEls=[...article.querySelectorAll('abbr[title],time,[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')];
           const timeLabel=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(" ")).join(" ");
           const age=parseAgeHours(timeLabel,article);
           if(age==null)continue;
