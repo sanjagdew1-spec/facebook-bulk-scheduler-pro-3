@@ -111,14 +111,14 @@ async function analyzeTemporarySession(meta){
   const before=(node,cutoff)=>!cutoff||Boolean(node.compareDocumentPosition(cutoff)&Node.DOCUMENT_POSITION_FOLLOWING);
   for(const el of controls){
    if(!after(el,afterNode)||!before(el,cutoffNode))continue;
-   const label=[el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-tooltip-content'),el.getAttribute('data-testid'),el.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+   const label=[el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-tooltip-content'),el.getAttribute('data-testid'),(el.innerText||el.textContent)].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
    if(!words.some(w=>new RegExp('\\b'+w+'s?\\b','i').test(label)))continue;
    const kindPattern=words.join('|');
    const directMatch=label.match(new RegExp('(\\d[\\d,.]*\\s*[KMB]?)\\s*(?:'+kindPattern+')s?\\b','i'))||label.match(new RegExp('(?:'+kindPattern+')s?\\D{0,12}(\\d[\\d,.]*\\s*[KMB]?)','i'));
    if(directMatch){const direct=parseCount(directMatch[1]);if(direct!=null)return direct;}
    let parent=el;
    for(let i=0;i<2&&parent;i++,parent=parent.parentElement){
-    const text=(parent.innerText||'').replace(/\s+/g,' ').trim();
+    const text=(parent.innerText||parent.textContent||'').replace(/\s+/g,' ').trim();
     if(!words.some(w=>new RegExp('\\b'+w+'s?\\b','i').test(text)))continue;
     const match=text.match(/(\d[\d,.]*\s*[KMB]?)\s*(?:likes?|reactions?|comments?|shares?)/i);
     if(match){const count=parseCount(match[1]);if(count!=null)return count;}
@@ -138,18 +138,18 @@ async function analyzeTemporarySession(meta){
    const beforeAnchor=(node)=>!contentAnchor||Boolean(node.compareDocumentPosition(contentAnchor)&Node.DOCUMENT_POSITION_FOLLOWING);
    const authorLink=[...article.querySelectorAll('a[href]')].find(a=>{
     if(!beforeAnchor(a))return false;
-    const href=a.getAttribute('href')||'',label=(a.innerText||'').trim();
+    const href=a.getAttribute('href')||'',label=(a.innerText||a.textContent||'').trim();
     return label.length>=2&&label.length<=90&&(/profile\.php|^\/people\//i.test(href)||(/^\/[^/]+\/?$/.test(href)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(href)));
    });
    const timeNode=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]')].find(beforeAnchor);
-   const time=[timeNode?.innerText,timeNode?.getAttribute('aria-label'),timeNode?.getAttribute('title'),timeNode?.getAttribute('datetime'),timeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
+   const time=[timeNode?.innerText||timeNode?.textContent,timeNode?.getAttribute('aria-label'),timeNode?.getAttribute('title'),timeNode?.getAttribute('datetime'),timeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
    const relativeAge=parseAge(time);
    const unix=Number(timeNode?.getAttribute('data-utime'));
    const dateStamp=Date.parse(timeNode?.getAttribute('datetime')||'');
    const age=relativeAge!=null?relativeAge:(unix>0?(Date.now()-unix*1000)/3600000:(Number.isFinite(dateStamp)?(Date.now()-dateStamp)/3600000:null));
-   const preview=(story?.innerText||'').replace(/\s+/g,' ').trim().slice(0,220);
+   const preview=(story?.innerText||story?.textContent||'').replace(/\s+/g,' ').trim().slice(0,220);
    const marker=[...article.querySelectorAll('[data-gfp-boundary-marker="true"]')][0]||null;
-   return {author:authorLink?.innerText?.trim()||'Not available',time:time||'Not available',ageHours:age,preview:preview||'Not available',likes:extractMetric(article,'likes',contentAnchor,marker),comments:extractMetric(article,'comments',contentAnchor,marker),shares:extractMetric(article,'shares',contentAnchor,marker),postId:(authorLink?.getAttribute('href')||'')+'|'+time+'|'+preview};
+   return {author:(authorLink?.innerText||authorLink?.textContent||'').trim()||'Not available',time:time||'Not available',ageHours:age,preview:preview||'Not available',likes:extractMetric(article,'likes',contentAnchor,marker),comments:extractMetric(article,'comments',contentAnchor,marker),shares:extractMetric(article,'shares',contentAnchor,marker),postId:(authorLink?.getAttribute('href')||'')+'|'+time+'|'+preview};
   });
  };
  for(const batch of batches){
