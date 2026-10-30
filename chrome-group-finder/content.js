@@ -9,6 +9,9 @@
         window.postMessage({source:"gfp-chrome-helper",type:"STATE",state},WEBSITE_ORIGIN);
       } catch {}
     };
+    window.addEventListener("pagehide", () => {
+      chrome.runtime.sendMessage({type:"CANCEL_ACTIVITY_SESSION"}).catch(()=>{});
+    });
     chrome.runtime.onMessage.addListener((message) => {
       if (!message || !["ACTIVITY_RAW_BATCH","ACTIVITY_RAW_COMPLETE","ACTIVITY_RAW_ERROR"].includes(message.type)) return;
       window.postMessage({source:"gfp-chrome-helper",...message}, WEBSITE_ORIGIN);
