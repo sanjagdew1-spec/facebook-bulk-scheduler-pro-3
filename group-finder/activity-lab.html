@@ -33,9 +33,10 @@ function renderActivityReport(report,job){
  $('activitySummary').innerHTML=identity+'<div class="activity-kpis"><div class="activity-kpi"><small>Posts · last 24 hours</small><b>'+Number(report.recentPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Posts · days 2–7</small><b>'+Number(report.weekPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Scroll steps</small><b>'+Number(report.scanDiagnostics?.scrollSteps||0).toLocaleString()+'</b></div></div><div class="hint">Post authors identified: <b>'+Number(report.scanDiagnostics?.authorsIdentified||0).toLocaleString()+'</b> · Author unavailable: <b>'+Number(report.scanDiagnostics?.authorsUnavailable||0).toLocaleString()+'</b> · Nested comment cards excluded: <b>'+Number(report.scanDiagnostics?.nestedArticlesExcluded||0).toLocaleString()+'</b> · Scan time: '+esc(report.checkedAt?new Date(report.checkedAt).toLocaleString():'Not available')+'</div><div class="activity-section-title">Last 24 hours · visible totals</div><div class="hint">Likes: '+metricText(r.likes?.total,'likes')+' · Comments: '+metricText(r.comments?.total,'comments')+' · Shares: '+metricText(r.shares?.total,'shares')+'</div>'+topLine('Highest 24-hour engagement',report.recentTopEngagement)+activityRows(report.recentPosts)+'<div class="activity-section-title">Older posts · days 2–7 · visible totals</div><div class="hint">Likes: '+metricText(w.likes?.total,'likes')+' · Comments: '+metricText(w.comments?.total,'comments')+' · Shares: '+metricText(w.shares?.total,'shares')+'</div>'+topLine('Highest days 2–7 engagement',report.weekTopEngagement)+activityRows(report.weekPosts)+'<div class="hint">'+esc(report.note||'Only visible information is reported.')+'</div>';
 }
 const ACTIVITY_API='https://group-finder-search-api.onrender.com';
-let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityUploadQueue=Promise.resolve();
+let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null;
 async function deleteActivitySession(keepalive=false){
  const id=activitySessionId;activitySessionId=null;
+ if(activityExpiryTimer){clearTimeout(activityExpiryTimer);activityExpiryTimer=null;}
  if(!id)return;
  try{await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id),{method:'DELETE',keepalive,headers:{'Content-Type':'application/json'}})}catch{}
 }
@@ -43,7 +44,15 @@ window.addEventListener('pagehide',()=>{deleteActivitySession(true)});
 async function createActivitySession(){
  const response=await fetch(ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
  const data=await response.json();if(!response.ok||!data.sessionId)throw new Error(data.error||'Could not create temporary Activity Lab session.');
- activitySessionId=data.sessionId;activityBatchCount=0;activityRawBytes=0;return data;
+ activitySessionId=data.sessionId;activityBatchCount=0;activityRawBytes=0;
+ activityExpiryTimer=setTimeout(()=>{
+  window.postMessage({source:'top-facebook-group-finder',type:'CANCEL_ACTIVITY_SESSION'},location.origin);
+  deleteActivitySession(false);
+  $('activityStatus').textContent='EXPIRED';
+  $('activitySummary').textContent='Temporary scan data expired and was cleared after the 5-minute maximum.';
+  $('activityRows').innerHTML='';
+ },300000);
+ return data;
 }
 function receiveRawActivityBatch(payload){
  if(!activitySessionId||!payload)return activityUploadQueue;
@@ -93,7 +102,7 @@ async function analyzeTemporarySession(meta){
   const words={likes:['like','reaction'],comments:['comment'],shares:['share']}[kind];
   const controls=[...article.querySelectorAll('button,[role="button"],[aria-label],[title],[data-testid]')];
   const after=(node,anchor)=>!anchor||Boolean(anchor.compareDocumentPosition(node)&Node.DOCUMENT_POSITION_FOLLOWING);
-  const before=(node,cutoff)=>!cutoff||Boolean(cutoff.compareDocumentPosition(node)&Node.DOCUMENT_POSITION_FOLLOWING);
+  const before=(node,cutoff)=>!cutoff||Boolean(node.compareDocumentPosition(cutoff)&Node.DOCUMENT_POSITION_FOLLOWING);
   for(const el of controls){
    if(!after(el,afterNode)||!before(el,cutoffNode))continue;
    const label=[el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-tooltip-content'),el.getAttribute('data-testid'),el.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
@@ -127,7 +136,10 @@ async function analyzeTemporarySession(meta){
    });
    const timeNode=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]')].find(beforeAnchor);
    const time=[timeNode?.innerText,timeNode?.getAttribute('aria-label'),timeNode?.getAttribute('title'),timeNode?.getAttribute('datetime'),timeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
-   const age=parseAge(time);
+   const relativeAge=parseAge(time);
+   const unix=Number(timeNode?.getAttribute('data-utime'));
+   const dateStamp=Date.parse(timeNode?.getAttribute('datetime')||'');
+   const age=relativeAge!=null?relativeAge:(unix>0?(Date.now()-unix*1000)/3600000:(Number.isFinite(dateStamp)?(Date.now()-dateStamp)/3600000:null));
    const preview=(story?.innerText||'').replace(/\s+/g,' ').trim().slice(0,220);
    const marker=[...article.querySelectorAll('[data-gfp-boundary-marker="true"]')][0]||null;
    return {author:authorLink?.innerText?.trim()||'Not available',time:time||'Not available',ageHours:age,preview:preview||'Not available',likes:extractMetric(article,'likes',contentAnchor,marker),comments:extractMetric(article,'comments',contentAnchor,marker),shares:extractMetric(article,'shares',contentAnchor,marker),postId:(authorLink?.getAttribute('href')||'')+'|'+time+'|'+preview};
@@ -148,6 +160,7 @@ async function analyzeTemporarySession(meta){
  const report={status:'complete',groupName:meta?.groupName||'Not available',url:meta?.url||'Not available',scannedUrl:meta?.url||'Not available',checkedAt:meta?.checkedAt||new Date().toISOString(),recentPostsFound:recent.length,weekPostsFound:week.length,recentPosts:recent.map((p,i)=>({...p,postNumber:i+1})),weekPosts:week.map((p,i)=>({...p,postNumber:i+1})),recentTotals:{likes:totals(recent,'likes'),comments:totals(recent,'comments'),shares:totals(recent,'shares')},weekTotals:{likes:totals(week,'likes'),comments:totals(week,'comments'),shares:totals(week,'shares')},recentTopEngagement:top(recent),weekTopEngagement:top(week),scanDiagnostics:{scrollSteps:meta?.scrollSteps||batches.length,authorsIdentified:rows.filter(p=>p.author!=='Not available').length,authorsUnavailable:rows.filter(p=>p.author==='Not available').length,nestedArticlesExcluded:articleNodes,rawBatches:batches.length,rawSnapshots:snapshots,feedUnits,timeNodes,actionSignals,viewMoreBoundariesFound:viewMoreMarkers},note:'Activity Lab analyzed the temporary DOM snapshots. Comment/reply article text was redacted before transfer. Counts are shown only when explicitly linked to a matching visible action control; missing values remain Not available.'};
  $('activityStatus').textContent='ANALYSIS COMPLETE';
  renderActivityReport(report,{status:'complete'});
+ data.batches=[];batches.length=0;
  if(!snapshots)$('activitySummary').innerHTML+='<div class="hint">No eligible feed DOM snapshots were captured. Check that the extension is reloaded and the Facebook group tab was allowed to finish scanning.</div>';
 }
 $('startActivityScan').onclick=async()=>{
