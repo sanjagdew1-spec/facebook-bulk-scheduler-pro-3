@@ -35,23 +35,17 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
  if(msg.type==="START_ACTIVITY_CHECK"){
   const url=String(msg.group?.url||"");
   if(!/^https:\/\/www\.facebook\.com\/groups\/[A-Za-z0-9._-]+\/?(?:[?#].*)?$/i.test(url)){sendResponse({ok:false,error:"This group does not have a supported Facebook group URL."});return;}
-  const job=await getJob();
-  let fbTabId=job?.tabId;
-  if(fbTabId){try{await chrome.tabs.get(fbTabId)}catch{fbTabId=null}}
-  if(!fbTabId){sendResponse({ok:false,error:"Run a Facebook group search first so the extension has its logged-in Facebook tab. No extra tab will be created."});return;}
-  const activityJob={group:{name:String(msg.group?.name||"Selected group"),url},websiteTabId:sender.tab?.id||null,fbTabId,startedAt:Date.now(),status:"checking"};
+  // Keep both the Group Finder website and the original search tab untouched.
+  // Every selected group opens in a dedicated Facebook tab for activity inspection.
+  const activityTab=await chrome.tabs.create({url,active:true});
+  const activityJob={group:{name:String(msg.group?.name||"Selected group"),url},websiteTabId:sender.tab?.id||null,fbTabId:activityTab.id,startedAt:Date.now(),status:"checking"};
   await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
-  const tab=await chrome.tabs.get(fbTabId);
-  const current=String(tab.url||"").split(/[?#]/)[0].replace(/\/+$/,"");
-  const target=url.split(/[?#]/)[0].replace(/\/+$/,"");
-  if(current===target){await chrome.tabs.update(fbTabId,{active:true});await chrome.tabs.reload(fbTabId);}
-  else{await chrome.tabs.update(fbTabId,{url,active:true});}
-  sendResponse({ok:true,message:"Opening/reloading the selected Facebook group and checking visible posts from the last 24 hours."});return;
+  sendResponse({ok:true,message:"Opened the selected Facebook group in a new tab. Activity scan started."});return;
  }
  if(msg.type==="PAGE_DETAILS"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
-  if(msg.blocked){await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:{...a,status:"blocked",error:"Facebook login/checkpoint or restricted content blocked the activity scan."}});if(a.websiteTabId)try{await chrome.tabs.update(a.websiteTabId,{active:true})}catch{}sendResponse({ok:true,blocked:true});return;}
+  if(msg.blocked){await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:{...a,status:"blocked",error:"Facebook login/checkpoint or restricted content blocked the activity scan."}});sendResponse({ok:true,blocked:true});return;}
   const posts=Array.isArray(msg.recentPosts)?msg.recentPosts:[];
   const countKnown=key=>posts.filter(p=>p[key]!=null).length;
   const sum=key=>posts.reduce((n,p)=>n+(Number(p[key])||0),0);
