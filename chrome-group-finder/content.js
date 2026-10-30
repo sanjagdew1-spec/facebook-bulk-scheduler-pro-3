@@ -10,9 +10,9 @@
         window.postMessage({source:"gfp-chrome-helper",type:"STATE",state},WEBSITE_ORIGIN);
       } catch {}
     };
-    window.addEventListener("pagehide", () => {
-      chrome.runtime.sendMessage({type:"CANCEL_ACTIVITY_SESSION"}).catch(()=>{});
-    });
+    // Do not cancel an activity scan when the Group Finder page navigates
+    // to Activity Lab on the same origin. The previous pagehide event can race
+    // with START_ACTIVITY_CHECK and close the newly opened Facebook tab.
     chrome.runtime.onMessage.addListener((message) => {
       if (!message) return;
       // Background forwards the scanner's RAW_ACTIVITY_* messages. Translate
