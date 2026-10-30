@@ -9,6 +9,10 @@
         window.postMessage({source:"gfp-chrome-helper",type:"STATE",state},WEBSITE_ORIGIN);
       } catch {}
     };
+    chrome.runtime.onMessage.addListener((message) => {
+      if (!message || !["ACTIVITY_RAW_BATCH","ACTIVITY_RAW_COMPLETE","ACTIVITY_RAW_ERROR"].includes(message.type)) return;
+      window.postMessage({source:"gfp-chrome-helper",...message}, WEBSITE_ORIGIN);
+    });
     window.addEventListener("message", async event => {
       if (event.source !== window || event.origin !== WEBSITE_ORIGIN) return;
       const msg = event.data;
@@ -319,6 +323,33 @@
       const collected=new Map();
       let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
+      let rawBatchSequence=0;
+      const captureRawDomBatch=()=>{
+        // Send visible DOM evidence to Activity Lab without classifying posts here.
+        // Nested comment cards are structurally retained but their text/labels are redacted.
+        const feed=document.querySelector('[role="main"]')||document.body;
+        const feedUnits=[...feed.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
+        const articleRoots=[...feed.querySelectorAll('[role="article"]')].filter(visible)
+          .filter(el=>!el.parentElement?.closest('[role="article"]'));
+        const roots=feedUnits.length?feedUnits.slice(0,8):articleRoots.slice(0,8);
+        const snapshots=[];
+        for(const root of roots){
+          const clone=root.cloneNode(true);
+          const nested=[...clone.querySelectorAll('[role="article"]')];
+          nested.forEach((node,index)=>{
+            // Keep the first main article's content; redact nested comment/reply bodies.
+            if(index===0&&clone.matches('[role="article"]'))return;
+            const marker=[...node.querySelectorAll('*')].find(el=>/^view more comments$/i.test((el.innerText||'').trim()));
+            node.replaceChildren();
+            node.setAttribute('data-gfp-comment-content-redacted','true');
+            if(marker){const label=document.createElement('span');label.textContent='View More Comments';label.setAttribute('data-gfp-boundary-marker','true');node.appendChild(label);}
+          });
+          const html=clone.outerHTML||'';
+          if(html)snapshots.push({tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',html:html.slice(0,110000)});
+        }
+        const payload={scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},rootCount:snapshots.length,snapshots};
+        chrome.runtime.sendMessage({type:'RAW_ACTIVITY_BATCH',payload}).catch(()=>{});
+      };
       const collectVisiblePosts=()=>{
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
         // multiple cards and mix one post's timestamp with another post's metrics.
@@ -419,6 +450,7 @@
         return {count:articles.length,oldestVisibleAge:visibleTimestampAges.length?Math.max(...visibleTimestampAges):null,timestampedVisible:visibleTimestampAges.length};
       };
       await sleep(2200);
+      captureRawDomBatch();
       let observed=collectVisiblePosts();
       let consecutiveOldBatches=0;
       for(let step=0;step<60;step++){
@@ -426,6 +458,7 @@
         window.scrollBy({top:Math.max(420,Math.floor(window.innerHeight*0.68)),behavior:"instant"});
         await sleep(900);
         scrollSteps++;
+        captureRawDomBatch();
         observed=collectVisiblePosts();
         if(observed.oldestVisibleAge!=null&&observed.oldestVisibleAge>168)consecutiveOldBatches++;else consecutiveOldBatches=0;
         if(consecutiveOldBatches>=2)break;
@@ -461,6 +494,7 @@
         blocked:false,
         note:"Only visible post timestamps and visible like/comment/share counts were read. No post was opened and no comment or liker list was inspected."
       };
+      chrome.runtime.sendMessage({type:"RAW_ACTIVITY_COMPLETE",payload:{url:report.url,groupName:report.groupName,checkedAt:report.checkedAt,scrollSteps,rawBatchesSent:rawBatchSequence}}).catch(()=>{});
       chrome.runtime.sendMessage({type:"PAGE_DETAILS",...report});return;
     }
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
