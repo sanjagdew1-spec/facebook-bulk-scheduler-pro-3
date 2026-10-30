@@ -47,33 +47,63 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
   if(msg.blocked){await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:{...a,status:"blocked",error:"Facebook login/checkpoint or restricted content blocked the activity scan."}});sendResponse({ok:true,blocked:true});return;}
-  const posts=Array.isArray(msg.recentPosts)?msg.recentPosts:[];
+  const recentPosts=Array.isArray(msg.recentPosts)?msg.recentPosts:[];
+  const weekPosts=Array.isArray(msg.weekPosts)?msg.weekPosts:[];
   const historyData=await chrome.storage.local.get([ACTIVITY_HISTORY_KEY,ACTIVITY_KEY,RESULTS_KEY]);
   const allHistory=historyData[ACTIVITY_HISTORY_KEY]||{};
   const groupHistory=Array.isArray(allHistory[a.group.url])?allHistory[a.group.url]:[];
   const previous=historyData[ACTIVITY_KEY]?.url===a.group.url?historyData[ACTIVITY_KEY]:null;
-  const postKey=p=>String(p.time||"")+"|"+String(p.snippet||"").replace(/\\s+/g," ").slice(0,180);
-  const priorKeys=new Set(groupHistory.flatMap(h=>(h.recentPosts||[]).map(postKey)));
-  const newPosts=posts.filter(p=>!priorKeys.has(postKey(p)));
-  const countKnown=key=>posts.filter(p=>p[key]!=null).length;
-  const sum=key=>posts.reduce((n,p)=>n+(Number(p[key])||0),0);
-  const postScore=Math.min(100,posts.length*12);
-  const reactionScore=countKnown("reactions")?Math.min(100,Math.round(Math.log10(sum("reactions")+1)*25)):null;
-  const commentScore=countKnown("comments")?Math.min(100,Math.round(Math.log10(sum("comments")+1)*30)):null;
-  const shareScore=countKnown("shares")?Math.min(100,Math.round(Math.log10(sum("shares")+1)*35)):null;
-  const knownScores=[postScore,reactionScore,commentScore,shareScore].filter(v=>v!=null);
-  const activityScore=knownScores.length?Math.round(knownScores.reduce((x,y)=>x+y,0)/knownScores.length):null;
-  const completeness=Math.round((Math.min(1,posts.length/5)*40)+(countKnown("reactions")?20:0)+(countKnown("comments")?20:0)+(countKnown("shares")?20:0));
+  const postKey=p=>String(p.postId||((p.time||"")+"|"+(p.ageHours??"")+"|"+(p.likes??"")+"|"+(p.comments??"")+"|"+(p.shares??"")));
+  const priorKeys=new Set(groupHistory.flatMap(h=>[...(h.recentPosts||[]),...(h.weekPosts||[])].map(postKey)));
+  const newRecentPosts=recentPosts.filter(p=>!priorKeys.has(postKey(p)));
+  const newWeekPosts=weekPosts.filter(p=>!priorKeys.has(postKey(p)));
+  const known=(posts,key)=>posts.filter(p=>p[key]!=null).length;
+  const total=(posts,key)=>{const n=known(posts,key);return n?posts.reduce((s,p)=>s+(Number(p[key])||0),0):null;};
+  const metricAvailability=["likes","comments","shares"].filter(k=>known([...recentPosts,...weekPosts],k)>0);
+  const completeness=Math.round((Math.min(1,recentPosts.length/5)*40)+(known(recentPosts,"likes")?20:0)+(known(recentPosts,"comments")?20:0)+(known(recentPosts,"shares")?20:0));
   const results=historyData[RESULTS_KEY]||[];
   const priorGroup=results.find(g=>g.url===a.group.url);
   const previousScore=previous?.evidenceScore??priorGroup?.score??null;
-  // Score only improves when this scan adds verifiable, previously unseen evidence.
-  const newlyExposedMetrics=["reactions","comments","shares"].filter(k=>countKnown(k)>0&&!(previous?.metricAvailability||[]).includes(k));
-  const evidenceUnits=(newPosts.length*8)+(newlyExposedMetrics.length*4)+(msg.baseEvidence?.members!=null&&previous?.baseEvidence?.members==null?3:0);
+  const newMetricTypes=metricAvailability.filter(k=>!(previous?.metricAvailability||[]).includes(k));
+  const evidenceUnits=(newRecentPosts.length*8)+(newWeekPosts.length*2)+(newMetricTypes.length*4);
   const evidenceIncrease=evidenceUnits>0?Math.max(1,Math.min(12,evidenceUnits)):0;
   const evidenceScore=previousScore==null?completeness:Math.min(100,previousScore+evidenceIncrease);
-  const report={...msg,groupName:a.group.name||msg.groupName,url:a.group.url,activityScore,evidenceCompleteness:completeness,baseEvidenceScore:priorGroup?.score??null,previousEvidenceScore:previousScore,evidenceScore,evidenceIncrease,newPostsFound:newPosts.length,metricAvailability:["reactions","comments","shares"].filter(k=>countKnown(k)>0),scanDiagnostics:{scrollSteps:Number(msg.scanDiagnostics?.scrollSteps)||0,articlesObserved:Number(msg.scanDiagnostics?.articlesObserved)||0,uniqueArticleSamples:Number(msg.scanDiagnostics?.uniqueArticleSamples)||0,timestampedArticles:Number(msg.scanDiagnostics?.timestampedArticles)||0,recentPostsFound:posts.length},historyCount:groupHistory.length+1,checkedAt:msg.checkedAt||new Date().toISOString(),status:"complete",note:"Only visible posts and counts were inspected. The scan log records what the extension actually saw; hidden Facebook data is never estimated."};
-  const historyEntry={checkedAt:report.checkedAt,recentPosts:posts,scanDiagnostics:report.scanDiagnostics,newPostsFound:report.newPostsFound,evidenceScore:report.evidenceScore,previousEvidenceScore:report.previousEvidenceScore,evidenceIncrease:report.evidenceIncrease,activityScore:report.activityScore,recentPostsFound:posts.length,metricAvailability:report.metricAvailability};
+  const top=(posts)=>posts.length?[...posts].sort((x,y)=>((y.likes||0)+(y.comments||0)+(y.shares||0))-((x.likes||0)+(x.comments||0)+(x.shares||0)))[0]:null;
+  const report={
+    url:a.group.url,groupName:a.group.name||msg.groupName,
+    checkedAt:msg.checkedAt||new Date().toISOString(),
+    recentPostsFound:recentPosts.length,recentPosts,
+    weekPostsFound:weekPosts.length,weekPosts,
+    recentTopEngagement:msg.recentTopEngagement||top(recentPosts),
+    weekTopEngagement:msg.weekTopEngagement||top(weekPosts),
+    recentTotals:msg.recentTotals||{likes:{count:known(recentPosts,"likes"),total:total(recentPosts,"likes")},comments:{count:known(recentPosts,"comments"),total:total(recentPosts,"comments")},shares:{count:known(recentPosts,"shares"),total:total(recentPosts,"shares")}},
+    weekTotals:msg.weekTotals||{likes:{count:known(weekPosts,"likes"),total:total(weekPosts,"likes")},comments:{count:known(weekPosts,"comments"),total:total(weekPosts,"comments")},shares:{count:known(weekPosts,"shares"),total:total(weekPosts,"shares")}},
+    activityScore:completeness,evidenceCompleteness:completeness,
+    baseEvidenceScore:priorGroup?.score??null,previousEvidenceScore:previousScore,
+    evidenceScore,evidenceIncrease,newPostsFound:newRecentPosts.length+newWeekPosts.length,
+    newRecentPostsFound:newRecentPosts.length,newWeekPostsFound:newWeekPosts.length,
+    metricAvailability,
+    scanDiagnostics:{
+      scrollSteps:Number(msg.scanDiagnostics?.scrollSteps)||0,
+      articlesObserved:Number(msg.scanDiagnostics?.articlesObserved)||0,
+      uniqueArticleSamples:Number(msg.scanDiagnostics?.uniqueArticleSamples)||0,
+      timestampedArticles:Number(msg.scanDiagnostics?.timestampedArticles)||0,
+      recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,
+      oldestAgeHours:Number(msg.scanDiagnostics?.oldestAgeHours)||0,
+      olderThanSevenDaysSeen:Boolean(msg.scanDiagnostics?.olderThanSevenDaysSeen)
+    },
+    historyCount:groupHistory.length+1,status:"complete",
+    note:"Only visible timestamps and visible like/comment/share counts were inspected on the group page. No post was opened; comments, liker lists and share destinations were not inspected. Missing counts are Not available."
+  };
+  const historyEntry={
+    checkedAt:report.checkedAt,recentPosts,weekPosts,
+    scanDiagnostics:report.scanDiagnostics,
+    newRecentPostsFound:report.newRecentPostsFound,newWeekPostsFound:report.newWeekPostsFound,
+    evidenceScore:report.evidenceScore,previousEvidenceScore:report.previousEvidenceScore,
+    evidenceIncrease:report.evidenceIncrease,activityScore:report.activityScore,
+    recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,
+    metricAvailability:report.metricAvailability
+  };
   const nextHistory={...allHistory,[a.group.url]:[...groupHistory,historyEntry].slice(-30)};
   report.scanHistory=nextHistory[a.group.url];
   await chrome.storage.local.set({[ACTIVITY_KEY]:report,[ACTIVITY_HISTORY_KEY]:nextHistory,[ACTIVITY_JOB_KEY]:{...a,status:"complete",finishedAt:Date.now()}});
