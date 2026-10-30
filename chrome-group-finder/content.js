@@ -156,10 +156,12 @@
       };
       const postHeaderTimeNodes=(article)=>{
         const bounds=postHeaderBounds(article);
+        // Only timestamps physically inside the main post header are eligible.
+        // Anything at/below the media belongs to the comment/action region and is ignored.
         return postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')
           .filter(el=>{
-            const y=el.getBoundingClientRect().top;
-            return y>=bounds.lower&&y<bounds.boundary;
+            const r=el.getBoundingClientRect();
+            return r.top>=bounds.lower&&r.bottom<=bounds.boundary;
           })
           .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
       };
@@ -300,9 +302,14 @@
         return candidates[0]?.label||"Not available";
       };
       const postPreview=(article)=>{
-        // Only use Facebook's explicit visible story-message containers.
-        // Do not fall back to the whole article, which may include comments.
-        const nodes=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
+        // Only read the main story text before the main media / comment cutoff.
+        // Never fall back to article text, which can contain nested comments.
+        const media=mediaAnchor(article);
+        if(!media)return "Not available";
+        const mediaTop=media.getBoundingClientRect().top;
+        const cutoff=commentsBoundary(article,media.getBoundingClientRect().bottom);
+        const nodes=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
+          .filter(el=>el.getBoundingClientRect().bottom<=mediaTop&&el.getBoundingClientRect().top<cutoff);
         const value=nodes.map(el=>(el.innerText||"").replace(/\s+/g," ").trim()).find(t=>t.length>0);
         return value?value.slice(0,220):"Not available";
       };
@@ -318,13 +325,29 @@
         // an extra article, fall back only to nested cards with an explicit story body.
         const topLevel=allArticles.filter(el=>!el.parentElement?.closest('[role="article"]'));
         const timeSelector='abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]';
-        let articles=topLevel.filter(el=>postNodes(el,timeSelector).length>0);
+        // A candidate must look like a complete main feed post: a substantial
+        // main photo/video, its own header timestamp above that media, and the
+        // visible "View More Comments" cutoff below the first action area.
+        // Comment/reply cards do not satisfy this combination and are discarded.
+        const isCompleteMainPost=el=>{
+          const media=mediaAnchor(el);
+          if(!media)return false;
+          const mediaBottom=media.getBoundingClientRect().bottom;
+          const hasHardCommentCutoff=Number.isFinite(commentsBoundary(el,mediaBottom));
+          const hasHeaderTime=postHeaderTimeNodes(el).length>0;
+          return hasHardCommentCutoff&&hasHeaderTime;
+        };
+        let articles=topLevel.filter(el=>isCompleteMainPost(el));
         if(!articles.length){
-          const nestedWithStory=allArticles.filter(el=>el.parentElement?.closest('[role="article"]')&&postNodes(el,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]').length>0&&postNodes(el,timeSelector).length>0);
+          const nestedWithStory=allArticles.filter(el=>
+            el.parentElement?.closest('[role="article"]')&&
+            postNodes(el,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]').length>0&&
+            isCompleteMainPost(el));
           articles=nestedWithStory;
         }
+        // Do not fall back to generic FeedUnit wrappers: they can contain
+        // multiple posts and nested comment timestamps, which caused false rows.
         nestedArticlesExcluded=Math.max(nestedArticlesExcluded,allArticles.length-articles.length);
-        if(!articles.length)articles=[...document.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
         articlesObserved=Math.max(articlesObserved,articles.length);
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
@@ -351,7 +374,11 @@
           const monthDate=absoluteLabel.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}(?:\s+at\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?/i);
           const absoluteStamp=monthDate?Date.parse(monthDate[0].replace(/\s+at\s+/i," ")):Date.parse(String(absoluteLabel||"").replace(/\s+at\s+/i," "));
           const exactAgeHours=Number.isFinite(absoluteStamp)?(Date.now()-absoluteStamp)/3600000:null;
-          const age=exactAgeHours!=null&&exactAgeHours>=0?exactAgeHours:parseAgeHours(relativeLabel||timeLabel,article,primaryTimeEl);
+          // The visible relative label on the main header is the primary age
+          // signal (e.g. 12h). Ancestor hover metadata can belong to a different
+          // nested element, so an absolute date must never override that label.
+          const relativeAge=parseAgeHours(relativeLabel,article,primaryTimeEl);
+          const age=relativeAge!=null?relativeAge:(exactAgeHours!=null&&exactAgeHours>=0?exactAgeHours:parseAgeHours(timeLabel,article,primaryTimeEl));
           if(age==null)continue;
           timestampedArticles++;
           visibleTimestampAges.push(age);
@@ -406,9 +433,14 @@
       const recentPosts=all.filter(p=>p.ageHours<=24);
       const totals=(posts,key)=>{const known=posts.filter(p=>p[key]!=null);return {count:known.length,total:known.length?known.reduce((n,p)=>n+p[key],0):null};};
       const maxEngagement=(posts)=>{
-        if(!posts.length)return null;
-        return posts.map(p=>({...p,engagementTotal:[p.likes,p.comments,p.shares].reduce((n,v)=>n+(v||0),0)}))
-          .sort((a,b)=>b.engagementTotal-a.engagementTotal)[0];
+        // Unknown metrics are not zero. If no real count was captured, do not
+        // manufacture a "highest engagement" post from missing values.
+        const scored=posts.map(p=>{
+          const known=[p.likes,p.comments,p.shares].filter(v=>v!=null);
+          return {...p,engagementTotal:known.length?known.reduce((n,v)=>n+v,0):null,knownMetricCount:known.length};
+        }).filter(p=>p.engagementTotal!=null);
+        if(!scored.length)return null;
+        return scored.sort((a,b)=>b.engagementTotal-a.engagementTotal)[0];
       };
       const report={
         url:groupUrl(location.href),
