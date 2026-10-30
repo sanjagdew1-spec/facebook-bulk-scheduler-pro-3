@@ -167,8 +167,8 @@
         if(!bar)return null;
         const nodes=[bar,...bar.querySelectorAll('[aria-label],[title]')];
         const patterns=[
-          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s*"+names+"\\\\b","i"),
-          new RegExp("\\\\b"+names+"\\\\s*(\\\\d[\\\\d,.]*\\\\s*[KMB]?)","i")
+          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
+          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
         ];
         for(const el of nodes){
           const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ");
