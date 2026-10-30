@@ -47,6 +47,10 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
   sendResponse({ok:true,message:"Opened the selected Facebook group in a new tab. Activity scan started."});return;
  }
+ if(msg.type==="CLEAR_ACTIVITY_STORAGE"){
+  await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
+  sendResponse({ok:true,cleared:true});return;
+ }
  if(msg.type==="CANCEL_ACTIVITY_SESSION"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(a?.fbTabId){try{await chrome.tabs.remove(a.fbTabId)}catch{}}
