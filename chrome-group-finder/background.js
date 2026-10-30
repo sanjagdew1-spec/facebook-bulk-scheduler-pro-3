@@ -99,6 +99,10 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
       authorsIdentified:Number(msg.scanDiagnostics?.authorsIdentified)||0,
       authorsUnavailable:Number(msg.scanDiagnostics?.authorsUnavailable)||0,
       nestedArticlesExcluded:Number(msg.scanDiagnostics?.nestedArticlesExcluded)||0,
+      mediaAnchorsFound:Number(msg.scanDiagnostics?.mediaAnchorsFound)||0,
+      viewMoreBoundariesFound:Number(msg.scanDiagnostics?.viewMoreBoundariesFound)||0,
+      commentComposersFound:Number(msg.scanDiagnostics?.commentComposersFound)||0,
+      actionRowsFound:Number(msg.scanDiagnostics?.actionRowsFound)||0,
       recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,
       oldestAgeHours:Number(msg.scanDiagnostics?.oldestAgeHours)||0,
       olderThanSevenDaysSeen:Boolean(msg.scanDiagnostics?.olderThanSevenDaysSeen)
