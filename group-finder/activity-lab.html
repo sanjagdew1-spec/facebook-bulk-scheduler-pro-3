@@ -67,20 +67,25 @@ function waitForActivityBridge(timeoutMs=10000){
   const timeoutTimer=setTimeout(()=>finish(new Error('Chrome Helper did not become ready. Check that the Group Finder Pro extension is enabled and its site access includes this website.')),timeoutMs);
  });
 }
-async function createActivitySession(){
- const response=await fetch(ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
- const data=await response.json();if(!response.ok||!data.sessionId)throw new Error(data.error||'Could not create temporary Activity Lab session.');
- activitySessionId=data.sessionId;activityBatchCount=0;activityRawBytes=0;activityUploadQueue=Promise.resolve();activityExpiresAt=Date.now()+300000;
+function activateActivitySession(sessionId){
+ activitySessionId=sessionId;activityBatchCount=0;activityRawBytes=0;activityUploadQueue=Promise.resolve();activityExpiresAt=Date.now()+300000;
  if(activityNoDataTimer)clearTimeout(activityNoDataTimer);
  activityNoDataTimer=setTimeout(()=>{
-  if(activitySessionId===data.sessionId&&activityBatchCount===0){
+  if(activitySessionId===sessionId&&activityBatchCount===0){
    $('activityStatus').textContent='NO DATA RECEIVED';
    $('activitySummary').textContent='The Facebook tab opened, but no scan batch reached Activity Lab. The extension did not send any scan data. Check the Facebook tab and extension status, then retry.';
   }
  },15000);
+ if(activityExpiryTimer)clearTimeout(activityExpiryTimer);
  activityExpiryTimer=setTimeout(expireActivityNow,300000);
+}
+async function createActivitySession(){
+ const response=await fetch(ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+ const data=await response.json();if(!response.ok||!data.sessionId)throw new Error(data.error||'Could not create temporary Activity Lab session.');
+ activateActivitySession(data.sessionId);
  return data;
 }
+
 function receiveRawActivityBatch(payload){
  const id=activitySessionId;if(!id||!payload)return activityUploadQueue;
  activityUploadQueue=activityUploadQueue.catch(()=>{}).then(async()=>{
@@ -202,16 +207,23 @@ async function analyzeTemporarySession(meta){
 }
 $('startActivityScan').onclick=async()=>{
  const name=$('gname').value.trim(),url=$('gurl').value.trim();
- try{const u=new URL(url);if(!['facebook.com','www.facebook.com','m.facebook.com'].includes(u.hostname.toLowerCase())||!/^\/groups\/[^/]+/.test(u.pathname))throw Error();}
+ try{const u=new URL(url);if(!/(^|\\.)facebook\\.com$/i.test(u.hostname)||!/^\\/groups\\/[^/]+/.test(u.pathname))throw Error();}
  catch{$('saveToast').textContent='Enter a valid Facebook Group URL first.';$('saveToast').classList.add('show');return;}
- $('activityReport').style.display='block';$('activityStatus').textContent='STARTING';$('activitySummary').textContent='Clearing previous scan and creating a temporary session…';
+ $('activityReport').style.display='block';$('activityStatus').textContent='STARTING';$('activitySummary').textContent='Checking Chrome extension connection…';
  try{
-  $('activitySummary').textContent='Checking Chrome extension connection…';
   await waitForActivityBridge();
   await deleteActivitySession(false);
   const session=await createActivitySession();
   $('activitySummary').textContent='Temporary session created. Opening the selected Facebook Group in a new tab…';
-  window.postMessage({source:'top-facebook-group-finder',type:'START_ACTIVITY_CHECK',payload:{group:{name:name||'Selected Facebook Group',url},sessionId:session.sessionId}},location.origin);
+  await new Promise((resolve,reject)=>{
+   let settled=false;
+   const finish=(error)=>{if(settled)return;settled=true;clearTimeout(timer);window.removeEventListener('message',onLaunch);error?reject(error):resolve();};
+   const onLaunch=event=>{if(event.source!==window||event.origin!==location.origin||event.data?.source!=='gfp-chrome-helper')return;if(event.data.type==='STARTED')finish();if(event.data.type==='ERROR')finish(new Error(event.data.error||'Could not open Facebook Group.'));};
+   window.addEventListener('message',onLaunch);
+   const timer=setTimeout(()=>finish(new Error('Chrome Helper did not confirm the Facebook tab opened.')),8000);
+   window.postMessage({source:'top-facebook-group-finder',type:'START_ACTIVITY_CHECK',payload:{group:{name:name||'Selected Facebook Group',url},sessionId:session.sessionId}},location.origin);
+  });
+  $('activityStatus').textContent='CHECKING';$('activitySummary').textContent='Facebook Group opened in a new tab. Waiting for visible feed data…';
  }catch(error){$('activityStatus').textContent='ERROR';$('activitySummary').textContent=String(error);}
 };
 window.addEventListener('message',async event=>{
@@ -242,10 +254,15 @@ window.addEventListener('message',async event=>{
 const activityParams=new URLSearchParams(location.search);
 const activityGroupName=activityParams.get('groupName')||'';
 const activityGroupUrl=activityParams.get('groupUrl')||'';
+const existingActivitySessionId=activityParams.get('sessionId')||'';
 if(activityGroupUrl){
  $('gname').value=activityGroupName;
  $('gurl').value=activityGroupUrl;
- if(activityParams.get('autostart')==='1')setTimeout(()=>$('startActivityScan').click(),250);
+ if(existingActivitySessionId){
+  activateActivitySession(existingActivitySessionId);
+  $('activityStatus').textContent='CHECKING';
+  $('activitySummary').textContent='Facebook Group tab opened. Waiting for visible feed data…';
+ }else if(activityParams.get('autostart')==='1')setTimeout(()=>$('startActivityScan').click(),250);
 }
 $('clear').onclick=()=>{if(confirm('Clear the saved Group list in this browser?')){localStorage.removeItem('gfp_shortlist');render();$('saveToast').textContent='Saved list cleared.';$('saveToast').classList.add('show')}};$('savedJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});$('activityJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});render();
 </script><!-- Render auto-deploy refresh: Activity Lab visible report section -->
