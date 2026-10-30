@@ -45,6 +45,12 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
   sendResponse({ok:true,message:"Opened the selected Facebook group in a new tab. Activity scan started."});return;
  }
+ if(msg.type==="CANCEL_ACTIVITY_SESSION"){
+  const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
+  if(a?.fbTabId){try{await chrome.tabs.remove(a.fbTabId)}catch{}}
+  await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
+  sendResponse({ok:true,cleared:true});return;
+ }
  if(msg.type==="RAW_ACTIVITY_BATCH"||msg.type==="RAW_ACTIVITY_COMPLETE"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
@@ -55,6 +61,13 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   return;
  }
  if(msg.type==="PAGE_DETAILS"){
+  const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
+  if(a&&sender.tab?.id===a.fbTabId){
+   // Never persist the extracted activity report or scan history in extension storage.
+   await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
+   sendResponse({ok:true,temporaryOnly:true});return;
+  }
+
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
   const selectedUrl=canonicalGroupUrl(a.group.url);
