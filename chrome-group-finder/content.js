@@ -358,11 +358,21 @@
         // Nested comment cards are structurally retained but their text/labels are redacted.
         const feed=document.querySelector('[role="main"]')||document.body;
         const feedUnits=[...feed.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
+        // Only snapshot cards that actually intersect the browser viewport.
+        // The old CSS-visible check included off-screen feed cards, and slice(0,3)
+        // repeatedly captured the first three posts on every scroll.
+        const intersectsViewport=el=>{
+          const r=el.getBoundingClientRect();
+          return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth;
+        };
         const articleRoots=[...feed.querySelectorAll('[role="article"]')].filter(visible)
-          .filter(el=>!el.parentElement?.closest('[role="article"]'));
+          .filter(el=>!el.parentElement?.closest('[role="article"]'))
+          .filter(intersectsViewport);
         const dataFtRoots=[...feed.querySelectorAll('[data-ft]')].filter(visible)
-          .filter(el=>!el.parentElement?.closest('[data-ft]'));
-        const roots=articleRoots.length?articleRoots.slice(0,3):(feedUnits.length?feedUnits.slice(0,3):dataFtRoots.slice(0,3));
+          .filter(el=>!el.parentElement?.closest('[data-ft]'))
+          .filter(intersectsViewport);
+        const feedUnitRoots=feedUnits.filter(intersectsViewport);
+        const roots=(articleRoots.length?articleRoots:(feedUnitRoots.length?feedUnitRoots:dataFtRoots)).slice(0,8);
         const snapshots=[];
         for(const root of roots){
           const clone=root.cloneNode(true);
@@ -377,7 +387,21 @@
             if(marker){const label=document.createElement('span');label.textContent='View More Comments';label.setAttribute('data-gfp-boundary-marker','true');node.appendChild(label);}
           });
           const html=clone.outerHTML||'';
-          if(html)snapshots.push({tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',html:html.slice(0,45000)});
+          if(html){
+            const permalink=root.querySelector('a[href*="/posts/"],a[href*="/permalink/"],a[href*="story_fbid"]')?.getAttribute('href')||'';
+            const dataFt=root.getAttribute('data-ft')||root.querySelector('[data-ft]')?.getAttribute('data-ft')||'';
+            let stableFt='';
+            try{
+              const parsed=JSON.parse(dataFt);
+              stableFt=String(parsed.mf_story_key||parsed.story_fbid||parsed.feedback_id||parsed.post_id||'');
+            }catch{stableFt=(dataFt.match(/(?:mf_story_key|story_fbid|feedback_id|post_id)["':= ]+([0-9]+)/i)||[])[1]||'';}
+            const author=root.querySelector('a[href*="profile.php"],a[href*="/people/"]')||[...root.querySelectorAll('a[href]')].find(a=>/^\/[^/]+\/?$/.test(new URL(a.href,location.origin).pathname));
+            const timeNode=root.querySelector('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]');
+            const story=root.querySelector('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
+            const fallback=[author?.getAttribute('href')||'',timeNode?.getAttribute('data-utime')||timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.innerText||'',(story?.innerText||'').replace(/\\s+/g,' ').trim().slice(0,300)].join('|');
+            const snapshotKey=permalink?'url:'+permalink:stableFt?'story:'+stableFt:'fallback:'+fallback;
+            snapshots.push({snapshotKey,tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',html:html.slice(0,45000)});
+          }
         }
         const firstScreenshot=initialVisualScreenshot;initialVisualScreenshot="";
         const payload={scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},rootCount:snapshots.length,snapshots,...(firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})};
