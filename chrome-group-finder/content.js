@@ -190,7 +190,7 @@
         let articles=[...document.querySelectorAll('[role="article"]')].filter(visible);
         if(!articles.length)articles=[...document.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
         // Drop nested duplicate article wrappers; each remaining node represents one card.
-        articles=articles.filter(el=>!el.parentElement?.closest('[role="article"]'));
+        articles=articles.filter(el=>!el.querySelector('[role="article"]'));
         articlesObserved=Math.max(articlesObserved,articles.length);
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
