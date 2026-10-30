@@ -221,10 +221,11 @@
         return candidates[0]?.getBoundingClientRect().top??null;
       };
       const actionKind=(el)=>{
-        const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.getAttribute?.("data-testid"),el.getAttribute?.("data-tooltip-content"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ").toLowerCase();
-        if(/\\b(like|liked|reaction|reactions)\\b/.test(label))return "likes";
-        if(/\\b(comment|comments|reply)\\b/.test(label))return "comments";
-        if(/\\b(share|shared)\\b/.test(label))return "shares";
+        const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.getAttribute?.("data-testid"),el.getAttribute?.("data-tooltip-content"),el.innerText].filter(Boolean).join(" ").toLowerCase();
+        // Reply is a comment-level action, not the main post's Comment control.
+        if(label.includes("like")||label.includes("reaction"))return "likes";
+        if(label.includes("comment"))return "comments";
+        if(label.includes("share"))return "shares";
         return null;
       };
       const postActionBar=(article)=>{
