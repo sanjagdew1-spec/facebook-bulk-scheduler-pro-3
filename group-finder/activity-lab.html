@@ -117,11 +117,22 @@ async function analyzeTemporarySession(meta){
  const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary session expired before analysis.');
  const batches=data.batches||[];const visualScreenshots=[];let snapshots=0,htmlBytes=0,articleNodes=0,timeNodes=0,actionSignals=0,viewMoreMarkers=0,feedUnits=0;
  const sampleTexts=[],snapshotEvidence=[];
+ // Merge repeated views of the same post across overlapping scroll windows.
+ // Keep the richest/fullest DOM copy, so a tall post seen in two partial
+ // viewport positions is represented once rather than as two half-snapshots.
+ const uniqueSnapshotMap=new Map();
  for(const batch of batches){
   if(typeof batch.screenshotDataUrl==='string'&&batch.screenshotDataUrl.startsWith('data:image/jpeg;base64,')){
    visualScreenshots.push({scrollStep:Number(batch.scrollStep||0),capturedAt:batch.screenshotCapturedAt||batch.capturedAt||'',dataUrl:batch.screenshotDataUrl});
   }
-  for(const snap of (batch.snapshots||[])){
+  (batch.snapshots||[]).forEach((snap,index)=>{
+   const key=String(snap.snapshotKey||('legacy:'+batch.scrollStep+':'+index));
+   const previous=uniqueSnapshotMap.get(key);
+   if(!previous||String(snap.html||'').length>String(previous.html||'').length)uniqueSnapshotMap.set(key,snap);
+  });
+ }
+ const uniqueSnapshots=[...uniqueSnapshotMap.values()];
+ for(const snap of uniqueSnapshots){
    snapshots++;htmlBytes+=String(snap.html||'').length;
    const doc=new DOMParser().parseFromString(String(snap.html||''),'text/html');
    articleNodes+=doc.querySelectorAll('[role="article"]').length;
@@ -200,14 +211,12 @@ async function analyzeTemporarySession(meta){
    return {author:(authorLink?.innerText||authorLink?.textContent||'').trim()||'Not available',time:time||'Not available',ageHours:age,preview:preview||'Not available',likes:extractMetric(article,'likes',contentAnchor,marker),comments:extractMetric(article,'comments',contentAnchor,marker),shares:extractMetric(article,'shares',contentAnchor,marker),postId:(authorLink?.getAttribute('href')||'')+'|'+time+'|'+preview,photoCount:article.querySelectorAll('img').length,videoCount:article.querySelectorAll('video,[role="img"]').length};
   });
  };
- for(const batch of batches){
-  for(const snap of (batch.snapshots||[])){
+ for(const snap of uniqueSnapshots){
    for(const row of analyzeSnapshot(snap)){
     if(row.ageHours==null||row.ageHours>168)continue;
     const key=String(row.postId||'').slice(0,500);if(seen.has(key))continue;seen.add(key);
     row.feedOrder=++feedOrder;rows.push(row);
    }
-  }
  }
  const recent=rows.filter(p=>p.ageHours<=24),week=rows.filter(p=>p.ageHours>24&&p.ageHours<=168);
  const totals=(items,key)=>{const values=items.map(x=>x[key]).filter(v=>v!=null);return {count:values.length,total:values.length?values.reduce((a,b)=>a+b,0):null};};
