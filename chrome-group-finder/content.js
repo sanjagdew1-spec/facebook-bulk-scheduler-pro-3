@@ -247,7 +247,7 @@
             const text=(group.innerText||"").replace(/\\s+/g," ").trim();
             // A row needs at least two recognizable action controls, or an explicit
             // Facebook action-row test id. This avoids selecting comment text blocks.
-            return kinds.size>=2||/ufi_action|post_action|social_actions/i.test(String(group.getAttribute("data-testid")||""));
+            return (kinds.has("likes")&&kinds.has("comments")&&kinds.has("shares"))||/ufi_action|post_action|social_actions/i.test(String(group.getAttribute("data-testid")||""));
           })
           .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top||
             a.getBoundingClientRect().height-b.getBoundingClientRect().height);
@@ -401,7 +401,21 @@
             const fallbackText=(story?.innerText||root.innerText||'').replace(/\\s+/g,' ').trim().slice(0,300);
             const fallback=[author?.getAttribute('href')||'',timeNode?.getAttribute('data-utime')||timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.innerText||'',fallbackText].join('|');
             const snapshotKey=permalink?'url:'+permalink:stableFt?'story:'+stableFt:'fallback:'+fallback;
-            snapshots.push({snapshotKey,tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',html:html.slice(0,45000)});
+            const headerTimeNodes=postHeaderTimeNodes(root);
+            const postTimeNode=headerTimeNodes[0]||null;
+            const postTime=[postTimeNode?.innerText,postTimeNode?.getAttribute('aria-label'),postTimeNode?.getAttribute('title'),postTimeNode?.getAttribute('datetime'),postTimeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
+            const postData={
+              author:postAuthor(root),
+              time:postTime||'Not available',
+              ageHours:parseAgeHours(postTime,root,postTimeNode),
+              preview:postPreview(root),
+              likes:metric(root,'likes').value,
+              comments:metric(root,'comments').value,
+              shares:metric(root,'shares').value,
+              photoCount:root.querySelectorAll('img').length,
+              videoCount:root.querySelectorAll('video,[role="img"]').length
+            };
+            snapshots.push({snapshotKey,tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',postData,html:html.slice(0,45000)});
           }
         }
         const firstScreenshot=initialVisualScreenshot;initialVisualScreenshot="";
