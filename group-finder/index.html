@@ -116,6 +116,16 @@ window.addEventListener('message',event=>{
  if(event.data.type==='ERROR'&&gfpPending){const pending=gfpPending;gfpPending=null;clearTimeout(pending.timer);pending.reject(new Error(event.data.error||'Chrome search could not start.'));return;}
  if(event.data.type!=='STATE')return;
  const state=event.data.state||{},job=state.job,rows=state.results||[];
+ const activity=state.activityReport,activityJob=state.activityJob;
+ if(activity&&window.__gfpCurrentActivityUrl===activity.url)renderActivityReport(activity);
+ if(activityJob&&window.__gfpCurrentActivityUrl===activityJob.group?.url&&activityJob.status==="blocked"){
+   const scanHost=document.getElementById('activityScanResult');
+   if(scanHost)scanHost.innerHTML='<p class="detail-note">Activity scan paused: '+escapeHtml(activityJob.error||'Facebook restricted the visible page. Complete any normal Facebook check yourself, then rescan.')+'</p>';
+ }
+ if(activityJob&&window.__gfpCurrentActivityUrl===activityJob.group?.url&&activityJob.status==="checking"){
+   const scanHost=document.getElementById('activityScanResult');
+   if(scanHost&&!activity)scanHost.innerHTML='<p class="detail-note">The selected group is open in a separate Facebook tab. The extension is checking visible posts from the last 24 hours. Return here to see the report.</p>';
+ }
  const status=document.getElementById('searchStatus');
  if(job?.message&&status)status.innerHTML='<span>⌕</span><div>'+escapeHtml(job.message)+'</div>';
  if(gfpPending&&event.data?.type==='ERROR'){
