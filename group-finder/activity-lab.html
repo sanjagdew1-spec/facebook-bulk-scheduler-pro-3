@@ -153,12 +153,16 @@ async function analyzeTemporarySession(meta){
   if(!m)return null;return Math.round(Number(m[1])*({K:1000,M:1000000,B:1000000000}[(m[2]||'').toUpperCase()]||1));
  };
  const parseAge=(value)=>{
-  const t=String(value||'').toLowerCase();
-  if(/just now|\bnow\b/.test(t))return 0;
+  const t=String(value||'').toLowerCase().replace(/\\s+/g,' ').trim();
+  if(/just now|\\bnow\\b|moments? ago/.test(t))return 0;
+  const compact=t.match(/\\b(\\d+)\\s*([mhdw])\\b/);
+  if(compact){const n=Number(compact[1]),u=compact[2];return u==='m'?n/60:u==='h'?n:u==='d'?n*24:n*168;}
+  const m=t.match(/(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\\b/);
+  if(m){const n=Number(m[1]),u=m[2];return /^(m|min|mins|minute|minutes)$/.test(u)?n/60:/^(h|hr|hrs|hour|hours)$/.test(u)?n:/^(d|day|days)$/.test(u)?n*24:n*168;}
   if(/yesterday/.test(t))return 24;
-  const m=t.match(/(\d+)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\b/);
-  if(!m)return null;const n=Number(m[1]),u=m[2];
-  return /^(m|min|mins|minute|minutes)$/.test(u)?n/60:/^(h|hr|hrs|hour|hours)$/.test(u)?n:/^(d|day|days)$/.test(u)?n*24:n*168;
+  const dated=t.match(/(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2},?\\s+\\d{4}(?:\\s+at\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm))?/i)||t.match(/(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2},?\\s+\\d{4}(?:\\s+at\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm))?/i);
+  if(dated){const stamp=Date.parse(dated[0]),age=(Date.now()-stamp)/3600000;if(Number.isFinite(stamp)&&age>=0)return age;}
+  return null;
  };
  const rows=[],seen=new Set();let feedOrder=0;
  const extractMetric=(article,kind,afterNode,cutoffNode)=>{
@@ -193,21 +197,28 @@ async function analyzeTemporarySession(meta){
    const story=article.querySelector('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
    const contentAnchor=story||article.querySelector('img,video,[role="img"]');
    const beforeAnchor=(node)=>!contentAnchor||Boolean(node.compareDocumentPosition(contentAnchor)&Node.DOCUMENT_POSITION_FOLLOWING);
+   const labels=[article.getAttribute('aria-label'),article.getAttribute('title'),...([...article.querySelectorAll('[aria-label],[title]')].map(el=>el.getAttribute('aria-label')||el.getAttribute('title')))].filter(Boolean);
+   const accessibleText=labels.join(' · ');
    const authorLink=[...article.querySelectorAll('a[href]')].find(a=>{
     if(!beforeAnchor(a))return false;
     const href=a.getAttribute('href')||'',label=(a.innerText||a.textContent||'').trim();
-    return label.length>=2&&label.length<=90&&(/profile\.php|^\/people\//i.test(href)||(/^\/[^/]+\/?$/.test(href)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(href)));
+    return label.length>=2&&label.length<=90&&(/profile\\.php|^\\/people\\//i.test(href)||(/^\\/[^/]+\\/?$/.test(href)&&!/^\\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\\//i.test(href)));
    });
-   const timeNode=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]')].find(beforeAnchor);
-   const time=[timeNode?.innerText||timeNode?.textContent,timeNode?.getAttribute('aria-label'),timeNode?.getAttribute('title'),timeNode?.getAttribute('datetime'),timeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
+   const authorMatch=accessibleText.match(/(?:comment|post|photo|video)\\s+by\\s+(.+?)(?=\\s+(?:\\d+\\s*(?:minutes?|mins?|hours?|hrs?|days?|weeks?|[mhdw])|a day|yesterday|on\\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\\b|$)/i);
+   const author=(authorLink?.innerText||authorLink?.textContent||authorMatch?.[1]||'').trim();
+   const timeSelector='abbr[title],time[datetime],[data-utime],a[aria-label],span[aria-label],[aria-label*="ago" i],[aria-label*="yesterday" i]';
+   const timeNode=[...article.querySelectorAll(timeSelector)].find(el=>beforeAnchor(el)&&/(?:\\b\\d+\\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\\b|\\b[0-9]+[mhdw]\\b|yesterday|\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\b|\\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))/i.test([el.innerText,el.textContent,el.getAttribute('aria-label'),el.getAttribute('title')].filter(Boolean).join(' ')));
+   const time=[timeNode?.innerText||timeNode?.textContent,timeNode?.getAttribute('aria-label'),timeNode?.getAttribute('title'),timeNode?.getAttribute('datetime'),timeNode?.getAttribute('data-utime'),accessibleText].filter(Boolean).join(' · ').trim();
    const relativeAge=parseAge(time);
    const unix=Number(timeNode?.getAttribute('data-utime'));
-   const absoluteTime=timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.getAttribute('aria-label')||'';
+   const absoluteTime=timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.getAttribute('aria-label')||accessibleText;
    const dateStamp=Date.parse(absoluteTime);
    const age=relativeAge!=null?relativeAge:(unix>0?(Date.now()-unix*1000)/3600000:(Number.isFinite(dateStamp)?(Date.now()-dateStamp)/3600000:null));
-   const preview=(story?.innerText||story?.textContent||'').replace(/\s+/g,' ').trim().slice(0,220);
+   const preview=(story?.innerText||story?.textContent||article.innerText||article.textContent||'').replace(/\\s+/g,' ').trim().slice(0,220);
    const marker=[...article.querySelectorAll('[data-gfp-boundary-marker="true"]')][0]||null;
-   return {author:(authorLink?.innerText||authorLink?.textContent||'').trim()||'Not available',time:time||'Not available',ageHours:age,preview:preview||'Not available',likes:extractMetric(article,'likes',contentAnchor,marker),comments:extractMetric(article,'comments',contentAnchor,marker),shares:extractMetric(article,'shares',contentAnchor,marker),postId:(authorLink?.getAttribute('href')||'')+'|'+time+'|'+preview,photoCount:article.querySelectorAll('img').length,videoCount:article.querySelectorAll('video,[role="img"]').length};
+   const authorHref=authorLink?.getAttribute('href')||'';
+   const normalizedPreview=preview.replace(/(?:like|reply|share|comment)\\b.*$/i,'').replace(/\\s+/g,' ').trim().slice(0,180);
+   return {author:author||'Not available',time:time||'Not available',ageHours:age,preview:normalizedPreview||'Not available',likes:extractMetric(article,'likes',contentAnchor,marker),comments:extractMetric(article,'comments',contentAnchor,marker),shares:extractMetric(article,'shares',contentAnchor,marker),postId:(authorHref||author.toLowerCase())+'|'+(age==null?time:Math.round(age*2)/2)+'|'+normalizedPreview,photoCount:article.querySelectorAll('img').length,videoCount:article.querySelectorAll('video,[role="img"]').length};
   });
  };
  for(const snap of uniqueSnapshots){
