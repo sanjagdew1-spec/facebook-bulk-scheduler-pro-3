@@ -128,9 +128,11 @@
         if(!m)return null;
         return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));
       };
+      const belongsToPost=(el,article)=>el.closest('[role="article"]')===article;
+      const postNodes=(article,selector)=>[...article.querySelectorAll(selector)].filter(el=>visible(el)&&belongsToPost(el,article));
       const metric=(article,kind)=>{
         const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
-        const nodes=[...article.querySelectorAll("[aria-label],[title]")].filter(visible);
+        const nodes=postNodes(article,"[aria-label],[title]");
         // Prefer explicit accessible labels on visible metric controls/counts.
         // Do not scan arbitrary post body text for numbers.
         for(const el of nodes){
@@ -143,7 +145,7 @@
           for(const re of patterns){const m=label.match(re);if(m)return parseCount(m[1]);}
         }
         // Conservative fallback: visible footer/action controls only.
-        const footer=[...article.querySelectorAll('[role="group"],[aria-label*="comment" i],[aria-label*="share" i],[aria-label*="like" i]')].filter(visible);
+        const footer=postNodes(article,'[role="group"],[aria-label*="comment" i],[aria-label*="share" i],[aria-label*="like" i]');
         const text=footer.map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" ")).join(" ").replace(/\s+/g," ");
         const patterns=[
           new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
@@ -182,54 +184,47 @@
         return null;
       };
       const postAuthor=(article)=>{
-        // Read the author only from the visible header area of this individual post card.
-        // Facebook changes its markup frequently: support semantic profile labels,
-        // profile links, role=link nodes and heading/strong wrappers.
-        // Never inspect commenter/reaction lists or open any post.
+        // Strictly read the visible author header of the top-level post card.
+        // Never use names from nested comment/reply articles or arbitrary bold text.
         const cardTop=article.getBoundingClientRect().top;
-        const selectors='[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i],[data-testid*="story-subtitle" i],a[href],[role="link"],h2,h3,strong';
-        const candidates=[...article.querySelectorAll(selectors)].filter(visible);
-        const ranked=candidates.map(el=>{
-          const link=el.matches("a")?el:el.querySelector("a[href]");
-          const href=link?.getAttribute("href")||el.getAttribute("href")||"";
+        const semantic=postNodes(article,'[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i]')
+          .map(el=>({label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),top:el.getBoundingClientRect().top}))
+          .filter(x=>x.label.length>=2&&x.label.length<=90&&x.top>=cardTop-8&&x.top<=cardTop+150);
+        if(semantic.length)return semantic.sort((a,b)=>a.top-b.top)[0].label;
+        const links=postNodes(article,"a[href]").map(el=>{
+          let path="";try{path=new URL(el.getAttribute("href"),location.origin).pathname;}catch{}
           const rect=el.getBoundingClientRect();
-          const label=(el.innerText||el.getAttribute("aria-label")||link?.getAttribute("aria-label")||"").replace(/\s+/g," ").trim();
-          let path="";
-          try{path=new URL(href,location.origin).pathname;}catch{}
-          const semanticAuthor=el.matches('[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i]')||Boolean(el.closest('[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i]'));
-          const profileLike=semanticAuthor||/profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path));
-          const inHeader=rect.top>=cardTop-8&&rect.top<=cardTop+190;
-          const looksLikeTime=/\b(just now|yesterday|\d+\s*(?:m|min|mins|h|hr|hrs|d|day|days|w|week|weeks))\b/i.test(label);
-          const looksLikeAction=/^(like|comment|share|see more|send|follow|sponsored|more)$/i.test(label);
-          if(!label||label.length<2||label.length>90||!inHeader||looksLikeTime||looksLikeAction)return null;
-          const rank=semanticAuthor?0:(profileLike?1:(el.matches("h2,h3,strong")?2:3));
-          if(rank===3&&!el.matches('[role="link"]'))return null;
-          return {label,top:rect.top,left:rect.left,rank};
-        }).filter(Boolean).sort((a,b)=>a.rank-b.rank||a.top-b.top||a.left-b.left);
-        return ranked[0]?.label||"Not available";
+          const label=(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim();
+          const profile=/profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path));
+          return {label,top:rect.top,left:rect.left,profile};
+        }).filter(x=>x.profile&&x.label.length>=2&&x.label.length<=90&&x.top>=cardTop-8&&x.top<=cardTop+135)
+          .sort((a,b)=>a.top-b.top||a.left-b.left);
+        return links[0]?.label||"Not available";
       };
       const postPreview=(article)=>{
         // Only use Facebook's explicit visible story-message containers.
         // Do not fall back to the whole article, which may include comments.
-        const nodes=[...article.querySelectorAll('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')].filter(visible);
+        const nodes=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
         const value=nodes.map(el=>(el.innerText||"").replace(/\\s+/g," ").trim()).find(t=>t.length>0);
         return value?value.slice(0,220):"Not available";
       };
       const collected=new Map();
       let nextFeedOrder=1;
-      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false;
+      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0;
       const collectVisiblePosts=()=>{
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
         // multiple cards and mix one post's timestamp with another post's metrics.
-        let articles=[...document.querySelectorAll('[role="article"]')].filter(visible);
+        const allArticles=[...document.querySelectorAll('[role="article"]')].filter(visible);
+        // Keep the outermost feed post card. Nested article nodes can be comments/replies;
+        // treating them as posts can assign a commenter's name to the post.
+        let articles=allArticles.filter(el=>!el.parentElement?.closest('[role="article"]'));
+        nestedArticlesExcluded=Math.max(nestedArticlesExcluded,allArticles.length-articles.length);
         if(!articles.length)articles=[...document.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
-        // Drop nested duplicate article wrappers; each remaining node represents one card.
-        articles=articles.filter(el=>!el.querySelector('[role="article"]'));
         articlesObserved=Math.max(articlesObserved,articles.length);
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
-          const timeEls=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')].filter(visible);
+          const timeEls=postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]');
           // Pick the timestamp whose visible text is a relative age (10h, 4d, etc.)
           // before considering an absolute title. This avoids a neighboring card's date.
           const primaryTimeEl=timeEls.find(el=>/\b(?:just now|\d+\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks))\b/i.test([el.innerText,el.getAttribute("aria-label")].filter(Boolean).join(" ")))||timeEls[0]||null;
@@ -252,17 +247,19 @@
           visibleTimestampAges.push(age);
           oldestAgeHours=Math.max(oldestAgeHours,age);
           if(age>168){olderThanSevenDaysSeen=true;continue;}
-          const permalink=article.querySelector('a[href*="/posts/"],a[href*="/permalink/"],a[href*="story_fbid"]')?.getAttribute("href");
-          const dataFt=article.querySelector("[data-ft]")?.getAttribute("data-ft");
-          const utime=article.querySelector("[data-utime]")?.getAttribute("data-utime");
-          const datetime=article.querySelector("time[datetime]")?.getAttribute("datetime");
+          const permalink=postNodes(article,'a[href*="/posts/"],a[href*="/permalink/"],a[href*="story_fbid"]')[0]?.getAttribute("href");
+          const dataFt=postNodes(article,"[data-ft]")[0]?.getAttribute("data-ft");
+          const utime=postNodes(article,"[data-utime]")[0]?.getAttribute("data-utime");
+          const datetime=postNodes(article,"time[datetime]")[0]?.getAttribute("datetime");
           const identity=permalink||dataFt||utime||datetime||timeLabel;
           const key=String(identity||"visible-post").replace(/\s+/g," ").slice(0,240);
           if(collected.has(key))continue;
+          const author=postAuthor(article);
+          if(author==="Not available")authorsUnavailable++;else authorsIdentified++;
           collected.set(key,{
             postId:key,
             postNumber:nextFeedOrder++,
-            author:postAuthor(article),
+            author,
             preview:postPreview(article),
             relativeTime:relativeLabel.slice(0,80),
             exactTime:absoluteLabel.slice(0,180),
@@ -309,7 +306,7 @@
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
         weekTotals:{likes:totals(weekPosts,"likes"),comments:totals(weekPosts,"comments"),shares:totals(weekPosts,"shares")},
-        scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
+        scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,authorsIdentified,authorsUnavailable,nestedArticlesExcluded,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
         blocked:false,
         note:"Only visible post timestamps and visible like/comment/share counts were read. No post was opened and no comment or liker list was inspected."
       };
