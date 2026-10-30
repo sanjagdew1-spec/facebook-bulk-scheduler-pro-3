@@ -164,48 +164,96 @@
           .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
       };
       const commentsBoundary=(article,mediaBottom)=>{
+        // "View more comments" is a hard lower boundary: nothing below it
+        // may contribute a timestamp, author, action count, or preview.
         const candidates=postNodes(article,'span,div,a,[role="button"]')
           .filter(el=>{
             const r=el.getBoundingClientRect();
-            const label=(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim().toLowerCase();
-            return r.top>=mediaBottom-2&&r.top<mediaBottom+260&&/^view more comments(?:\s*\(\d+\))?$/.test(label);
+            const label=(el.innerText||el.getAttribute("aria-label")||"").replace(/\\s+/g," ").trim().toLowerCase();
+            return r.top>=mediaBottom-2&&r.top<mediaBottom+320&&/^view more comments(?:\\s*\\(\\d+\\))?$/.test(label);
           })
           .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
         return candidates[0]?.getBoundingClientRect().top??Infinity;
       };
+      const commentComposerBoundary=(article,mediaBottom,cutoff)=>{
+        // Secondary structural clue only; never use this as the sole post boundary.
+        const candidates=postNodes(article,'textarea,[contenteditable="true"],[aria-label*="comment" i],[placeholder*="comment" i]')
+          .filter(el=>{
+            const r=el.getBoundingClientRect();
+            const label=[el.getAttribute("aria-label"),el.getAttribute("placeholder"),el.innerText].filter(Boolean).join(" ").toLowerCase();
+            return r.top>=mediaBottom&&r.top<cutoff&&(/comment as|write a comment|comment/i.test(label)||el.matches("textarea,[contenteditable=true]"));
+          }).sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
+        return candidates[0]?.getBoundingClientRect().top??null;
+      };
+      const actionKind=(el)=>{
+        const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.getAttribute?.("data-testid"),el.getAttribute?.("data-tooltip-content"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ").toLowerCase();
+        if(/\\b(like|liked|reaction|reactions)\\b/.test(label))return "likes";
+        if(/\\b(comment|comments|reply)\\b/.test(label))return "comments";
+        if(/\\b(share|shared)\\b/.test(label))return "shares";
+        return null;
+      };
       const postActionBar=(article)=>{
         const media=mediaAnchor(article);
-        if(!media)return null;
+        if(!media)return {bar:null,cutoff:Infinity,composer:null,reason:"main-media-not-found"};
         const mediaBottom=media.getBoundingClientRect().bottom;
         const cutoff=commentsBoundary(article,mediaBottom);
-        // Only the narrow strip immediately below the media and before
-        // "View more comments" belongs to the post's action row.
-        const groups=postNodes(article,'[role="group"],[role="toolbar"]')
+        const composer=commentComposerBoundary(article,mediaBottom,cutoff);
+        // Inspect only the first compact action row immediately under the main media.
+        // No node at/after View More Comments is eligible.
+        const candidates=postNodes(article,'[role="group"],[role="toolbar"],[role="contentinfo"],div')
           .filter(group=>{
             const r=group.getBoundingClientRect();
-            if(r.top<mediaBottom-3||r.top>mediaBottom+112||r.top>=cutoff)return false;
-            const labels=[group.innerText,...[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title]')]
-              .map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" "))].filter(Boolean).join(" ").toLowerCase();
-            return /\blike\b/.test(labels)&&/\bcomment\b/.test(labels)&&/\bshare\b/.test(labels);
-          });
-        return groups.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0]||null;
+            if(r.top<mediaBottom-2||r.top>mediaBottom+145||r.top>=cutoff)return false;
+            const controls=[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title],[data-testid]')]
+              .filter(visible);
+            const kinds=new Set(controls.map(actionKind).filter(Boolean));
+            const text=(group.innerText||"").replace(/\\s+/g," ").trim();
+            // A row needs at least two recognizable action controls, or an explicit
+            // Facebook action-row test id. This avoids selecting comment text blocks.
+            return kinds.size>=2||/ufi_action|post_action|social_actions/i.test(String(group.getAttribute("data-testid")||""));
+          })
+          .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top||
+            a.getBoundingClientRect().height-b.getBoundingClientRect().height);
+        const bar=candidates[0]||null;
+        return {bar,cutoff,composer,reason:bar?"first-action-row-found":"action-row-not-identifiable"};
       };
       const metric=(article,kind)=>{
-        const names=kind==="likes"?"(?:likes?|reactions?)":kind==="comments"?"comments?":"shares?";
-        const bar=postActionBar(article);
-        if(!bar)return null;
-        const nodes=[bar,...bar.querySelectorAll('[aria-label],[title]')];
-        const patterns=[
-          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
-          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
-        ];
-        for(const el of nodes){
-          const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\s+/g," ");
-          if(!label||/reply|replied|commented|view more comments|write a comment|people who reacted/i.test(label))continue;
-          for(const re of patterns){const match=label.match(re);if(match)return parseCount(match[1]);}
+        const info=postActionBar(article),bar=info.bar;
+        if(!bar)return {value:null,source:info.reason};
+        const controls=[...bar.querySelectorAll('button,[role="button"],a,[aria-label],[title],[data-testid]')].filter(visible);
+        // Match each count to the actual Like / Comment / Share control, not to
+        // arbitrary numbers elsewhere in the post or in its comment thread.
+        for(const control of controls){
+          if(actionKind(control)!==kind)continue;
+          const nearby=[control,control.parentElement,control.parentElement?.parentElement].filter(Boolean);
+          for(const el of nearby){
+            const r=el.getBoundingClientRect();
+            if(r.top>=info.cutoff)continue;
+            const text=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ").trim();
+            const count=text.match(/(\\d[\\d,.]*(?:\\s*[KMB])?)/i);
+            if(count)return {value:parseCount(count[1]),source:"icon-control-associated-count"};
+          }
+          // Sometimes Facebook renders the count in a sibling immediately beside
+          // the icon control; only inspect siblings within the same action row.
+          for(const sibling of [control.previousElementSibling,control.nextElementSibling]){
+            if(!sibling||!visible(sibling)||sibling.getBoundingClientRect().top>=info.cutoff)continue;
+            const text=(sibling.innerText||sibling.getAttribute("aria-label")||"").trim();
+            const count=text.match(/^(\\d[\\d,.]*(?:\\s*[KMB])?)$/i);
+            if(count)return {value:parseCount(count[1]),source:"adjacent-count-in-action-row"};
+          }
         }
-        // Fail closed when Facebook does not expose a count tied to its action label.
-        return null;
+        return {value:null,source:"icon-count-not-exposed"};
+      };
+      const postBoundaryInfo=(article)=>{
+        const media=mediaAnchor(article);
+        if(!media)return {mediaFound:false,viewMoreFound:false,commentComposerFound:false,cardBottom:null,nextPostHeaderFound:false};
+        const mediaBottom=media.getBoundingClientRect().bottom;
+        const cutoff=commentsBoundary(article,mediaBottom);
+        const composer=commentComposerBoundary(article,mediaBottom,cutoff);
+        const r=article.getBoundingClientRect();
+        const next=article.parentElement?.querySelectorAll?.('[role="article"]')||[];
+        const nextHeader=[...next].find(el=>el!==article&&el.getBoundingClientRect().top>r.top&&el.getBoundingClientRect().top<r.bottom);
+        return {mediaFound:true,viewMoreFound:Number.isFinite(cutoff),commentComposerFound:composer!=null,cardBottom:Math.round(r.bottom),nextPostHeaderFound:Boolean(nextHeader)};
       };
       const parseAgeHours=(label,article,timeNode)=>{
         const now=Date.now();
@@ -259,7 +307,7 @@
       };
       const collected=new Map();
       let nextFeedOrder=1;
-      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0;
+      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
       const collectVisiblePosts=()=>{
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
         // multiple cards and mix one post's timestamp with another post's metrics.
@@ -280,7 +328,7 @@
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
-          const timeEls=postHeaderTimeNodes(article);
+          const boundaryCheck=postBoundaryInfo(article);\n          if(boundaryCheck.mediaFound)mediaAnchorsFound++;\n          if(boundaryCheck.viewMoreFound)viewMoreBoundariesFound++;\n          if(boundaryCheck.commentComposerFound)commentComposersFound++;\n          if(postActionBar(article).bar)actionRowsFound++;\n          const timeEls=postHeaderTimeNodes(article);
           // Pick the timestamp whose visible text is a relative age (10h, 4d, etc.)
           // before considering an absolute title. This avoids a neighboring card's date.
           const primaryTimeEl=timeEls.find(el=>/\b(?:just now|\d+\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks))\b/i.test([el.innerText,el.getAttribute("aria-label")].filter(Boolean).join(" ")))||timeEls[0]||null;
