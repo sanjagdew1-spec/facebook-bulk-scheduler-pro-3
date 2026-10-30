@@ -39,8 +39,10 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   if(!/^https:\/\/www\.facebook\.com\/groups\/[A-Za-z0-9._-]+\/?(?:[?#].*)?$/i.test(url)){sendResponse({ok:false,error:"This group does not have a supported Facebook group URL."});return;}
   // Keep both the Group Finder website and the original search tab untouched.
   // Every selected group opens in a dedicated Facebook tab for activity inspection.
+  const previous=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
+  if(previous?.fbTabId){try{await chrome.tabs.remove(previous.fbTabId)}catch{}}
+  await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
   const activityTab=await chrome.tabs.create({url,active:true});
-  await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY]);
   const activityJob={group:{name:String(msg.group?.name||"Selected group"),url},websiteTabId:sender.tab?.id||null,fbTabId:activityTab.id,sessionId:String(msg.sessionId||""),startedAt:Date.now(),status:"checking"};
   await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
   sendResponse({ok:true,message:"Opened the selected Facebook group in a new tab. Activity scan started."});return;
