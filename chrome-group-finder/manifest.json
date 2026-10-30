@@ -4,6 +4,7 @@
   "version": "0.5.15",
   "description": "Find visible public Facebook Groups and inspect visible last-24-hour and 7-day activity. Does not join groups or post.",
   "permissions": [
+    "activeTab",
     "tabs",
     "storage"
   ],
