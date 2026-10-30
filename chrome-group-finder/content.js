@@ -190,9 +190,9 @@
           const link=el.matches("a")?el:el.querySelector("a");
           const href=link?.getAttribute("href")||"";
           const rect=el.getBoundingClientRect();
-          const label=(el.innerText||el.getAttribute("aria-label")||link?.getAttribute("aria-label")||"").replace(/\\s+/g," ").trim();
+          const label=(el.innerText||el.getAttribute("aria-label")||link?.getAttribute("aria-label")||"").replace(/\s+/g," ").trim();
           const path=(()=>{try{return new URL(href,location.origin).pathname;}catch{return "";}})();
-          const profileLike=/profile\\.php|^\\/people\\//i.test(path)||(/^\\/[^/]+\\/?$/.test(path)&&!/^\\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\\//i.test(path));
+          const profileLike=/profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path));
           if(!label||label.length<2||label.length>90||!profileLike||rect.top>top+220)return null;
           if(/^(like|comment|share|see more|send|follow)$/i.test(label))return null;
           return {label,top:rect.top,left:rect.left};
