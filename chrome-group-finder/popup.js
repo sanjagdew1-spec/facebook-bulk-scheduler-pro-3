@@ -28,3 +28,17 @@ $("export").addEventListener("click",async()=>{
  a.href=url;a.download="group-finder-results.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 refresh();setInterval(refresh,1200);
+async function enableVisualCaptureForActiveGroup(){
+ try{
+  const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+  if(!tab?.id||!/^https:\/\/www\.facebook\.com\/groups\//i.test(tab.url||""))return;
+  const screenshotDataUrl=await chrome.tabs.captureVisibleTab(tab.windowId,{format:"jpeg",quality:42});
+  const result=await send({type:"ENABLE_VISUAL_CAPTURE",tabId:tab.id,screenshotDataUrl});
+  $("status").textContent=result?.ok
+   ?"Visual screenshots enabled for this Facebook Group. Keep the Group tab active while Activity Lab scans."
+   :(result?.error||"Could not enable visual screenshots for this tab.");
+ }catch(error){
+  $("status").textContent="Visual screenshot permission was not available: "+String(error);
+ }
+}
+enableVisualCaptureForActiveGroup();
