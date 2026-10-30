@@ -204,20 +204,7 @@
           if(!label||/reply|replied|commented|view more comments|write a comment|people who reacted/i.test(label))continue;
           for(const re of patterns){const match=label.match(re);if(match)return parseCount(match[1]);}
         }
-        // Some Facebook layouts expose the three counts as adjacent text nodes
-        // in the action strip, with the button labels in separate elements.
-        const text=(bar.innerText||"").replace(/\s+/g," ").trim();
-        const labels=[...bar.querySelectorAll('button,[role="button"],a,[aria-label],[title]')]
-          .map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" ").toLowerCase());
-        const target=kind==="likes"?/\blike\b/:kind==="comments"?/\bcomment\b/:/\bshare\b/;
-        const index=labels.findIndex(v=>target.test(v));
-        if(index>=0){
-          const nearby=labels.slice(Math.max(0,index-1),Math.min(labels.length,index+2)).join(" ");
-          for(const re of [new RegExp("(\\d[\\d,.]*\\s*[KMB]?)","i")]){
-            const m=(nearby+" "+text).match(re);
-            if(m)return parseCount(m[1]);
-          }
-        }
+        // Fail closed when Facebook does not expose a count tied to its action label.
         return null;
       };
       const parseAgeHours=(label,article,timeNode)=>{
