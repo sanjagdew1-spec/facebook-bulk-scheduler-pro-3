@@ -19,7 +19,7 @@ def cleanup_activity_sessions():
 
 def activity_cleanup_loop():
     while True:
-        time.sleep(5)
+        time.sleep(1)
         cleanup_activity_sessions()
 
 threading.Thread(target=activity_cleanup_loop, daemon=True, name="activity-session-cleanup").start()
