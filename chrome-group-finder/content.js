@@ -86,7 +86,12 @@
     const blocked=location.pathname.startsWith("/login") ||
       /checkpoint|confirm your identity|security check|enter the code|captcha/.test(location.pathname+" "+pageLow) ||
       Boolean(document.querySelector('input[name="email"]'));
-    if(blocked){chrome.runtime.sendMessage({type:"PAGE_RESULTS",results:[],blocked:true});return;}
+    if(blocked){
+      if(/^\/groups\/[^/]+\/?$/.test(location.pathname)){
+        chrome.runtime.sendMessage({type:"PAGE_DETAILS",url:groupUrl(location.href),groupName:document.title,checkedAt:new Date().toISOString(),recentPostsFound:0,recentPosts:[],blocked:true});
+      }else chrome.runtime.sendMessage({type:"PAGE_RESULTS",results:[],blocked:true});
+      return;
+    }
     const isGroupPage=/^\/groups\/[^/]+\/?$/.test(location.pathname);
     function countValue(raw){const m=String(raw||"").replace(/,/g,"").match(/(\d+(?:\.\d+)?)\s*([KMB])?/i);if(!m)return null;return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));}
     function countryEvidence(text){
