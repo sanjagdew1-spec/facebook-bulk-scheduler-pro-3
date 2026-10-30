@@ -6,6 +6,7 @@ const ACTIVITY_HISTORY_KEY = "gfpActivityHistory";
 async function getJob(){ return (await chrome.storage.local.get(JOB_KEY))[JOB_KEY] || null; }
 async function setJob(job){ await chrome.storage.local.set({[JOB_KEY]:job}); }
 async function setStatus(status, extra={}) { const job=await getJob(); if(job) await setJob({...job,status,...extra,updatedAt:Date.now()}); }
+function canonicalGroupUrl(raw){try{const u=new URL(String(raw||""));if(!/(^|\\.)facebook\\.com$/i.test(u.hostname))return null;const p=u.pathname.split("/").filter(Boolean);return p[0]==="groups"&&p[1]?"https://www.facebook.com/groups/"+p[1].toLowerCase()+"/":null;}catch{return null;}}
 function makeSearchUrl(query,country,onlyUSA){const suffix=onlyUSA?"United States":((country&&country!=="Any country"&&country!=="Worldwide")?country:"");const clean=String(query||"").trim();const full=suffix?(clean?clean+", "+suffix:suffix):clean;return "https://www.facebook.com/search/groups/?q="+encodeURIComponent(full);}
 async function openCurrent(job){
  if(job.phase!=="search")return;
@@ -46,6 +47,13 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
  if(msg.type==="PAGE_DETAILS"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
+  const selectedUrl=canonicalGroupUrl(a.group.url);
+  const scannedUrl=canonicalGroupUrl(msg.url||sender.tab?.url);
+  if(!selectedUrl||!scannedUrl||selectedUrl!==scannedUrl){
+   const mismatch={status:"mismatch",groupName:a.group.name,selectedGroupName:a.group.name,selectedUrl:a.group.url,scannedUrl:msg.url||sender.tab?.url||"Not available",checkedAt:msg.checkedAt||new Date().toISOString(),recentPostsFound:0,weekPostsFound:0,recentPosts:[],weekPosts:[],note:"Safety check stopped this report because the Facebook tab URL does not match the Group selected in Group Finder. No posts from this tab were saved."};
+   await chrome.storage.local.set({[ACTIVITY_KEY]:mismatch,[ACTIVITY_JOB_KEY]:{...a,status:"mismatch",error:"Selected Group URL and scanned Facebook URL do not match."}});
+   sendResponse({ok:false,mismatch:true});return;
+  }
   if(msg.blocked){await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:{...a,status:"blocked",error:"Facebook login/checkpoint or restricted content blocked the activity scan."}});sendResponse({ok:true,blocked:true});return;}
   const recentPosts=Array.isArray(msg.recentPosts)?msg.recentPosts:[];
   const weekPosts=Array.isArray(msg.weekPosts)?msg.weekPosts:[];
@@ -70,7 +78,7 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   const evidenceScore=previousScore==null?completeness:Math.min(100,previousScore+evidenceIncrease);
   const top=(posts)=>posts.length?[...posts].sort((x,y)=>((y.likes||0)+(y.comments||0)+(y.shares||0))-((x.likes||0)+(x.comments||0)+(x.shares||0)))[0]:null;
   const report={
-    url:a.group.url,groupName:a.group.name||msg.groupName,
+    url:scannedUrl,groupName:msg.groupName||a.group.name,selectedGroupName:a.group.name,selectedUrl:a.group.url,scannedUrl:msg.url||sender.tab?.url,
     checkedAt:msg.checkedAt||new Date().toISOString(),
     recentPostsFound:recentPosts.length,recentPosts,
     weekPostsFound:weekPosts.length,weekPosts,
