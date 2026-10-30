@@ -185,7 +185,7 @@
         // Read only the visible author label near the top of this post card.
         // Never inspect commenter/reaction lists or open any post.
         const top=article.getBoundingClientRect().top;
-        const candidates=[...article.querySelectorAll('[data-ad-rendering-role="profile_name"],h2 a,h3 a,strong a,a[href*="profile.php"],a[href*="/people/"]')].filter(visible);
+        const candidates=[...article.querySelectorAll('[data-ad-rendering-role="profile_name"],a[href]')].filter(visible);
         const ranked=candidates.map(el=>{
           const link=el.matches("a")?el:el.querySelector("a");
           const href=link?.getAttribute("href")||"";
@@ -199,6 +199,13 @@
           return {label,top:rect.top,left:rect.left};
         }).filter(Boolean).sort((a,b)=>a.top-b.top||a.left-b.left);
         return ranked[0]?.label||"Not available";
+      };
+      const postPreview=(article)=>{
+        // Only use Facebook's explicit visible story-message containers.
+        // Do not fall back to the whole article, which may include comments.
+        const nodes=[...article.querySelectorAll('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')].filter(visible);
+        const value=nodes.map(el=>(el.innerText||"").replace(/\\s+/g," ").trim()).find(t=>t.length>0);
+        return value?value.slice(0,220):"Not available";
       };
       const collected=new Map();
       let nextFeedOrder=1;
@@ -244,7 +251,10 @@
             postId:key,
             postNumber:nextFeedOrder++,
             author:postAuthor(article),
-            time:timeLabel.trim().slice(0,180)||"Timestamp visible; exact label unavailable",
+            preview:postPreview(article),
+            relativeTime:relativeLabel.slice(0,80),
+            exactTime:absoluteLabel.slice(0,180),
+            time:timeLabel.trim().slice(0,220)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
             likes:metric(article,"likes"),
             comments:metric(article,"comments"),
