@@ -154,7 +154,7 @@
           const labels=[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title]')]
             .map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" "))
             .join(" ").toLowerCase();
-          const hasLike=/\\blike\\b/.test(labels),hasComment=/\\bcomment\\b/.test(labels),hasShare=/\\bshare\\b/.test(labels);
+          const hasLike=/\blike\b/.test(labels),hasComment=/\bcomment\b/.test(labels),hasShare=/\bshare\b/.test(labels);
           return hasLike&&hasComment&&hasShare&&!/view more comments|reply to|write a comment/.test(labels);
         });
         return groups.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0]||null;
@@ -167,11 +167,11 @@
         if(!bar)return null;
         const nodes=[bar,...bar.querySelectorAll('[aria-label],[title]')];
         const patterns=[
-          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
-          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
+          new RegExp("(\d[\d,.]*\s*[KMB]?)\s*"+names+"\b","i"),
+          new RegExp("\b"+names+"\s*(\d[\d,.]*\s*[KMB]?)","i")
         ];
         for(const el of nodes){
-          const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ");
+          const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\s+/g," ");
           if(!label||/reply|replied|commented|view more comments|write a comment|people who reacted/i.test(label))continue;
           for(const re of patterns){const match=label.match(re);if(match)return parseCount(match[1]);}
         }
@@ -214,7 +214,7 @@
         // Links appearing after the story body are commenters and are ignored.
         const candidates=postNodes(article,"a[href],[data-ad-rendering-role='profile_name'],[data-testid*='post_author' i]")
           .map(el=>({
-            label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\\s+/g," ").trim(),
+            label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),
             y:el.getBoundingClientRect().top,
             profile:el.matches("a[href]")?profileLink(el):true
           }))
@@ -226,7 +226,7 @@
         // Only use Facebook's explicit visible story-message containers.
         // Do not fall back to the whole article, which may include comments.
         const nodes=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
-        const value=nodes.map(el=>(el.innerText||"").replace(/\\s+/g," ").trim()).find(t=>t.length>0);
+        const value=nodes.map(el=>(el.innerText||"").replace(/\s+/g," ").trim()).find(t=>t.length>0);
         return value?value.slice(0,220):"Not available";
       };
       const collected=new Map();
@@ -261,13 +261,13 @@
           // on the time node or its immediate link/container. Keep it separate
           // from the rounded relative label (10h, 8h, etc.).
           const timeMetaNodes=primaryTimeEl?[primaryTimeEl,primaryTimeEl.closest("a"),primaryTimeEl.parentElement,primaryTimeEl.parentElement?.parentElement].filter(Boolean):[];
-          const absoluteLabel=[...new Set(timeMetaNodes.flatMap(el=>[el.getAttribute("title"),el.getAttribute("datetime"),el.getAttribute("aria-label"),el.getAttribute("data-tooltip-content")]).filter(Boolean).map(v=>v.replace(/\\s+/g," ").trim()).filter(v=>!/^\\d+\\s*(?:m|min|mins|h|hr|hrs|hour|hours|d|day|days)\\b/i.test(v)))].join(" · ").slice(0,220);
+          const absoluteLabel=[...new Set(timeMetaNodes.flatMap(el=>[el.getAttribute("title"),el.getAttribute("datetime"),el.getAttribute("aria-label"),el.getAttribute("data-tooltip-content")]).filter(Boolean).map(v=>v.replace(/\s+/g," ").trim()).filter(v=>!/^\d+\s*(?:m|min|mins|h|hr|hrs|hour|hours|d|day|days)\b/i.test(v)))].join(" · ").slice(0,220);
           const timeLabel=[relativeLabel,absoluteLabel].filter(Boolean).join(" · ");
           // Parse the calendar date embedded in Facebook's hover timestamp first.
           // The hover aria-label can also contain "10h", so do not let that rounded
           // fragment win over the exact date/time later in the same label.
-          const monthDate=absoluteLabel.match(/\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2},?\\s+\\d{4}(?:\\s+at\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?/i);
-          const absoluteStamp=monthDate?Date.parse(monthDate[0].replace(/\\s+at\\s+/i," ")):Date.parse(String(absoluteLabel||"").replace(/\\s+at\\s+/i," "));
+          const monthDate=absoluteLabel.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4}(?:\s+at\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?/i);
+          const absoluteStamp=monthDate?Date.parse(monthDate[0].replace(/\s+at\s+/i," ")):Date.parse(String(absoluteLabel||"").replace(/\s+at\s+/i," "));
           const exactAgeHours=Number.isFinite(absoluteStamp)?(Date.now()-absoluteStamp)/3600000:null;
           const age=exactAgeHours!=null&&exactAgeHours>=0?exactAgeHours:parseAgeHours(relativeLabel||timeLabel,article,primaryTimeEl);
           if(age==null)continue;
