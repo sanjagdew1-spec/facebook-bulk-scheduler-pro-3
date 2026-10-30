@@ -44,7 +44,7 @@ window.addEventListener('pagehide',()=>{deleteActivitySession(true)});
 async function createActivitySession(){
  const response=await fetch(ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
  const data=await response.json();if(!response.ok||!data.sessionId)throw new Error(data.error||'Could not create temporary Activity Lab session.');
- activitySessionId=data.sessionId;activityBatchCount=0;activityRawBytes=0;
+ activitySessionId=data.sessionId;activityBatchCount=0;activityRawBytes=0;activityUploadQueue=Promise.resolve();
  activityExpiryTimer=setTimeout(()=>{
   window.postMessage({source:'top-facebook-group-finder',type:'CANCEL_ACTIVITY_SESSION'},location.origin);
   deleteActivitySession(false);
@@ -55,10 +55,12 @@ async function createActivitySession(){
  return data;
 }
 function receiveRawActivityBatch(payload){
- if(!activitySessionId||!payload)return activityUploadQueue;
- activityUploadQueue=activityUploadQueue.then(async()=>{
-  const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(activitySessionId)+'/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ const id=activitySessionId;if(!id||!payload)return activityUploadQueue;
+ activityUploadQueue=activityUploadQueue.catch(()=>{}).then(async()=>{
+  if(id!==activitySessionId)return;
+  const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id)+'/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary data upload failed.');
+  if(id!==activitySessionId)return;
   activityBatchCount++;activityRawBytes+=new Blob([JSON.stringify(payload)]).size;
   $('activityStatus').textContent='RECEIVING';
   $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' temporary raw-data batches ('+activityRawBytes.toLocaleString()+' bytes). Server expiry: maximum 5 minutes.';
