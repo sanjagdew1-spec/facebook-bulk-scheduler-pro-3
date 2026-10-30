@@ -31,7 +31,11 @@ refresh();setInterval(refresh,1200);
 async function enableVisualCaptureForActiveGroup(){
  try{
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-  if(!tab?.id||!/^https:\/\/www\.facebook\.com\/groups\//i.test(tab.url||""))return;
+  if(!tab?.id)return;
+  if(!/^https:\/\/www\.facebook\.com\/groups\//i.test(tab.url||"")){
+   $("status").textContent="To enable visual screenshots, open the Facebook Group tab created by View Activity, then click this extension icon on that Group tab. Scanning and scrolling no longer wait for screenshot permission.";
+   return;
+  }
   const screenshotDataUrl=await chrome.tabs.captureVisibleTab(tab.windowId,{format:"jpeg",quality:42});
   const result=await send({type:"ENABLE_VISUAL_CAPTURE",tabId:tab.id,screenshotDataUrl});
   $("status").textContent=result?.ok
