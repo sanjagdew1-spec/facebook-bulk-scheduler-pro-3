@@ -196,8 +196,10 @@
       };
       const postActionBar=(article)=>{
         const media=mediaAnchor(article);
-        if(!media)return {bar:null,cutoff:Infinity,composer:null,reason:"main-media-not-found"};
-        const mediaBottom=media.getBoundingClientRect().bottom;
+        const story=storyBody(article);
+        const anchor=media||story;
+        if(!anchor)return {bar:null,cutoff:Infinity,composer:null,reason:"main-content-not-found"};
+        const mediaBottom=anchor.getBoundingClientRect().bottom;
         const cutoff=commentsBoundary(article,mediaBottom);
         const composer=commentComposerBoundary(article,mediaBottom,cutoff);
         // Inspect only the first compact action row immediately under the main media.
@@ -305,7 +307,8 @@
         // Only read the main story text before the main media / comment cutoff.
         // Never fall back to article text, which can contain nested comments.
         const media=mediaAnchor(article);
-        if(!media)return "Not available";
+        const story=storyBody(article);
+        if(!media)return story?(story.innerText||"").replace(/\\s+/g," ").trim().slice(0,220)||"Not available":"Not available";
         const mediaTop=media.getBoundingClientRect().top;
         const cutoff=commentsBoundary(article,media.getBoundingClientRect().bottom);
         const nodes=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
@@ -330,11 +333,12 @@
         // visible "View More Comments" cutoff below the first action area.
         // Comment/reply cards do not satisfy this combination and are discarded.
         const isCompleteMainPost=el=>{
-          const media=mediaAnchor(el);
-          if(!media)return false;
-          // View More Comments is a hard stop when present, not a requirement:
-          // Facebook omits that control on many otherwise valid posts.
-          return postHeaderTimeNodes(el).length>0;
+          // Accept photo/video posts AND text-only story posts. Requiring a large
+          // media element discarded valid Facebook posts and could leave a full
+          // 60-step scan with an empty report. Still require a timestamp in the
+          // main header; nested comment articles remain excluded by topLevel.
+          const hasMainContent=Boolean(mediaAnchor(el)||storyBody(el));
+          return hasMainContent&&postHeaderTimeNodes(el).length>0;
         };
         let articles=topLevel.filter(el=>isCompleteMainPost(el));
         if(!articles.length){
