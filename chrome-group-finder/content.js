@@ -14,8 +14,14 @@
       chrome.runtime.sendMessage({type:"CANCEL_ACTIVITY_SESSION"}).catch(()=>{});
     });
     chrome.runtime.onMessage.addListener((message) => {
-      if (!message || !["ACTIVITY_RAW_BATCH","ACTIVITY_RAW_COMPLETE","ACTIVITY_RAW_ERROR"].includes(message.type)) return;
-      window.postMessage({source:"gfp-chrome-helper",...message}, WEBSITE_ORIGIN);
+      if (!message) return;
+      // Background forwards the scanner's RAW_ACTIVITY_* messages. Translate
+      // them here to the Activity Lab's ACTIVITY_RAW_* browser-message names.
+      const translatedType = message.type === "RAW_ACTIVITY_BATCH" ? "ACTIVITY_RAW_BATCH"
+        : message.type === "RAW_ACTIVITY_COMPLETE" ? "ACTIVITY_RAW_COMPLETE"
+        : message.type;
+      if (!["ACTIVITY_RAW_BATCH","ACTIVITY_RAW_COMPLETE","ACTIVITY_RAW_ERROR"].includes(translatedType)) return;
+      window.postMessage({source:"gfp-chrome-helper",...message,type:translatedType}, WEBSITE_ORIGIN);
     });
     window.addEventListener("message", async event => {
       if (event.source !== window || event.origin !== WEBSITE_ORIGIN) return;
