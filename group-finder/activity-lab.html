@@ -225,4 +225,5 @@ if(activityGroupUrl){
  if(activityParams.get('autostart')==='1')setTimeout(()=>$('startActivityScan').click(),250);
 }
 $('clear').onclick=()=>{if(confirm('Clear the saved Group list in this browser?')){localStorage.removeItem('gfp_shortlist');render();$('saveToast').textContent='Saved list cleared.';$('saveToast').classList.add('show')}};$('savedJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});$('activityJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});render();
-</script></body></html>
+</script><!-- Render auto-deploy refresh: Activity Lab visible report section -->
+</body></html>
