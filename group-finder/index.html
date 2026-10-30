@@ -175,9 +175,57 @@ function renderActivityReport(r){
  const score=document.getElementById('activityEvidenceScore');if(score)score.textContent=(r.evidenceScore==null?'Not enough evidence':r.evidenceScore+'/100');
  const rows=saved(),idx=rows.findIndex(x=>x.url===r.url);if(idx>=0){rows[idx]={...rows[idx],activityReport:r,score:r.evidenceScore,activityScore:r.activityScore};saveAll(rows);}
 }
-function openActivity(g){
- const params=new URLSearchParams({groupName:String(g.name||'Selected Group'),groupUrl:String(g.url||''),keyword:String(g.keyword||''),autostart:'1'});
- location.href='activity-lab.html?'+params.toString();
+const GFP_ACTIVITY_API='https://group-finder-search-api.onrender.com';
+let gfpActivityLaunching=false;
+function waitForActivityBridge(timeoutMs=5000){
+ return new Promise((resolve,reject)=>{
+  let settled=false;
+  const finish=(error)=>{if(settled)return;settled=true;clearInterval(pingTimer);clearTimeout(timeoutTimer);window.removeEventListener('message',onMessage);error?reject(error):resolve();};
+  const onMessage=event=>{
+   if(event.source!==window||event.origin!==location.origin||event.data?.source!=='gfp-chrome-helper')return;
+   if(event.data.type==='READY'&&event.data.available)finish();
+  };
+  window.addEventListener('message',onMessage);
+  const ping=()=>window.postMessage({source:'top-facebook-group-finder',type:'PING'},location.origin);
+  ping();const pingTimer=setInterval(ping,250);
+  const timeoutTimer=setTimeout(()=>finish(new Error('Chrome Helper did not respond on the Group Finder page. Reload the extension and this page.')),timeoutMs);
+ });
+}
+function startFacebookGroupTab(g,sessionId,timeoutMs=8000){
+ return new Promise((resolve,reject)=>{
+  let settled=false;
+  const finish=(error,data)=>{if(settled)return;settled=true;clearTimeout(timer);window.removeEventListener('message',onMessage);error?reject(error):resolve(data);};
+  const onMessage=event=>{
+   if(event.source!==window||event.origin!==location.origin||event.data?.source!=='gfp-chrome-helper')return;
+   if(event.data.type==='STARTED')finish(null,event.data);
+   if(event.data.type==='ERROR')finish(new Error(event.data.error||'Chrome Helper could not open the Facebook Group.'));
+  };
+  window.addEventListener('message',onMessage);
+  const timer=setTimeout(()=>finish(new Error('Chrome Helper did not confirm that the Facebook Group tab opened.')),timeoutMs);
+  window.postMessage({source:'top-facebook-group-finder',type:'START_ACTIVITY_CHECK',payload:{group:{name:String(g.name||'Selected Group'),url:String(g.url||'')},sessionId}},location.origin);
+ });
+}
+async function openActivity(g){
+ if(gfpActivityLaunching)return;
+ gfpActivityLaunching=true;
+ const url=String(g?.url||'');
+ try{
+  const u=new URL(url);
+  if(!/(^|\\.)facebook\\.com$/i.test(u.hostname)||!/^\\/groups\\/[^/]+/.test(u.pathname))throw new Error('Selected result does not contain a valid Facebook Group link.');
+  const params=new URLSearchParams({groupName:String(g.name||'Selected Group'),groupUrl:url,keyword:String(g.keyword||'')});
+  toast.textContent='Connecting to Chrome Helper and opening the selected Facebook Group…';toast.classList.add('show');
+  await waitForActivityBridge();
+  const response=await fetch(GFP_ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  const session=await response.json();
+  if(!response.ok||!session.sessionId)throw new Error(session.error||'Could not create the temporary Activity Lab session.');
+  await startFacebookGroupTab(g,session.sessionId);
+  params.set('sessionId',session.sessionId);
+  location.href='activity-lab.html?'+params.toString();
+ }catch(error){
+  gfpActivityLaunching=false;
+  toast.textContent='Could not open Group Activity: '+String(error.message||error);
+  toast.classList.add('show');
+ }
 }
 function wireGroupCards(rows){document.querySelectorAll('#keywordResults .group-result-card').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('a,button,input,label'))return;const g=rows[+el.dataset.i];if(g)openActivity(g)}));document.querySelectorAll('#keywordResults .activityOpen').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();const g=rows[+b.dataset.i];if(g)openActivity(g)}));}
 function renderSaved(){
