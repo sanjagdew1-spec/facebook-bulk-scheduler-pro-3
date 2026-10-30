@@ -345,6 +345,7 @@
             // Keep the first main article's content; redact nested comment/reply bodies.
             if(index===0&&!clone.matches('[role="article"]'))return;
             const marker=[...node.querySelectorAll('*')].find(el=>/^view more comments$/i.test((el.innerText||'').trim()));
+            for(const attr of ['aria-label','title','data-tooltip-content','alt'])node.removeAttribute(attr);
             node.replaceChildren();
             node.setAttribute('data-gfp-comment-content-redacted','true');
             if(marker){const label=document.createElement('span');label.textContent='View More Comments';label.setAttribute('data-gfp-boundary-marker','true');node.appendChild(label);}
