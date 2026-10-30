@@ -248,7 +248,8 @@
             const text=(group.innerText||"").replace(/\\s+/g," ").trim();
             // A row needs at least two recognizable action controls, or an explicit
             // Facebook action-row test id. This avoids selecting comment text blocks.
-            return (kinds.has("likes")&&kinds.has("comments")&&kinds.has("shares"))||/ufi_action|post_action|social_actions/i.test(String(group.getAttribute("data-testid")||""));
+            // Require three distinct post actions; Like/Reply/Share is a comment row.
+            return kinds.has("likes")&&kinds.has("comments")&&kinds.has("shares");
           })
           .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top||
             a.getBoundingClientRect().height-b.getBoundingClientRect().height);
@@ -406,6 +407,7 @@
             const postTimeNode=headerTimeNodes[0]||null;
             const postTime=[postTimeNode?.innerText,postTimeNode?.getAttribute('aria-label'),postTimeNode?.getAttribute('title'),postTimeNode?.getAttribute('datetime'),postTimeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
             const postData={
+              mainPostVerified:Boolean(postActionBar(root).bar)&&postHeaderTimeNodes(root).length>0&&postAuthor(root)!=="Not available",
               author:postAuthor(root),
               time:postTime||'Not available',
               ageHours:parseAgeHours(postTime,root,postTimeNode),
@@ -442,7 +444,9 @@
           // 60-step scan with an empty report. Still require a timestamp in the
           // main header; nested comment articles remain excluded by topLevel.
           const hasMainContent=Boolean(mediaAnchor(el)||storyBody(el));
-          return hasMainContent&&postHeaderTimeNodes(el).length>0;
+          // Main posts must expose their own timestamp and Like/Comment/Share row.
+          // Comment cards expose Like/Reply/Share and are therefore rejected.
+          return hasMainContent&&postHeaderTimeNodes(el).length>0&&Boolean(postActionBar(el).bar);
         };
         let articles=topLevel.filter(el=>isCompleteMainPost(el));
         if(!articles.length){
