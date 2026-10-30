@@ -134,46 +134,89 @@
         let path="";try{path=new URL(el.getAttribute("href")||"",location.origin).pathname;}catch{}
         return /profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path))||Boolean(el.getAttribute("data-hovercard")||el.getAttribute("data-hovercard-id"));
       };
+      // Use the largest visible feed photo/video as the post's visual boundary.
+      // Facebook comment avatars are much smaller and therefore cannot become the anchor.
+      const mediaAnchor=(article)=>{
+        const candidates=postNodes(article,'img,video,[role="img"]')
+          .map(el=>({el,r:el.getBoundingClientRect()}))
+          .filter(x=>x.r.width>=220&&x.r.height>=130&&x.r.width*x.r.height>=50000)
+          .sort((a,b)=>(b.r.width*b.r.height)-(a.r.width*a.r.height));
+        return candidates[0]?.el||null;
+      };
       const storyBody=(article)=>postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
         .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0]||null;
-      const postHeaderTimeNodes=(article)=>{
+      const postHeaderBounds=(article)=>{
         const top=article.getBoundingClientRect().top;
+        const media=mediaAnchor(article);
         const story=storyBody(article);
-        const storyTop=story?story.getBoundingClientRect().top:top+160;
-        // The post timestamp belongs to the header row above the story body.
+        const boundary=media?media.getBoundingClientRect().top:(story?story.getBoundingClientRect().top:top+220);
+        // Header + optional caption may occupy up to ~2.5 inches (240 CSS px)
+        // above the main media. Never use timestamps below the media.
+        return {top,boundary,lower:Math.max(top-8,boundary-260)};
+      };
+      const postHeaderTimeNodes=(article)=>{
+        const bounds=postHeaderBounds(article);
         return postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')
-          .filter(el=>el.getBoundingClientRect().top>=top-5&&el.getBoundingClientRect().top<storyTop&&el.getBoundingClientRect().top<top+240)
+          .filter(el=>{
+            const y=el.getBoundingClientRect().top;
+            return y>=bounds.lower&&y<bounds.boundary;
+          })
           .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
       };
+      const commentsBoundary=(article,mediaBottom)=>{
+        const candidates=postNodes(article,'span,div,a,[role="button"]')
+          .filter(el=>{
+            const r=el.getBoundingClientRect();
+            const label=(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim().toLowerCase();
+            return r.top>=mediaBottom-2&&r.top<mediaBottom+260&&/^view more comments(?:\s*\(\d+\))?$/.test(label);
+          })
+          .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
+        return candidates[0]?.getBoundingClientRect().top??Infinity;
+      };
       const postActionBar=(article)=>{
-        const story=storyBody(article);
-        const storyBottom=story?story.getBoundingClientRect().bottom:article.getBoundingClientRect().top+120;
-        const groups=postNodes(article,'[role="group"]').filter(group=>{
-          const y=group.getBoundingClientRect().top;
-          if(y<storyBottom-8)return false;
-          const labels=[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title]')]
-            .map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" "))
-            .join(" ").toLowerCase();
-          const hasLike=/\blike\b/.test(labels),hasComment=/\bcomment\b/.test(labels),hasShare=/\bshare\b/.test(labels);
-          return hasLike&&hasComment&&hasShare&&!/view more comments|reply to|write a comment/.test(labels);
-        });
+        const media=mediaAnchor(article);
+        if(!media)return null;
+        const mediaBottom=media.getBoundingClientRect().bottom;
+        const cutoff=commentsBoundary(article,mediaBottom);
+        // Only the narrow strip immediately below the media and before
+        // "View more comments" belongs to the post's action row.
+        const groups=postNodes(article,'[role="group"],[role="toolbar"]')
+          .filter(group=>{
+            const r=group.getBoundingClientRect();
+            if(r.top<mediaBottom-3||r.top>mediaBottom+112||r.top>=cutoff)return false;
+            const labels=[group.innerText,...[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title]')]
+              .map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" "))].filter(Boolean).join(" ").toLowerCase();
+            return /\blike\b/.test(labels)&&/\bcomment\b/.test(labels)&&/\bshare\b/.test(labels);
+          });
         return groups.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0]||null;
       };
       const metric=(article,kind)=>{
-        const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
-        // Read counts only from Facebook's Like / Comment / Share action bar.
-        // Never scan the post's full subtree: comment/reply reaction chips live there too.
+        const names=kind==="likes"?"(?:likes?|reactions?)":kind==="comments"?"comments?":"shares?";
         const bar=postActionBar(article);
         if(!bar)return null;
         const nodes=[bar,...bar.querySelectorAll('[aria-label],[title]')];
         const patterns=[
-          new RegExp("(\d[\d,.]*\s*[KMB]?)\s*"+names+"\b","i"),
-          new RegExp("\b"+names+"\s*(\d[\d,.]*\s*[KMB]?)","i")
+          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
+          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
         ];
         for(const el of nodes){
           const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\s+/g," ");
           if(!label||/reply|replied|commented|view more comments|write a comment|people who reacted/i.test(label))continue;
           for(const re of patterns){const match=label.match(re);if(match)return parseCount(match[1]);}
+        }
+        // Some Facebook layouts expose the three counts as adjacent text nodes
+        // in the action strip, with the button labels in separate elements.
+        const text=(bar.innerText||"").replace(/\s+/g," ").trim();
+        const labels=[...bar.querySelectorAll('button,[role="button"],a,[aria-label],[title]')]
+          .map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" ").toLowerCase());
+        const target=kind==="likes"?/\blike\b/:kind==="comments"?/\bcomment\b/:/\bshare\b/;
+        const index=labels.findIndex(v=>target.test(v));
+        if(index>=0){
+          const nearby=labels.slice(Math.max(0,index-1),Math.min(labels.length,index+2)).join(" ");
+          for(const re of [new RegExp("(\\d[\\d,.]*\\s*[KMB]?)","i")]){
+            const m=(nearby+" "+text).match(re);
+            if(m)return parseCount(m[1]);
+          }
         }
         return null;
       };
@@ -207,18 +250,16 @@
         return null;
       };
       const postAuthor=(article)=>{
-        const top=article.getBoundingClientRect().top;
-        const story=storyBody(article);
-        const storyTop=story?story.getBoundingClientRect().top:top+180;
-        // The first profile/page identity in the post header is the publisher.
-        // Links appearing after the story body are commenters and are ignored.
+        const bounds=postHeaderBounds(article);
+        // The publisher is the first profile identity in the header above the media.
+        // Anything after the media boundary (including commenters) is excluded.
         const candidates=postNodes(article,"a[href],[data-ad-rendering-role='profile_name'],[data-testid*='post_author' i]")
           .map(el=>({
             label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),
             y:el.getBoundingClientRect().top,
             profile:el.matches("a[href]")?profileLink(el):true
           }))
-          .filter(x=>x.profile&&x.label.length>=2&&x.label.length<=90&&x.y>=top-8&&x.y<storyTop&&x.y<top+190)
+          .filter(x=>x.profile&&x.label.length>=2&&x.label.length<=90&&x.y>=bounds.lower&&x.y<bounds.boundary)
           .sort((x,y)=>x.y-y.y);
         return candidates[0]?.label||"Not available";
       };
