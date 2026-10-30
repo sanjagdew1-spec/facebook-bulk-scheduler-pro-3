@@ -128,13 +128,18 @@
         if(!m)return null;
         return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));
       };
-      const metric=(text,kind)=>{
-        const escaped=kind==="likes"?"likes?|reactions?":kind;
+      const metric=(article,kind)=>{
+        const labels=[...article.querySelectorAll("[aria-label],[title]")].filter(visible).map(el=>[
+          el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText
+        ].filter(Boolean).join(" ")).filter(Boolean);
+        const text=[article.innerText||"",...labels].join(" ").replace(/\s+/g," ");
+        const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
         const patterns=[
-          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+escaped+"\\b","i"),
-          new RegExp("\\b"+escaped+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
+          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s*"+names+"\\\\b","i"),
+          new RegExp("\\\\b"+names+"\\\\s*(\\\\d[\\\\d,.]*\\\\s*[KMB]?)","i"),
+          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s+(?:people\\\\s+)?(?:like|comment|share)","i")
         ];
-        for(const re of patterns){const m=String(text||"").match(re);if(m)return parseCount(m[1]);}
+        for(const re of patterns){const m=text.match(re);if(m)return parseCount(m[1]);}
         return null;
       };
       const parseAgeHours=(label,article)=>{
@@ -179,8 +184,6 @@
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
-          const body=(article.innerText||"").trim();
-          if(body.length<12)continue;
           const timeEls=[...article.querySelectorAll('abbr[title],time,[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')];
           const timeLabel=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(" ")).join(" ");
           const age=parseAgeHours(timeLabel,article);
@@ -189,16 +192,15 @@
           visibleTimestampAges.push(age);
           oldestAgeHours=Math.max(oldestAgeHours,age);
           if(age>168){olderThanSevenDaysSeen=true;continue;}
-          if(age>24)continue;
-          const key=(timeLabel+"|"+body.slice(0,180)).replace(/\s+/g," ").slice(0,240);
+          const key=(timeLabel+"|"+(article.querySelector("[data-ft]")?.getAttribute("data-ft")||article.querySelector('a[href*="/posts/"],a[href*="/permalink/"]')?.getAttribute("href")||"visible-post")+"|"+age.toFixed(2)).replace(/\s+/g," ").slice(0,240);
           if(collected.has(key))continue;
           collected.set(key,{
             postId:key,
             time:timeLabel.trim().slice(0,120)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
-            likes:metric(body,"likes"),
-            comments:metric(body,"comments"),
-            shares:metric(body,"shares")
+            likes:metric(article,"likes"),
+            comments:metric(article,"comments"),
+            shares:metric(article,"shares")
           });
         }
         return {count:articles.length,oldestVisibleAge:visibleTimestampAges.length?Math.max(...visibleTimestampAges):null,timestampedVisible:visibleTimestampAges.length};
