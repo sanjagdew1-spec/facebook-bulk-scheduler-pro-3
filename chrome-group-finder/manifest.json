@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Group Finder Pro — Chrome Helper",
+  "version": "0.5.11",
+  "description": "Find visible public Facebook Groups and inspect visible last-24-hour and 7-day activity. Does not join groups or post.",
+  "permissions": [
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://top-facebook-group-finder-preview.onrender.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Group Finder Pro",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/search/groups/*",
+        "https://www.facebook.com/groups/*",
+        "https://top-facebook-group-finder-preview.onrender.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
