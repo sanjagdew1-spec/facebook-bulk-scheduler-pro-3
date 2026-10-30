@@ -128,7 +128,7 @@
         if(!m)return null;
         return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));
       };
-      const belongsToPost=(el,article)=>el.closest('[role="article"]')===article;
+      const belongsToPost=(el,article)=>article.matches('[role="article"]')?el.closest('[role="article"]')===article:!el.closest('[role="article"]')&&article.contains(el);
       const postNodes=(article,selector)=>[...article.querySelectorAll(selector)].filter(el=>visible(el)&&belongsToPost(el,article));
       const metric=(article,kind)=>{
         const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
@@ -215,9 +215,16 @@
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
         // multiple cards and mix one post's timestamp with another post's metrics.
         const allArticles=[...document.querySelectorAll('[role="article"]')].filter(visible);
-        // Keep the outermost feed post card. Nested article nodes can be comments/replies;
-        // treating them as posts can assign a commenter's name to the post.
-        let articles=allArticles.filter(el=>!el.parentElement?.closest('[role="article"]'));
+        // Prefer outermost cards that own their own timestamp. Nested article nodes
+        // are often comments/replies, not feed posts. If Facebook wraps the post in
+        // an extra article, fall back only to nested cards with an explicit story body.
+        const topLevel=allArticles.filter(el=>!el.parentElement?.closest('[role="article"]'));
+        const timeSelector='abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]';
+        let articles=topLevel.filter(el=>postNodes(el,timeSelector).length>0);
+        if(!articles.length){
+          const nestedWithStory=allArticles.filter(el=>el.parentElement?.closest('[role="article"]')&&postNodes(el,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]').length>0&&postNodes(el,timeSelector).length>0);
+          articles=nestedWithStory;
+        }
         nestedArticlesExcluded=Math.max(nestedArticlesExcluded,allArticles.length-articles.length);
         if(!articles.length)articles=[...document.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
         articlesObserved=Math.max(articlesObserved,articles.length);
