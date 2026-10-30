@@ -230,8 +230,9 @@
             const r=el.getBoundingClientRect();
             if(r.top>=info.cutoff)continue;
             const text=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ").trim();
-            const count=text.match(/(\\d[\\d,.]*(?:\\s*[KMB])?)/i);
-            if(count)return {value:parseCount(count[1]),source:"icon-control-associated-count"};
+            const counts=[...text.matchAll(/(\\d[\\d,.]*(?:\\s*[KMB])?)/ig)];
+            // If a parent contains multiple action counts, it is not a safe association.
+            if(counts.length===1)return {value:parseCount(counts[0][1]),source:"icon-control-associated-count"};
           }
           // Sometimes Facebook renders the count in a sibling immediately beside
           // the icon control; only inspect siblings within the same action row.
