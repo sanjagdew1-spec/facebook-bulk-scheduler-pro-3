@@ -1,10 +1,29 @@
-import html, json, os, re, time, urllib.parse, urllib.request, urllib.error
+import html, json, os, re, time, uuid, threading, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from xml.etree import ElementTree as ET
 
 PORT = int(os.environ.get("PORT", "10000"))
+ACTIVITY_TTL_SECONDS = 300
+ACTIVITY_MAX_SESSION_BYTES = 15_000_000
+ACTIVITY_SESSIONS = {}
+ACTIVITY_LOCK = threading.RLock()
+
+def cleanup_activity_sessions():
+    now = time.time()
+    with ACTIVITY_LOCK:
+        expired = [sid for sid, item in ACTIVITY_SESSIONS.items() if now >= item["expiresAt"]]
+        for sid in expired:
+            ACTIVITY_SESSIONS.pop(sid, None)
+
+def activity_cleanup_loop():
+    while True:
+        time.sleep(5)
+        cleanup_activity_sessions()
+
+threading.Thread(target=activity_cleanup_loop, daemon=True, name="activity-session-cleanup").start()
+
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 class AnchorParser(HTMLParser):
@@ -293,11 +312,57 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
     def do_GET(self):
-        if self.path.rstrip("/") in ("", "/health"):
+        path = urllib.parse.urlparse(self.path).path.rstrip("/")
+        if path in ("", "/health"):
             return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Mojeek public web index", "Brave Search public web index", "Google public web index", "Bing public web index", "DuckDuckGo public web index", "Yahoo public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
+        match = re.fullmatch(r"/api/activity/sessions/([a-f0-9-]{36})", path)
+        if match:
+            sid = match.group(1)
+            cleanup_activity_sessions()
+            with ACTIVITY_LOCK:
+                item = ACTIVITY_SESSIONS.get(sid)
+                if not item:
+                    return self._send(404, {"ok": False, "error": "Temporary activity session expired or not found."})
+                return self._send(200, {"ok": True, "sessionId": sid, "createdAt": item["createdAt"], "expiresAt": item["expiresAt"], "batchCount": len(item["batches"]), "batches": item["batches"]})
         return self._send(404, {"error":"Not found"})
+    def do_DELETE(self):
+        path = urllib.parse.urlparse(self.path).path.rstrip("/")
+        match = re.fullmatch(r"/api/activity/sessions/([a-f0-9-]{36})", path)
+        if not match:
+            return self._send(404, {"error":"Not found"})
+        sid = match.group(1)
+        with ACTIVITY_LOCK:
+            existed = ACTIVITY_SESSIONS.pop(sid, None) is not None
+        return self._send(200, {"ok": True, "deleted": existed})
     def do_POST(self):
-        if self.path.rstrip("/") != "/api/search":
+        path = urllib.parse.urlparse(self.path).path.rstrip("/")
+        if path == "/api/activity/sessions":
+            sid = str(uuid.uuid4())
+            now = time.time()
+            with ACTIVITY_LOCK:
+                ACTIVITY_SESSIONS[sid] = {"createdAt": now, "expiresAt": now + ACTIVITY_TTL_SECONDS, "bytes": 0, "batches": []}
+            return self._send(201, {"ok": True, "sessionId": sid, "ttlSeconds": ACTIVITY_TTL_SECONDS, "expiresAt": now + ACTIVITY_TTL_SECONDS})
+        batch_match = re.fullmatch(r"/api/activity/sessions/([a-f0-9-]{36})/batches", path)
+        if batch_match:
+            sid = batch_match.group(1)
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 1_500_000:
+                    return self._send(413, {"ok": False, "error": "Activity batch must be between 1 byte and 1.5 MB."})
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                with ACTIVITY_LOCK:
+                    item = ACTIVITY_SESSIONS.get(sid)
+                    if not item or time.time() >= item["expiresAt"]:
+                        ACTIVITY_SESSIONS.pop(sid, None)
+                        return self._send(410, {"ok": False, "error": "Temporary activity session expired."})
+                    if item["bytes"] + length > ACTIVITY_MAX_SESSION_BYTES:
+                        return self._send(413, {"ok": False, "error": "Temporary activity session reached its 15 MB safety limit."})
+                    item["batches"].append(payload)
+                    item["bytes"] += length
+                return self._send(202, {"ok": True, "accepted": True, "batchCount": len(item["batches"]), "expiresAt": item["expiresAt"]})
+            except Exception:
+                return self._send(400, {"ok": False, "error": "Invalid activity batch JSON."})
+        if path != "/api/search":
             return self._send(404, {"error":"Not found"})
         try:
             length = int(self.headers.get("Content-Length", "0"))
