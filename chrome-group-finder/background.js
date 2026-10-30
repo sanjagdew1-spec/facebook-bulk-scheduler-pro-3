@@ -65,6 +65,9 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
  if(msg.type==="PAGE_DETAILS"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(a&&sender.tab?.id===a.fbTabId){
+   if(msg.blocked&&a.websiteTabId){
+    try{await chrome.tabs.sendMessage(a.websiteTabId,{type:"ACTIVITY_RAW_ERROR",payload:{error:"Facebook login/checkpoint or restricted content blocked the visible scan. Complete any normal Facebook check yourself, then start a new scan."}})}catch{}
+   }
    // Raw scan content and derived reports are never written to extension storage.
    await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
    sendResponse({ok:true,temporaryOnly:true});return;
