@@ -52,6 +52,21 @@ function expireActivityNow(){
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')expireActivityNow()});
 
+function waitForActivityBridge(timeoutMs=10000){
+ return new Promise((resolve,reject)=>{
+  let settled=false;
+  const finish=(error)=>{if(settled)return;settled=true;clearInterval(pingTimer);clearTimeout(timeoutTimer);window.removeEventListener('message',onReady);error?reject(error):resolve();};
+  const onReady=event=>{
+   if(event.source!==window||event.origin!==location.origin)return;
+   if(event.data?.source==='gfp-chrome-helper'&&event.data.type==='READY'&&event.data.available)finish();
+  };
+  window.addEventListener('message',onReady);
+  const ping=()=>window.postMessage({source:'top-facebook-group-finder',type:'PING'},location.origin);
+  ping();
+  const pingTimer=setInterval(ping,350);
+  const timeoutTimer=setTimeout(()=>finish(new Error('Chrome Helper did not become ready. Check that the Group Finder Pro extension is enabled and its site access includes this website.')),timeoutMs);
+ });
+}
 async function createActivitySession(){
  const response=await fetch(ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
  const data=await response.json();if(!response.ok||!data.sessionId)throw new Error(data.error||'Could not create temporary Activity Lab session.');
@@ -60,7 +75,7 @@ async function createActivitySession(){
  activityNoDataTimer=setTimeout(()=>{
   if(activitySessionId===data.sessionId&&activityBatchCount===0){
    $('activityStatus').textContent='NO DATA RECEIVED';
-   $('activitySummary').textContent='The Facebook tab opened, but no scan batch reached Activity Lab. Reload the Group Finder Pro extension (v0.5.13), refresh this website, and try again.';
+   $('activitySummary').textContent='The Facebook tab opened, but no scan batch reached Activity Lab. The extension did not send any scan data. Check the Facebook tab and extension status, then retry.';
   }
  },15000);
  activityExpiryTimer=setTimeout(expireActivityNow,300000);
@@ -191,9 +206,11 @@ $('startActivityScan').onclick=async()=>{
  catch{$('saveToast').textContent='Enter a valid Facebook Group URL first.';$('saveToast').classList.add('show');return;}
  $('activityReport').style.display='block';$('activityStatus').textContent='STARTING';$('activitySummary').textContent='Clearing previous scan and creating a temporary session…';
  try{
+  $('activitySummary').textContent='Checking Chrome extension connection…';
+  await waitForActivityBridge();
   await deleteActivitySession(false);
   const session=await createActivitySession();
-  $('activitySummary').textContent='Temporary session created. Connecting to Chrome extension…';
+  $('activitySummary').textContent='Temporary session created. Opening the selected Facebook Group in a new tab…';
   window.postMessage({source:'top-facebook-group-finder',type:'START_ACTIVITY_CHECK',payload:{group:{name:name||'Selected Facebook Group',url},sessionId:session.sessionId}},location.origin);
  }catch(error){$('activityStatus').textContent='ERROR';$('activitySummary').textContent=String(error);}
 };
