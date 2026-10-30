@@ -42,3 +42,6 @@ This extension is on the isolated `prototype/chrome-group-finder-automation` bra
 - Does not open individual posts, read comment threads, inspect who liked a post, inspect share destinations, or perform likes/comments/shares/joins.
 - Activity Lab displays only post number, time, likes, comments, and shares; missing values are shown as Not available.
 - Facebook may hide timestamps or engagement counts. The scan reports only values it can actually read and does not estimate missing data.
+
+
+Version 0.5.0: activity reports now show the visible post author beside each post when Facebook exposes it.
