@@ -129,15 +129,25 @@
         return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));
       };
       const metric=(article,kind)=>{
-        const labels=[...article.querySelectorAll("[aria-label],[title]")].filter(visible).map(el=>[
-          el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText
-        ].filter(Boolean).join(" ")).filter(Boolean);
-        const text=[article.innerText||"",...labels].join(" ").replace(/\s+/g," ");
         const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
+        const nodes=[...article.querySelectorAll("[aria-label],[title]")].filter(visible);
+        // Prefer explicit accessible labels on visible metric controls/counts.
+        // Do not scan arbitrary post body text for numbers.
+        for(const el of nodes){
+          const label=[el.getAttribute("aria-label"),el.getAttribute("title")].filter(Boolean).join(" ").replace(/\s+/g," ");
+          if(!label)continue;
+          const patterns=[
+            new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
+            new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
+          ];
+          for(const re of patterns){const m=label.match(re);if(m)return parseCount(m[1]);}
+        }
+        // Conservative fallback: visible footer/action controls only.
+        const footer=[...article.querySelectorAll('[role="group"],[aria-label*="comment" i],[aria-label*="share" i],[aria-label*="like" i]')].filter(visible);
+        const text=footer.map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" ")).join(" ").replace(/\s+/g," ");
         const patterns=[
           new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
-          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i"),
-          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s+(?:people\\s+)?(?:like|comment|share)","i")
+          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
         ];
         for(const re of patterns){const m=text.match(re);if(m)return parseCount(m[1]);}
         return null;
@@ -192,9 +202,10 @@
             article.querySelector('[data-utime]')||
             article.querySelector('a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]');
           const timeEls=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')];
+          // Use one timestamp node only; combining nested labels can mix unrelated times.
           const timeLabel=primaryTimeEl
-            ?[primaryTimeEl.innerText,primaryTimeEl.getAttribute("aria-label"),primaryTimeEl.getAttribute("title"),primaryTimeEl.getAttribute("datetime")].filter(Boolean).join(" ")
-            :timeEls.map(el=>[el.innerText,el.getAttribute("aria-label"),el.getAttribute("title"),el.getAttribute("datetime")].filter(Boolean).join(" ")).join(" ");
+            ?String(primaryTimeEl.innerText||primaryTimeEl.getAttribute("aria-label")||primaryTimeEl.getAttribute("title")||primaryTimeEl.getAttribute("datetime")||"").trim()
+            :String(timeEls.find(el=>String(el.innerText||el.getAttribute("aria-label")||el.getAttribute("title")||"").trim())?.innerText||"").trim();
           const age=parseAgeHours(timeLabel,article);
           if(age==null)continue;
           timestampedArticles++;
@@ -247,9 +258,9 @@
         groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),
         checkedAt:new Date().toISOString(),
         recentPostsFound:recentPosts.length,
-        recentPosts:recentPosts.map(p=>({postNumber:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        recentPosts:recentPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
         weekPostsFound:weekPosts.length,
-        weekPosts:weekPosts.map(p=>({postNumber:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        weekPosts:weekPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
         recentTopEngagement:maxEngagement(recentPosts),
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
