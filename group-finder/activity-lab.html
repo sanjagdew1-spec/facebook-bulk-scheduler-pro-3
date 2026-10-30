@@ -188,6 +188,17 @@ async function analyzeTemporarySession(meta){
   return null;
  };
  const analyzeSnapshot=(snap)=>{
+  // Trust only metadata captured from the live post's verified header and
+  // first-level Like/Comment/Share action row. Never infer a post from
+  // comment-card names, timestamps, or reaction controls in serialized HTML.
+  const data=snap.postData;
+  if(!data||!data.author||data.author==='Not available'||data.ageHours==null)return [];
+  const preview=String(data.preview||'Not available').replace(/\\s+/g,' ').trim().slice(0,220);
+  const author=String(data.author).trim();
+  const time=String(data.time||'Not available');
+  const authorKey=author.toLowerCase();
+  const postId=(snap.snapshotKey||'')+'|'+authorKey+'|'+Math.round(Number(data.ageHours)*2)/2+'|'+preview.slice(0,180);
+  return [{author,time,ageHours:Number(data.ageHours),preview,likes:Number.isFinite(data.likes)?data.likes:null,comments:Number.isFinite(data.comments)?data.comments:null,shares:Number.isFinite(data.shares)?data.shares:null,postId,photoCount:Number(data.photoCount)||0,videoCount:Number(data.videoCount)||0}];
   const doc=new DOMParser().parseFromString(String(snap.html||''),'text/html');
   const root=doc.body.firstElementChild;if(!root)return [];
   let candidates=[...root.querySelectorAll('[role="article"]')].filter(el=>!el.parentElement?.closest('[role="article"]'));
