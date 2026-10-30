@@ -369,9 +369,15 @@
             exactTime:absoluteLabel.slice(0,180),
             time:timeLabel.trim().slice(0,220)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
-            likes:metric(article,"likes"),
-            comments:metric(article,"comments"),
-            shares:metric(article,"shares")
+            likes:metric(article,"likes").value,
+            comments:metric(article,"comments").value,
+            shares:metric(article,"shares").value,
+            extractionDiagnostics:{
+              likeSource:metric(article,"likes").source,
+              commentSource:metric(article,"comments").source,
+              shareSource:metric(article,"shares").source,
+              boundary:postBoundaryInfo(article)
+            }
           });
         }
         return {count:articles.length,oldestVisibleAge:visibleTimestampAges.length?Math.max(...visibleTimestampAges):null,timestampedVisible:visibleTimestampAges.length};
@@ -410,7 +416,7 @@
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
         weekTotals:{likes:totals(weekPosts,"likes"),comments:totals(weekPosts,"comments"),shares:totals(weekPosts,"shares")},
-        scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,authorsIdentified,authorsUnavailable,nestedArticlesExcluded,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
+        scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,authorsIdentified,authorsUnavailable,nestedArticlesExcluded,mediaAnchorsFound,viewMoreBoundariesFound,commentComposersFound,actionRowsFound,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
         blocked:false,
         note:"Only visible post timestamps and visible like/comment/share counts were read. No post was opened and no comment or liker list was inspected."
       };
