@@ -207,7 +207,7 @@ async function analyzeTemporarySession(meta){
 }
 $('startActivityScan').onclick=async()=>{
  const name=$('gname').value.trim(),url=$('gurl').value.trim();
- try{const u=new URL(url);if(!/(^|\\.)facebook\\.com$/i.test(u.hostname)||!/^\\/groups\\/[^/]+/.test(u.pathname))throw Error();}
+ try{const u=new URL(url);if(!(u.hostname.toLowerCase()==='facebook.com'||u.hostname.toLowerCase().endsWith('.facebook.com'))||!u.pathname.startsWith('/groups/')||!u.pathname.split('/')[2])throw Error();}
  catch{$('saveToast').textContent='Enter a valid Facebook Group URL first.';$('saveToast').classList.add('show');return;}
  $('activityReport').style.display='block';$('activityStatus').textContent='STARTING';$('activitySummary').textContent='Checking Chrome extension connection…';
  try{
