@@ -63,7 +63,6 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   await chrome.storage.local.set({[ACTIVITY_KEY]:report,[ACTIVITY_JOB_KEY]:{...a,status:"complete",finishedAt:Date.now()}});
   const updated=results.map(g=>g.url===report.url?{...g,activityReport:report,activityScore:report.activityScore,activityEvidenceScore:report.evidenceScore,score:report.evidenceScore}:g);
   await chrome.storage.local.set({[RESULTS_KEY]:updated});
-  if(a.websiteTabId)try{await chrome.tabs.update(a.websiteTabId,{active:true})}catch{}
   sendResponse({ok:true,report});return;
  }
  if(msg.type==="START_SCAN"){const active=await getJob();if(active&&["starting","searching","checking-details"].includes(active.status)){sendResponse({ok:false,error:"A search is already running. Stop it or wait for it to finish before starting another."});return;}const queries=String(msg.keywords||"").split(/\n+/).map(s=>s.trim()).filter(Boolean);if(!queries.length)queries.push("");const job={queries,country:msg.country||"Any country",onlyUSA:Boolean(msg.onlyUSA),minimumMembers:Number(msg.minimumMembers)||0,minimumScore:Number(msg.minimumScore)||0,activityPriorities:Array.isArray(msg.activityPriorities)?msg.activityPriorities:[],extraKeywords:String(msg.extraKeywords||""),phase:"search",index:0,tabId:null,status:"starting",message:"Starting Chrome search",startedAt:Date.now()};await chrome.storage.local.set({[RESULTS_KEY]:[]});await setJob(job);await openCurrent(job);sendResponse({ok:true,count:queries.length});return;}
