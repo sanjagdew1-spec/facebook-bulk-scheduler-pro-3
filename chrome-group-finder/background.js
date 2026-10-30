@@ -60,14 +60,21 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   const historyData=await chrome.storage.local.get([ACTIVITY_HISTORY_KEY,ACTIVITY_KEY,RESULTS_KEY]);
   const allHistory=historyData[ACTIVITY_HISTORY_KEY]||{};
   const groupHistory=Array.isArray(allHistory[a.group.url])?allHistory[a.group.url]:[];
-  const previous=historyData[ACTIVITY_KEY]?.url===a.group.url?historyData[ACTIVITY_KEY]:null;
+  const currentReport=historyData[ACTIVITY_KEY]?.url===a.group.url?historyData[ACTIVITY_KEY]:null;
+  const hasPosts=r=>Boolean(r&&((r.recentPosts||[]).length+(r.weekPosts||[]).length)>0);
+  const historyPrevious=[...groupHistory].reverse().find(hasPosts)||null;
+  // An empty scan must never erase the last useful report for this same group.
+  const previous=hasPosts(currentReport)?currentReport:(historyPrevious?{...historyPrevious,url:a.group.url,groupName:a.group.name}:currentReport);
+  const preservePrevious=recentPosts.length+weekPosts.length===0&&hasPosts(previous);
+  const displayRecentPosts=preservePrevious?previous.recentPosts:recentPosts;
+  const displayWeekPosts=preservePrevious?previous.weekPosts:weekPosts;
   const postKey=p=>String(p.postId||((p.time||"")+"|"+(p.ageHours??"")+"|"+(p.likes??"")+"|"+(p.comments??"")+"|"+(p.shares??"")));
   const priorKeys=new Set(groupHistory.flatMap(h=>[...(h.recentPosts||[]),...(h.weekPosts||[])].map(postKey)));
   const newRecentPosts=recentPosts.filter(p=>!priorKeys.has(postKey(p)));
   const newWeekPosts=weekPosts.filter(p=>!priorKeys.has(postKey(p)));
   const known=(posts,key)=>posts.filter(p=>p[key]!=null).length;
   const total=(posts,key)=>{const n=known(posts,key);return n?posts.reduce((s,p)=>s+(Number(p[key])||0),0):null;};
-  const metricAvailability=["likes","comments","shares"].filter(k=>known([...recentPosts,...weekPosts],k)>0);
+  const metricAvailability=["likes","comments","shares"].filter(k=>known([...displayRecentPosts,...displayWeekPosts],k)>0);
   const completeness=Math.round((Math.min(1,recentPosts.length/5)*40)+(known(recentPosts,"likes")?20:0)+(known(recentPosts,"comments")?20:0)+(known(recentPosts,"shares")?20:0));
   const results=historyData[RESULTS_KEY]||[];
   const priorGroup=results.find(g=>g.url===a.group.url);
@@ -79,13 +86,14 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   const top=(posts)=>posts.length?[...posts].sort((x,y)=>((y.likes||0)+(y.comments||0)+(y.shares||0))-((x.likes||0)+(x.comments||0)+(x.shares||0)))[0]:null;
   const report={
     url:scannedUrl,groupName:msg.groupName||a.group.name,selectedGroupName:a.group.name,selectedUrl:a.group.url,scannedUrl:msg.url||sender.tab?.url,
-    checkedAt:msg.checkedAt||new Date().toISOString(),
-    recentPostsFound:recentPosts.length,recentPosts,
-    weekPostsFound:weekPosts.length,weekPosts,
-    recentTopEngagement:msg.recentTopEngagement||top(recentPosts),
-    weekTopEngagement:msg.weekTopEngagement||top(weekPosts),
-    recentTotals:msg.recentTotals||{likes:{count:known(recentPosts,"likes"),total:total(recentPosts,"likes")},comments:{count:known(recentPosts,"comments"),total:total(recentPosts,"comments")},shares:{count:known(recentPosts,"shares"),total:total(recentPosts,"shares")}},
-    weekTotals:msg.weekTotals||{likes:{count:known(weekPosts,"likes"),total:total(weekPosts,"likes")},comments:{count:known(weekPosts,"comments"),total:total(weekPosts,"comments")},shares:{count:known(weekPosts,"shares"),total:total(weekPosts,"shares")}},
+    checkedAt:preservePrevious?(previous.checkedAt||"Previous successful scan"):msg.checkedAt||new Date().toISOString(),
+    lastAttemptAt:msg.checkedAt||new Date().toISOString(),
+    recentPostsFound:displayRecentPosts.length,recentPosts:displayRecentPosts,
+    weekPostsFound:displayWeekPosts.length,weekPosts:displayWeekPosts,
+    recentTopEngagement:preservePrevious?(previous.recentTopEngagement||top(displayRecentPosts)):(msg.recentTopEngagement||top(recentPosts)),
+    weekTopEngagement:preservePrevious?(previous.weekTopEngagement||top(displayWeekPosts)):(msg.weekTopEngagement||top(weekPosts)),
+    recentTotals:preservePrevious?(previous.recentTotals||null):(msg.recentTotals||{likes:{count:known(recentPosts,"likes"),total:total(recentPosts,"likes")},comments:{count:known(recentPosts,"comments"),total:total(recentPosts,"comments")},shares:{count:known(recentPosts,"shares"),total:total(recentPosts,"shares")}}),
+    weekTotals:preservePrevious?(previous.weekTotals||null):(msg.weekTotals||{likes:{count:known(weekPosts,"likes"),total:total(weekPosts,"likes")},comments:{count:known(weekPosts,"comments"),total:total(weekPosts,"comments")},shares:{count:known(weekPosts,"shares"),total:total(weekPosts,"shares")}}),
     activityScore:completeness,evidenceCompleteness:completeness,
     baseEvidenceScore:priorGroup?.score??null,previousEvidenceScore:previousScore,
     evidenceScore,evidenceIncrease,newPostsFound:newRecentPosts.length+newWeekPosts.length,
@@ -104,11 +112,12 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
       commentComposersFound:Number(msg.scanDiagnostics?.commentComposersFound)||0,
       actionRowsFound:Number(msg.scanDiagnostics?.actionRowsFound)||0,
       recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,
+      lastAttemptPostsFound:recentPosts.length+weekPosts.length,
       oldestAgeHours:Number(msg.scanDiagnostics?.oldestAgeHours)||0,
       olderThanSevenDaysSeen:Boolean(msg.scanDiagnostics?.olderThanSevenDaysSeen)
     },
     historyCount:groupHistory.length+1,status:"complete",
-    note:"Only visible timestamps and visible like/comment/share counts were inspected on the group page. No post was opened; comments, liker lists and share destinations were not inspected. Missing counts are Not available."
+    note:preservePrevious?"The latest scan found no eligible posts, so the last successful report for this same group is being kept instead of being erased. Latest scan diagnostics are shown separately. No post was opened; comments, liker lists and share destinations were not inspected.":"Only visible timestamps and visible like/comment/share counts were inspected on the group page. No post was opened; comments, liker lists and share destinations were not inspected. Missing counts are Not available."
   };
   const historyEntry={
     checkedAt:report.checkedAt,recentPosts,weekPosts,
