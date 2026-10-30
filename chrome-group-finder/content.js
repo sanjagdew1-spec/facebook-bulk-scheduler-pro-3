@@ -32,6 +32,8 @@
         } catch (error) {
           window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:String(error)},WEBSITE_ORIGIN);
         }
+      } else if (msg.type === "CANCEL_ACTIVITY_SESSION") {
+        try { await chrome.runtime.sendMessage({type:"CANCEL_ACTIVITY_SESSION"}); } catch {}
       } else if (msg.type === "START_ACTIVITY_CHECK") {
         try {
           const response = await chrome.runtime.sendMessage({type:"START_ACTIVITY_CHECK",group:msg.payload?.group,sessionId:msg.payload?.sessionId});
