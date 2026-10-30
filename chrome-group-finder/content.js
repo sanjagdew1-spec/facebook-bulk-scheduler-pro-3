@@ -130,27 +130,45 @@
       };
       const belongsToPost=(el,article)=>article.matches('[role="article"]')?el.closest('[role="article"]')===article:!el.closest('[role="article"]')&&article.contains(el);
       const postNodes=(article,selector)=>[...article.querySelectorAll(selector)].filter(el=>visible(el)&&belongsToPost(el,article));
+      const profileLink=(el)=>{
+        let path="";try{path=new URL(el.getAttribute("href")||"",location.origin).pathname;}catch{}
+        return /profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path))||Boolean(el.getAttribute("data-hovercard")||el.getAttribute("data-hovercard-id"));
+      };
+      const postHeaderTimeNodes=(article)=>{
+        const top=article.getBoundingClientRect().top;
+        return postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')
+          .filter(el=>el.getBoundingClientRect().top<=top+190);
+      };
+      const commentThreadStart=(article)=>{
+        const top=article.getBoundingClientRect().top;
+        const laterTimes=postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')
+          .filter(el=>el.getBoundingClientRect().top>top+190)
+          .map(el=>el.getBoundingClientRect().top);
+        if(laterTimes.length)return Math.min(...laterTimes);
+        const laterProfiles=postNodes(article,'a[href][data-hovercard],a[href][data-hovercard-id],a[href*="profile.php"],a[href^="/people/"]')
+          .filter(el=>el.getBoundingClientRect().top>top+190&&profileLink(el))
+          .map(el=>el.getBoundingClientRect().top);
+        return laterProfiles.length?Math.min(...laterProfiles):null;
+      };
       const metric=(article,kind)=>{
         const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
-        const nodes=postNodes(article,"[aria-label],[title]");
-        // Prefer explicit accessible labels on visible metric controls/counts.
-        // Do not scan arbitrary post body text for numbers.
-        for(const el of nodes){
-          const label=[el.getAttribute("aria-label"),el.getAttribute("title")].filter(Boolean).join(" ").replace(/\s+/g," ");
-          if(!label)continue;
-          const patterns=[
-            new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
-            new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
-          ];
-          for(const re of patterns){const m=label.match(re);if(m)return parseCount(m[1]);}
-        }
-        // Conservative fallback: visible footer/action controls only.
-        const footer=postNodes(article,'[role="group"],[aria-label*="comment" i],[aria-label*="share" i],[aria-label*="like" i]');
-        const text=footer.map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" ")).join(" ").replace(/\s+/g," ");
+        const boundary=commentThreadStart(article);
+        // Fail closed if we cannot separate the post footer from visible comments.
+        if(boundary==null)return null;
+        const withinPostFooter=el=>el.getBoundingClientRect().top<boundary;
         const patterns=[
           new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
           new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
         ];
+        const nodes=postNodes(article,"[aria-label],[title]").filter(withinPostFooter);
+        for(const el of nodes){
+          const label=[el.getAttribute("aria-label"),el.getAttribute("title")].filter(Boolean).join(" ").replace(/\s+/g," ");
+          if(!label||/reply|replied|commented|view more comments|write a comment/i.test(label))continue;
+          for(const re of patterns){const m=label.match(re);if(m)return parseCount(m[1]);}
+        }
+        const footer=postNodes(article,'[role="group"]').filter(withinPostFooter);
+        const text=footer.map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" ")).join(" ").replace(/\s+/g," ");
+        if(/reply|replied|commented|view more comments|write a comment/i.test(text))return null;
         for(const re of patterns){const m=text.match(re);if(m)return parseCount(m[1]);}
         return null;
       };
@@ -184,21 +202,19 @@
         return null;
       };
       const postAuthor=(article)=>{
-        // Strictly read the visible author header of the top-level post card.
-        // Never use names from nested comment/reply articles or arbitrary bold text.
-        const cardTop=article.getBoundingClientRect().top;
+        const top=article.getBoundingClientRect().top;
+        const story=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
+          .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0];
+        const storyTop=story?story.getBoundingClientRect().top:top+210;
         const semantic=postNodes(article,'[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i]')
-          .map(el=>({label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),top:el.getBoundingClientRect().top}))
-          .filter(x=>x.label.length>=2&&x.label.length<=90&&x.top>=cardTop-8&&x.top<=cardTop+150);
-        if(semantic.length)return semantic.sort((a,b)=>a.top-b.top)[0].label;
-        const links=postNodes(article,"a[href]").map(el=>{
-          let path="";try{path=new URL(el.getAttribute("href"),location.origin).pathname;}catch{}
-          const rect=el.getBoundingClientRect();
-          const label=(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim();
-          const profile=/profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path));
-          return {label,top:rect.top,left:rect.left,profile};
-        }).filter(x=>x.profile&&x.label.length>=2&&x.label.length<=90&&x.top>=cardTop-8&&x.top<=cardTop+135)
-          .sort((a,b)=>a.top-b.top||a.left-b.left);
+          .map(el=>({label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),y:el.getBoundingClientRect().top}))
+          .filter(x=>x.label.length>=2&&x.label.length<=90&&x.y>=top-8&&x.y<Math.min(storyTop,top+210));
+        if(semantic.length)return semantic.sort((a,b)=>a.y-b.y)[0].label;
+        const links=postNodes(article,"a[href]").filter(profileLink).map(el=>({
+          label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),
+          y:el.getBoundingClientRect().top
+        })).filter(x=>x.label.length>=2&&x.label.length<=90&&x.y>=top-8&&x.y<Math.min(storyTop,top+210))
+          .sort((a,b)=>a.y-b.y);
         return links[0]?.label||"Not available";
       };
       const postPreview=(article)=>{
@@ -231,7 +247,7 @@
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
-          const timeEls=postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]');
+          const timeEls=postHeaderTimeNodes(article);
           // Pick the timestamp whose visible text is a relative age (10h, 4d, etc.)
           // before considering an absolute title. This avoids a neighboring card's date.
           const primaryTimeEl=timeEls.find(el=>/\b(?:just now|\d+\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks))\b/i.test([el.innerText,el.getAttribute("aria-label")].filter(Boolean).join(" ")))||timeEls[0]||null;
