@@ -32,19 +32,77 @@ function renderActivityReport(report,job){
  const topLine=(label,p)=>'<div class="hint"><b>'+label+':</b> '+(p?'<b>'+esc(p.author||'Not available')+'</b> · '+esc(p.time||'Time not available')+' · Likes '+metricText(p.likes,'likes')+' · Comments '+metricText(p.comments,'comments')+' · Shares '+metricText(p.shares,'shares'):'Not available')+'</div>';
  $('activitySummary').innerHTML=identity+'<div class="activity-kpis"><div class="activity-kpi"><small>Posts · last 24 hours</small><b>'+Number(report.recentPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Posts · days 2–7</small><b>'+Number(report.weekPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Scroll steps</small><b>'+Number(report.scanDiagnostics?.scrollSteps||0).toLocaleString()+'</b></div></div><div class="hint">Post authors identified: <b>'+Number(report.scanDiagnostics?.authorsIdentified||0).toLocaleString()+'</b> · Author unavailable: <b>'+Number(report.scanDiagnostics?.authorsUnavailable||0).toLocaleString()+'</b> · Nested comment cards excluded: <b>'+Number(report.scanDiagnostics?.nestedArticlesExcluded||0).toLocaleString()+'</b> · Scan time: '+esc(report.checkedAt?new Date(report.checkedAt).toLocaleString():'Not available')+'</div><div class="activity-section-title">Last 24 hours · visible totals</div><div class="hint">Likes: '+metricText(r.likes?.total,'likes')+' · Comments: '+metricText(r.comments?.total,'comments')+' · Shares: '+metricText(r.shares?.total,'shares')+'</div>'+topLine('Highest 24-hour engagement',report.recentTopEngagement)+activityRows(report.recentPosts)+'<div class="activity-section-title">Older posts · days 2–7 · visible totals</div><div class="hint">Likes: '+metricText(w.likes?.total,'likes')+' · Comments: '+metricText(w.comments?.total,'comments')+' · Shares: '+metricText(w.shares?.total,'shares')+'</div>'+topLine('Highest days 2–7 engagement',report.weekTopEngagement)+activityRows(report.weekPosts)+'<div class="hint">'+esc(report.note||'Only visible information is reported.')+'</div>';
 }
-$('startActivityScan').onclick=()=>{
+const ACTIVITY_API='https://group-finder-search-api.onrender.com';
+let activitySessionId=null,activityBatchCount=0,activityRawBytes=0;
+async function deleteActivitySession(keepalive=false){
+ const id=activitySessionId;activitySessionId=null;
+ if(!id)return;
+ try{await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id),{method:'DELETE',keepalive,headers:{'Content-Type':'application/json'}})}catch{}
+}
+window.addEventListener('pagehide',()=>{deleteActivitySession(true)});
+async function createActivitySession(){
+ const response=await fetch(ACTIVITY_API+'/api/activity/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+ const data=await response.json();if(!response.ok||!data.sessionId)throw new Error(data.error||'Could not create temporary Activity Lab session.');
+ activitySessionId=data.sessionId;activityBatchCount=0;activityRawBytes=0;return data;
+}
+async function receiveRawActivityBatch(payload){
+ if(!activitySessionId||!payload)return;
+ const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(activitySessionId)+'/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary data upload failed.');
+ activityBatchCount++;activityRawBytes+=new Blob([JSON.stringify(payload)]).size;
+ $('activityStatus').textContent='RECEIVING';
+ $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' temporary raw-data batches ('+activityRawBytes.toLocaleString()+' bytes). Server expiry: maximum 5 minutes.';
+}
+async function analyzeTemporarySession(meta){
+ const id=activitySessionId;if(!id)return;
+ const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id));
+ const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary session expired before analysis.');
+ const batches=data.batches||[];let snapshots=0,htmlBytes=0,articleNodes=0,timeNodes=0,actionSignals=0,viewMoreMarkers=0,feedUnits=0;
+ const sampleTexts=[];
+ for(const batch of batches){
+  for(const snap of (batch.snapshots||[])){
+   snapshots++;htmlBytes+=String(snap.html||'').length;
+   const doc=new DOMParser().parseFromString(String(snap.html||''),'text/html');
+   articleNodes+=doc.querySelectorAll('[role="article"]').length;
+   timeNodes+=doc.querySelectorAll('abbr[title],time[datetime],[data-utime]').length;
+   feedUnits+=doc.querySelectorAll('[data-pagelet*="FeedUnit"]').length;
+   actionSignals+=doc.querySelectorAll('[aria-label*="like" i],[aria-label*="comment" i],[aria-label*="share" i],[data-testid*="ufi" i]').length;
+   viewMoreMarkers+=doc.querySelectorAll('[data-gfp-boundary-marker="true"]').length;
+   const root=doc.body.innerText.replace(/\s+/g,' ').trim();
+   if(root)sampleTexts.push(root.slice(0,180));
+  }
+ }
+ $('activityStatus').textContent='RAW DATA RECEIVED';
+ $('activitySummary').innerHTML='<div class="hint"><b>Temporary raw-data intake complete</b><br>Selected Group: '+esc(meta?.groupName||'Not available')+'<br>Scanned URL: '+esc(meta?.url||'Not available')+'<br>Scroll batches received: '+batches.length+'<br>DOM snapshots received: '+snapshots+'<br>DOM HTML characters: '+htmlBytes.toLocaleString()+'<br>FeedUnit markers: '+feedUnits+' · Article nodes: '+articleNodes+' · Time nodes: '+timeNodes+' · Action-label signals: '+actionSignals+' · View More Comments markers: '+viewMoreMarkers+'<br><b>Privacy:</b> comment/reply article text was redacted before transfer. The temporary server session expires within 5 minutes and is deleted on Refresh/New Find.</div><div class="hint">This confirms raw DOM data reached Activity Lab. Post-level author/time/engagement parsing still requires validation against the actual Facebook page structure; unknown counts will remain Not available rather than guessed.</div>';
+ $('activityRows').innerHTML='';
+ // Keep the server copy only for the five-minute inspection window. No browser storage is used.
+}
+$('startActivityScan').onclick=async()=>{
  const name=$('gname').value.trim(),url=$('gurl').value.trim();
  try{const u=new URL(url);if(!['facebook.com','www.facebook.com','m.facebook.com'].includes(u.hostname.toLowerCase())||!/^\/groups\/[^/]+/.test(u.pathname))throw Error();}
  catch{$('saveToast').textContent='Enter a valid Facebook Group URL first.';$('saveToast').classList.add('show');return;}
- $('activityReport').style.display='block';$('activityStatus').textContent='STARTING';$('activitySummary').textContent='Connecting to Chrome extension…';
- window.postMessage({source:'top-facebook-group-finder',type:'START_ACTIVITY_CHECK',payload:{group:{name:name||'Selected Facebook Group',url}}},location.origin);
+ $('activityReport').style.display='block';$('activityStatus').textContent='STARTING';$('activitySummary').textContent='Clearing previous scan and creating a temporary session…';
+ try{
+  await deleteActivitySession(false);
+  const session=await createActivitySession();
+  $('activitySummary').textContent='Temporary session created. Connecting to Chrome extension…';
+  window.postMessage({source:'top-facebook-group-finder',type:'START_ACTIVITY_CHECK',payload:{group:{name:name||'Selected Facebook Group',url},sessionId:session.sessionId}},location.origin);
+ }catch(error){$('activityStatus').textContent='ERROR';$('activitySummary').textContent=String(error);}
 };
-window.addEventListener('message',event=>{
+window.addEventListener('message',async event=>{
  if(event.source!==window||event.origin!==location.origin)return;
- const msg=event.data;if(!msg||msg.source!=='gfp-chrome-helper'||msg.type!=='STATE')return;
- const state=msg.state||{};
- if(state.activityReport)renderActivityReport(state.activityReport,state.activityJob);
- else if(state.activityJob)renderActivityReport(null,state.activityJob);
+ const msg=event.data;if(!msg||msg.source!=='gfp-chrome-helper')return;
+ if(msg.type==='STATE'){
+  const state=msg.state||{};if(state.activityJob?.status==='checking'&&!activitySessionId)return;
+  return;
+ }
+ if(msg.type==='ACTIVITY_RAW_BATCH'){
+  try{await receiveRawActivityBatch(msg.payload)}catch(error){$('activityStatus').textContent='UPLOAD ERROR';$('activitySummary').textContent=String(error);}
+  return;
+ }
+ if(msg.type==='ACTIVITY_RAW_COMPLETE'){
+  try{await analyzeTemporarySession(msg.payload)}catch(error){$('activityStatus').textContent='ANALYSIS ERROR';$('activitySummary').textContent=String(error);}
+ }
 });
 $('clear').onclick=()=>{if(confirm('Clear the saved Group list in this browser?')){localStorage.removeItem('gfp_shortlist');render();$('saveToast').textContent='Saved list cleared.';$('saveToast').classList.add('show')}};$('savedJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});$('activityJump').onclick=()=>$('shortlist').scrollIntoView({behavior:'smooth'});render();
 </script></body></html>
