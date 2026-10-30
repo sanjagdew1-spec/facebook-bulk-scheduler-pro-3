@@ -124,41 +124,66 @@
     }
     if(isGroupPage){
       const parseMetric=(text,kind)=>{
-        const patterns=kind==="shares"?[/([\\d,.]+\\s*[KMB]?)\\s+shares?\\b/i]:kind==="comments"?[/([\\d,.]+\\s*[KMB]?)\\s+comments?\\b/i]:[/([\\d,.]+\\s*[KMB]?)\\s+(?:likes?|reactions?)\\b/i];
-        for(const re of patterns){const m=String(text||"").match(re);if(m)return countValue(m[1]);}
-        return null;
+        const pattern=kind==="shares"?/([\d,.]+\s*[KMB]?)\s+shares?\b/i:kind==="comments"?/([\d,.]+\s*[KMB]?)\s+comments?\b/i:/([\d,.]+\s*[KMB]?)\s+(?:likes?|reactions?)\b/i;
+        const m=String(text||"").match(pattern);
+        return m?countValue(m[1]):null;
       };
       const isRecent24h=text=>{
-        const t=String(text||"").toLowerCase();
-        if(/\\b(just now|today)\\b/.test(t))return true;
-        const m=t.match(/\\b(\\d+)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours)\\b/);
-        if(m){const n=Number(m[1]),unit=m[2];return /^(?:h|hr|hrs|hour|hours)$/.test(unit)?n<=24:n<=1440;}
-        const parsed=new Date(t);if(!Number.isNaN(parsed.getTime())){const age=Date.now()-parsed.getTime();return age>=0&&age<=86400000;}
+        const t=String(text||"").toLowerCase().replace(/\s+/g," ").trim();
+        if(/\b(just now|today|moments? ago|a few seconds ago)\b/.test(t))return true;
+        if(/\byesterday\b/.test(t))return true;
+        const m=t.match(/\b(\d+|an?|one)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours)\b/);
+        if(m){
+          const n=/^(?:a|an|one)$/.test(m[1])?1:Number(m[1]);
+          const unit=m[2];
+          return /^(?:h|hr|hrs|hour|hours)$/.test(unit)?n<=24:n<=1440;
+        }
+        const dateMatch=t.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?\b/i);
+        if(dateMatch){
+          const parsed=new Date(dateMatch[0]+(dateMatch[0].match(/\d{4}/)?"":", "+new Date().getFullYear()));
+          const age=Date.now()-parsed.getTime();
+          return Number.isFinite(age)&&age>=0&&age<=86400000;
+        }
         return false;
       };
-      // Scroll the same logged-in group tab in bounded steps to load more visible feed items.
-      // This does not like, comment, share, join, or submit anything.
-      for(let step=0;step<12;step++){
+      const recentPostsByKey=new Map();
+      const articleSelector='[role="article"],[data-pagelet*="FeedUnit"]';
+      const collectVisiblePosts=()=>{
+        const articles=[...document.querySelectorAll(articleSelector)].filter(visible);
+        for(const article of articles){
+          const postText=(article.innerText||"").trim();
+          if(postText.length<20)continue;
+          const timeEls=[...article.querySelectorAll('a[aria-label],abbr[title],time,[aria-label],[data-utime]')];
+          const timeText=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(' ')).join(' ');
+          const combined=timeText+" "+postText;
+          if(!isRecent24h(combined))continue;
+          const key=(timeText+" "+postText.slice(0,220)).replace(/\s+/g," ").slice(0,260);
+          if(recentPostsByKey.has(key))continue;
+          recentPostsByKey.set(key,{
+            time:timeText.trim().slice(0,160)||"Recent timestamp visible; exact time unavailable",
+            reactions:parseMetric(postText,"reactions"),
+            comments:parseMetric(postText,"comments"),
+            shares:parseMetric(postText,"shares"),
+            snippet:postText.slice(0,320)
+          });
+        }
+        return articles.length;
+      };
+      // Facebook virtualizes its feed: collect posts after every scroll step,
+      // otherwise earlier posts may disappear from the DOM before inspection.
+      await sleep(2200);
+      let observedArticles=collectVisiblePosts();
+      for(let step=0;step<16;step++){
         const before=window.scrollY;
-        window.scrollBy({top:Math.max(500,Math.floor(window.innerHeight*0.75)),behavior:"instant"});
-        await sleep(650);
+        window.scrollBy({top:Math.max(450,Math.floor(window.innerHeight*0.7)),behavior:"instant"});
+        await sleep(1050);
+        observedArticles=Math.max(observedArticles,collectVisiblePosts());
         if(window.scrollY===before||window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5)break;
       }
-      const articles=[...document.querySelectorAll('[role="article"]')].filter(visible);
-      const recentPosts=[];
-      for(const article of articles){
-        const text=(article.innerText||"").trim();
-        if(text.length<20)continue;
-        const timeEls=[...article.querySelectorAll('a[aria-label],abbr[title],time,[aria-label]')];
-        const timeText=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(' ')).join(' ');
-        const combined=timeText+" "+text.slice(0,120);
-        if(!isRecent24h(combined))continue;
-        const reactions=parseMetric(text,"reactions"),comments=parseMetric(text,"comments"),shares=parseMetric(text,"shares");
-        recentPosts.push({time:timeText.trim().slice(0,120)||"Recent timestamp visible; exact time unavailable",reactions,comments,shares,snippet:text.slice(0,260)});
-      }
+      const recentPosts=[...recentPostsByKey.values()];
       const known=(key)=>recentPosts.filter(p=>p[key]!=null).length;
       const sum=(key)=>recentPosts.reduce((n,p)=>n+(p[key]||0),0);
-      const report={url:groupUrl(location.href),groupName:document.title.replace(/\\s*\\|\\s*Facebook.*$/i,"").trim(),checkedAt:new Date().toISOString(),observedArticles:articles.length,recentPostsFound:recentPosts.length,reactionsTotal:known("reactions")?sum("reactions"):null,commentsTotal:known("comments")?sum("comments"):null,sharesTotal:known("shares")?sum("shares"):null,reactionsPostsCount:known("reactions"),commentsPostsCount:known("comments"),sharesPostsCount:known("shares"),recentPosts:recentPosts.slice(0,30),baseEvidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false};
+      const report={url:groupUrl(location.href),groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),checkedAt:new Date().toISOString(),observedArticles,recentPostsFound:recentPosts.length,reactionsTotal:known("reactions")?sum("reactions"):null,commentsTotal:known("comments")?sum("comments"):null,sharesTotal:known("shares")?sum("shares"):null,reactionsPostsCount:known("reactions"),commentsPostsCount:known("comments"),sharesPostsCount:known("shares"),recentPosts:recentPosts.slice(0,30),baseEvidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false};
       chrome.runtime.sendMessage({type:"PAGE_DETAILS",...report});return;
     }
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
