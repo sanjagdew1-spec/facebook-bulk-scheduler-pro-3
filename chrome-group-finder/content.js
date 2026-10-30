@@ -176,26 +176,41 @@
         return null;
       };
       const collected=new Map();
+      let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false;
       const articleSelector='[role="article"],[data-pagelet*="FeedUnit"]';
       const collectVisiblePosts=()=>{
+        // DOM query order is Facebook's current top-to-bottom feed order.
+        // Keep a permanent serial number from the first encounter.
         const articles=[...document.querySelectorAll(articleSelector)].filter(visible);
         articlesObserved=Math.max(articlesObserved,articles.length);
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
-          const timeEls=[...article.querySelectorAll('abbr[title],time,[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')];
-          const timeLabel=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(" ")).join(" ");
+          const primaryTimeEl=article.querySelector('abbr[title]')||
+            article.querySelector('time[datetime]')||
+            article.querySelector('[data-utime]')||
+            article.querySelector('a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]');
+          const timeEls=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')];
+          const timeLabel=primaryTimeEl
+            ?[primaryTimeEl.innerText,primaryTimeEl.getAttribute("aria-label"),primaryTimeEl.getAttribute("title"),primaryTimeEl.getAttribute("datetime")].filter(Boolean).join(" ")
+            :timeEls.map(el=>[el.innerText,el.getAttribute("aria-label"),el.getAttribute("title"),el.getAttribute("datetime")].filter(Boolean).join(" ")).join(" ");
           const age=parseAgeHours(timeLabel,article);
           if(age==null)continue;
           timestampedArticles++;
           visibleTimestampAges.push(age);
           oldestAgeHours=Math.max(oldestAgeHours,age);
           if(age>168){olderThanSevenDaysSeen=true;continue;}
-          const key=(timeLabel+"|"+(article.querySelector("[data-ft]")?.getAttribute("data-ft")||article.querySelector('a[href*="/posts/"],a[href*="/permalink/"]')?.getAttribute("href")||"visible-post")+"|"+age.toFixed(2)).replace(/\s+/g," ").slice(0,240);
+          const permalink=article.querySelector('a[href*="/posts/"],a[href*="/permalink/"],a[href*="story_fbid"]')?.getAttribute("href");
+          const dataFt=article.querySelector("[data-ft]")?.getAttribute("data-ft");
+          const utime=article.querySelector("[data-utime]")?.getAttribute("data-utime");
+          const datetime=article.querySelector("time[datetime]")?.getAttribute("datetime");
+          const identity=permalink||dataFt||utime||datetime||timeLabel;
+          const key=String(identity||"visible-post").replace(/\s+/g," ").slice(0,240);
           if(collected.has(key))continue;
           collected.set(key,{
             postId:key,
+            postNumber:nextFeedOrder++,
             time:timeLabel.trim().slice(0,120)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
             likes:metric(article,"likes"),
@@ -218,7 +233,7 @@
         if(consecutiveOldBatches>=2)break;
         if(window.scrollY===before||window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5)break;
       }
-      const all=[...collected.values()].sort((a,b)=>a.ageHours-b.ageHours);
+      const all=[...collected.values()]; // Preserve original feed order; never sort by age.
       const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
       const recentPosts=all.filter(p=>p.ageHours<=24);
       const totals=(posts,key)=>{const known=posts.filter(p=>p[key]!=null);return {count:known.length,total:known.length?known.reduce((n,p)=>n+p[key],0):null};};
@@ -232,9 +247,9 @@
         groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),
         checkedAt:new Date().toISOString(),
         recentPostsFound:recentPosts.length,
-        recentPosts:recentPosts.map((p,i)=>({postNumber:i+1,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        recentPosts:recentPosts.map(p=>({postNumber:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
         weekPostsFound:weekPosts.length,
-        weekPosts:weekPosts.map((p,i)=>({postNumber:i+1,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        weekPosts:weekPosts.map(p=>({postNumber:p.postNumber,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
         recentTopEngagement:maxEngagement(recentPosts),
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
