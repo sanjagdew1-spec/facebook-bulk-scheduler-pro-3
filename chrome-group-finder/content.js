@@ -134,42 +134,47 @@
         let path="";try{path=new URL(el.getAttribute("href")||"",location.origin).pathname;}catch{}
         return /profile\.php|^\/people\//i.test(path)||(/^\/[^/]+\/?$/.test(path)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(path))||Boolean(el.getAttribute("data-hovercard")||el.getAttribute("data-hovercard-id"));
       };
+      const storyBody=(article)=>postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
+        .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0]||null;
       const postHeaderTimeNodes=(article)=>{
         const top=article.getBoundingClientRect().top;
+        const story=storyBody(article);
+        const storyTop=story?story.getBoundingClientRect().top:top+160;
+        // The post timestamp belongs to the header row above the story body.
         return postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')
-          .filter(el=>el.getBoundingClientRect().top<=top+190);
+          .filter(el=>el.getBoundingClientRect().top>=top-5&&el.getBoundingClientRect().top<storyTop&&el.getBoundingClientRect().top<top+240)
+          .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
       };
-      const commentThreadStart=(article)=>{
-        const top=article.getBoundingClientRect().top;
-        const laterTimes=postNodes(article,'abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')
-          .filter(el=>el.getBoundingClientRect().top>top+190)
-          .map(el=>el.getBoundingClientRect().top);
-        if(laterTimes.length)return Math.min(...laterTimes);
-        const laterProfiles=postNodes(article,"a[href]")
-          .filter(el=>el.getBoundingClientRect().top>top+190&&profileLink(el))
-          .map(el=>el.getBoundingClientRect().top);
-        return laterProfiles.length?Math.min(...laterProfiles):null;
+      const postActionBar=(article)=>{
+        const story=storyBody(article);
+        const storyBottom=story?story.getBoundingClientRect().bottom:article.getBoundingClientRect().top+120;
+        const groups=postNodes(article,'[role="group"]').filter(group=>{
+          const y=group.getBoundingClientRect().top;
+          if(y<storyBottom-8)return false;
+          const labels=[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title]')]
+            .map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" "))
+            .join(" ").toLowerCase();
+          const hasLike=/\\blike\\b/.test(labels),hasComment=/\\bcomment\\b/.test(labels),hasShare=/\\bshare\\b/.test(labels);
+          return hasLike&&hasComment&&hasShare&&!/view more comments|reply to|write a comment/.test(labels);
+        });
+        return groups.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0]||null;
       };
       const metric=(article,kind)=>{
         const names=kind==="likes"?"(?:likes?|reactions?|people reacted)":kind==="comments"?"comments?":"shares?";
-        const boundary=commentThreadStart(article);
-        // Fail closed if we cannot separate the post footer from visible comments.
-        if(boundary==null)return null;
-        const withinPostFooter=el=>el.getBoundingClientRect().top<boundary;
+        // Read counts only from Facebook's Like / Comment / Share action bar.
+        // Never scan the post's full subtree: comment/reply reaction chips live there too.
+        const bar=postActionBar(article);
+        if(!bar)return null;
+        const nodes=[bar,...bar.querySelectorAll('[aria-label],[title]')];
         const patterns=[
-          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+names+"\\b","i"),
-          new RegExp("\\b"+names+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
+          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s*"+names+"\\\\b","i"),
+          new RegExp("\\\\b"+names+"\\\\s*(\\\\d[\\\\d,.]*\\\\s*[KMB]?)","i")
         ];
-        const nodes=postNodes(article,"[aria-label],[title]").filter(withinPostFooter);
         for(const el of nodes){
-          const label=[el.getAttribute("aria-label"),el.getAttribute("title")].filter(Boolean).join(" ").replace(/\s+/g," ");
-          if(!label||/reply|replied|commented|view more comments|write a comment/i.test(label))continue;
-          for(const re of patterns){const m=label.match(re);if(m)return parseCount(m[1]);}
+          const label=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ");
+          if(!label||/reply|replied|commented|view more comments|write a comment|people who reacted/i.test(label))continue;
+          for(const re of patterns){const match=label.match(re);if(match)return parseCount(match[1]);}
         }
-        const footer=postNodes(article,'[role="group"]').filter(withinPostFooter);
-        const text=footer.map(el=>[el.getAttribute("aria-label"),el.getAttribute("title"),el.innerText].filter(Boolean).join(" ")).join(" ").replace(/\s+/g," ");
-        if(/reply|replied|commented|view more comments|write a comment/i.test(text))return null;
-        for(const re of patterns){const m=text.match(re);if(m)return parseCount(m[1]);}
         return null;
       };
       const parseAgeHours=(label,article,timeNode)=>{
@@ -203,19 +208,19 @@
       };
       const postAuthor=(article)=>{
         const top=article.getBoundingClientRect().top;
-        const story=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
-          .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top)[0];
-        const storyTop=story?story.getBoundingClientRect().top:top+210;
-        const semantic=postNodes(article,'[data-ad-rendering-role="profile_name"],[data-testid*="post_author" i]')
-          .map(el=>({label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),y:el.getBoundingClientRect().top}))
-          .filter(x=>x.label.length>=2&&x.label.length<=90&&x.y>=top-8&&x.y<Math.min(storyTop,top+210));
-        if(semantic.length)return semantic.sort((a,b)=>a.y-b.y)[0].label;
-        const links=postNodes(article,"a[href]").filter(profileLink).map(el=>({
-          label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim(),
-          y:el.getBoundingClientRect().top
-        })).filter(x=>x.label.length>=2&&x.label.length<=90&&x.y>=top-8&&x.y<Math.min(storyTop,top+210))
-          .sort((a,b)=>a.y-b.y);
-        return links[0]?.label||"Not available";
+        const story=storyBody(article);
+        const storyTop=story?story.getBoundingClientRect().top:top+180;
+        // The first profile/page identity in the post header is the publisher.
+        // Links appearing after the story body are commenters and are ignored.
+        const candidates=postNodes(article,"a[href],[data-ad-rendering-role='profile_name'],[data-testid*='post_author' i]")
+          .map(el=>({
+            label:(el.innerText||el.getAttribute("aria-label")||"").replace(/\\s+/g," ").trim(),
+            y:el.getBoundingClientRect().top,
+            profile:el.matches("a[href]")?profileLink(el):true
+          }))
+          .filter(x=>x.profile&&x.label.length>=2&&x.label.length<=90&&x.y>=top-8&&x.y<storyTop&&x.y<top+190)
+          .sort((x,y)=>x.y-y.y);
+        return candidates[0]?.label||"Not available";
       };
       const postPreview=(article)=>{
         // Only use Facebook's explicit visible story-message containers.
