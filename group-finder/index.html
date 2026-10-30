@@ -211,7 +211,7 @@ async function openActivity(g){
  const url=String(g?.url||'');
  try{
   const u=new URL(url);
-  if(!/(^|\\.)facebook\\.com$/i.test(u.hostname)||!/^\\/groups\\/[^/]+/.test(u.pathname))throw new Error('Selected result does not contain a valid Facebook Group link.');
+  if(!(u.hostname.toLowerCase()==='facebook.com'||u.hostname.toLowerCase().endsWith('.facebook.com'))||!u.pathname.startsWith('/groups/')||!u.pathname.split('/')[2])throw new Error('Selected result does not contain a valid Facebook Group link.')
   const params=new URLSearchParams({groupName:String(g.name||'Selected Group'),groupUrl:url,keyword:String(g.keyword||'')});
   toast.textContent='Connecting to Chrome Helper and opening the selected Facebook Group…';toast.classList.add('show');
   await waitForActivityBridge();
