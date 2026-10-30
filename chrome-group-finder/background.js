@@ -35,8 +35,8 @@ async function finish(job){
 }
 chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
  if(msg.type==="START_ACTIVITY_CHECK"){
-  const url=String(msg.group?.url||"");
-  if(!/^https:\/\/www\.facebook\.com\/groups\/[A-Za-z0-9._-]+\/?(?:[?#].*)?$/i.test(url)){sendResponse({ok:false,error:"This group does not have a supported Facebook group URL."});return;}
+  const url=canonicalGroupUrl(msg.group?.url);
+  if(!url){sendResponse({ok:false,error:"This group does not have a supported Facebook group URL."});return;}
   // Keep both the Group Finder website and the original search tab untouched.
   // Every selected group opens in a dedicated Facebook tab for activity inspection.
   const previous=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
