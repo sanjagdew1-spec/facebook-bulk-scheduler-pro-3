@@ -219,9 +219,15 @@
           // before considering an absolute title. This avoids a neighboring card's date.
           const primaryTimeEl=timeEls.find(el=>/\b(?:just now|\d+\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks))\b/i.test([el.innerText,el.getAttribute("aria-label")].filter(Boolean).join(" ")))||timeEls[0]||null;
           const relativeLabel=primaryTimeEl?[primaryTimeEl.innerText,primaryTimeEl.getAttribute("aria-label")].filter(Boolean).join(" · ").trim():"";
-          const absoluteLabel=primaryTimeEl?[primaryTimeEl.getAttribute("title"),primaryTimeEl.getAttribute("datetime")].filter(Boolean).join(" · ").trim():"";
+          // Facebook often exposes the exact hover timestamp in title/aria-label
+          // on the time node or its immediate link/container. Keep it separate
+          // from the rounded relative label (10h, 8h, etc.).
+          const timeMetaNodes=primaryTimeEl?[primaryTimeEl,primaryTimeEl.closest("a"),primaryTimeEl.parentElement,primaryTimeEl.parentElement?.parentElement].filter(Boolean):[];
+          const absoluteLabel=[...new Set(timeMetaNodes.flatMap(el=>[el.getAttribute("title"),el.getAttribute("datetime"),el.getAttribute("aria-label"),el.getAttribute("data-tooltip-content")]).filter(Boolean).map(v=>v.replace(/\\s+/g," ").trim()).filter(v=>!/^\\d+\\s*(?:m|min|mins|h|hr|hrs|hour|hours|d|day|days)\\b/i.test(v)))].join(" · ").slice(0,220);
           const timeLabel=[relativeLabel,absoluteLabel].filter(Boolean).join(" · ");
-          const age=parseAgeHours(relativeLabel||timeLabel,article,primaryTimeEl);
+          // Use Facebook's exact timestamp for age buckets whenever it exists;
+          // relative labels are rounded and are only a fallback.
+          const age=parseAgeHours(absoluteLabel||relativeLabel,article,primaryTimeEl);
           if(age==null)continue;
           timestampedArticles++;
           visibleTimestampAges.push(age);
