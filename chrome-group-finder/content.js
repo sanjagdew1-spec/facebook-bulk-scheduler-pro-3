@@ -45,6 +45,7 @@
         try {
           const response = await chrome.runtime.sendMessage({type:"START_ACTIVITY_CHECK",group:msg.payload?.group,sessionId:msg.payload?.sessionId});
           if (!response?.ok) window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:response?.error||"Could not start group activity check."},WEBSITE_ORIGIN);
+          else window.postMessage({source:"gfp-chrome-helper",type:"STARTED",fbTabId:response.fbTabId},WEBSITE_ORIGIN);
           await sendState();
         } catch (error) {
           window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:String(error)},WEBSITE_ORIGIN);
