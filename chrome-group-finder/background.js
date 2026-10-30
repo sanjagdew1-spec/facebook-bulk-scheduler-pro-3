@@ -3,6 +3,26 @@ const RESULTS_KEY = "gfpResults";
 const ACTIVITY_KEY = "gfpActivityReport";
 const ACTIVITY_JOB_KEY = "gfpActivityJob";
 const ACTIVITY_HISTORY_KEY = "gfpActivityHistory";
+let visualCaptureTabId = null;
+let visualCaptureBytes = 0;
+async function compactScreenshot(dataUrl){
+ try{
+  const response=await fetch(dataUrl);
+  const bitmap=await createImageBitmap(await response.blob());
+  const scale=Math.min(1,1100/bitmap.width);
+  const width=Math.max(1,Math.round(bitmap.width*scale));
+  const height=Math.max(1,Math.round(bitmap.height*scale));
+  const canvas=new OffscreenCanvas(width,height);
+  const context=canvas.getContext("2d",{alpha:false});
+  context.drawImage(bitmap,0,0,width,height);
+  bitmap.close?.();
+  const blob=await canvas.convertToBlob({type:"image/jpeg",quality:0.42});
+  const bytes=new Uint8Array(await blob.arrayBuffer());
+  let binary="";
+  for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+  return "data:image/jpeg;base64,"+btoa(binary);
+ }catch{return dataUrl||null;}
+}
 async function getJob(){ return (await chrome.storage.local.get(JOB_KEY))[JOB_KEY] || null; }
 async function setJob(job){ await chrome.storage.local.set({[JOB_KEY]:job}); }
 async function setStatus(status, extra={}) { const job=await getJob(); if(job) await setJob({...job,status,...extra,updatedAt:Date.now()}); }
@@ -42,6 +62,7 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   const previous=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(previous?.fbTabId){try{await chrome.tabs.remove(previous.fbTabId)}catch{}}
   await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
+  visualCaptureTabId=null;visualCaptureBytes=0;
   const activityTab=await chrome.tabs.create({url,active:true});
   const activityJob={group:{name:String(msg.group?.name||"Selected group"),url},websiteTabId:sender.tab?.id||null,fbTabId:activityTab.id,sessionId:String(msg.sessionId||""),startedAt:Date.now(),status:"checking"};
   await chrome.storage.local.set({[ACTIVITY_JOB_KEY]:activityJob,[ACTIVITY_KEY]:null});
@@ -57,13 +78,48 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
   sendResponse({ok:true,cleared:true});return;
  }
+ if(msg.type==="ENABLE_VISUAL_CAPTURE"){
+  const tabId=Number(msg.tabId);
+  try{
+   const tab=await chrome.tabs.get(tabId);
+   if(!tab||!tab.active||!/^https:\/\/www\.facebook\.com\/groups\//i.test(tab.url||"")){
+    sendResponse({ok:false,error:"Open the selected Facebook Group tab, then click the Group Finder Pro extension icon there."});return;
+   }
+   visualCaptureTabId=tabId;visualCaptureBytes=0;
+   await chrome.tabs.sendMessage(tabId,{type:"VISUAL_CAPTURE_READY",screenshotDataUrl:String(msg.screenshotDataUrl||"")});
+   sendResponse({ok:true,enabled:true});return;
+  }catch(error){sendResponse({ok:false,error:"Could not start visual capture: "+String(error)});return;}
+ }
  if(msg.type==="RAW_ACTIVITY_BATCH"||msg.type==="RAW_ACTIVITY_COMPLETE"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
+  let payload=msg.payload||{};
+  if(msg.type==="RAW_ACTIVITY_BATCH"&&visualCaptureTabId===sender.tab?.id){
+   payload={...payload};
+   let rawShot=payload.screenshotDataUrl||"";
+   delete payload.screenshotDataUrl;
+   if(!rawShot){
+    try{
+     const active=await chrome.tabs.query({active:true,windowId:sender.tab.windowId});
+     if(active[0]?.id===sender.tab.id)rawShot=await chrome.tabs.captureVisibleTab(sender.tab.windowId,{format:"jpeg",quality:42});
+    }catch(error){payload.screenshotCaptureError=String(error).slice(0,180);}
+   }
+   if(rawShot){
+    const compacted=await compactScreenshot(rawShot);
+    if(compacted&&visualCaptureBytes+compacted.length<=9000000){
+     payload.screenshotDataUrl=compacted;
+     payload.screenshotCapturedAt=new Date().toISOString();
+     visualCaptureBytes+=compacted.length;
+    }else payload.screenshotSkipped="temporary screenshot size budget reached";
+   }
+  }
   if(a.websiteTabId){
-   try{await chrome.tabs.sendMessage(a.websiteTabId,{type:msg.type,payload:msg.payload,sessionId:a.sessionId});sendResponse({ok:true,forwarded:true});}
-   catch(error){sendResponse({ok:false,error:"Activity Lab tab is not reachable: "+String(error)});}
+   try{
+    await chrome.tabs.sendMessage(a.websiteTabId,{type:msg.type,payload,sessionId:a.sessionId});
+    sendResponse({ok:true,forwarded:true,visualScreenshot:Boolean(payload.screenshotDataUrl)});
+   }catch(error){sendResponse({ok:false,error:"Activity Lab tab is not reachable: "+String(error)});}
   }else sendResponse({ok:false,error:"Activity Lab tab is not available."});
+  if(msg.type==="RAW_ACTIVITY_COMPLETE"&&visualCaptureTabId===sender.tab?.id){visualCaptureTabId=null;visualCaptureBytes=0;}
   return;
  }
  if(msg.type==="PAGE_DETAILS"){
@@ -74,6 +130,7 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
    }
    // Raw scan content and derived reports are never written to extension storage.
    await chrome.storage.local.remove([ACTIVITY_KEY,ACTIVITY_HISTORY_KEY,ACTIVITY_JOB_KEY]);
+   if(visualCaptureTabId===sender.tab?.id){visualCaptureTabId=null;visualCaptureBytes=0;}
    sendResponse({ok:true,temporaryOnly:true});return;
   }
   sendResponse({ok:false});return;
