@@ -131,8 +131,8 @@
       const metric=(text,kind)=>{
         const escaped=kind==="likes"?"likes?|reactions?":kind;
         const patterns=[
-          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s*"+escaped+"\\\\b","i"),
-          new RegExp("\\\\b"+escaped+"\\\\s*(\\\\d[\\\\d,.]*\\\\s*[KMB]?)","i")
+          new RegExp("(\\d[\\d,.]*\\s*[KMB]?)\\s*"+escaped+"\\b","i"),
+          new RegExp("\\b"+escaped+"\\s*(\\d[\\d,.]*\\s*[KMB]?)","i")
         ];
         for(const re of patterns){const m=String(text||"").match(re);if(m)return parseCount(m[1]);}
         return null;
@@ -140,30 +140,30 @@
       const parseAgeHours=(label,article)=>{
         const now=Date.now();
         const utime=article.querySelector("[data-utime]")?.getAttribute("data-utime");
-        if(utime&&/^\\d{9,13}$/.test(utime)){
+        if(utime&&/^\d{9,13}$/.test(utime)){
           const n=Number(utime),stamp=n>1e12?n:n*1000;
           const age=(now-stamp)/3600000;
           if(age>=0)return age;
         }
         const dt=article.querySelector("time[datetime]")?.getAttribute("datetime");
         if(dt){const stamp=Date.parse(dt);if(Number.isFinite(stamp)){const age=(now-stamp)/3600000;if(age>=0)return age;}}
-        const t=String(label||"").toLowerCase().replace(/\\s+/g," ").trim();
-        if(/\\b(just now|moments? ago|a few seconds ago)\\b/.test(t))return 0;
-        const rel=t.match(/\\b(\\d+|a|an|one)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\\b/);
+        const t=String(label||"").toLowerCase().replace(/\s+/g," ").trim();
+        if(/\b(just now|moments? ago|a few seconds ago)\b/.test(t))return 0;
+        const rel=t.match(/\b(\d+|a|an|one)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\b/);
         if(rel){
           const n=/^(a|an|one)$/.test(rel[1])?1:Number(rel[1]);
           const u=rel[2];
           return /^(m|min|mins|minute|minutes)$/.test(u)?n/60:/^(h|hr|hrs|hour|hours)$/.test(u)?n:/^(d|day|days)$/.test(u)?n*24:n*168;
         }
-        const dated=t.match(/\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2}(?:,\\s*\\d{4})?(?:\\s+at\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?\\b/i);
+        const dated=t.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?(?:\s+at\s+\d{1,2}:\d{2}\s*(?:am|pm)?)?\b/i);
         if(dated){
           let value=dated[0];
-          if(!/\\d{4}/.test(value))value+=", "+new Date().getFullYear();
+          if(!/\d{4}/.test(value))value+=", "+new Date().getFullYear();
           const stamp=Date.parse(value),age=(now-stamp)/3600000;
           if(Number.isFinite(stamp)&&age>=0)return age;
         }
-        if(/\\byesterday\\b/.test(t)){
-          const at=t.match(/yesterday(?:\\s+at\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?)?/);
+        if(/\byesterday\b/.test(t)){
+          const at=t.match(/yesterday(?:\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)?/);
           const d=new Date();d.setDate(d.getDate()-1);
           if(at&&at[1]){let h=Number(at[1]);if(at[3]==="pm"&&h<12)h+=12;if(at[3]==="am"&&h===12)h=0;d.setHours(h,Number(at[2]||0),0,0);}else d.setHours(12,0,0,0);
           const age=(now-d.getTime())/3600000;if(age>=0)return age;
@@ -190,7 +190,7 @@
           oldestAgeHours=Math.max(oldestAgeHours,age);
           if(age>168){olderThanSevenDaysSeen=true;continue;}
           if(age>24)continue;
-          const key=(timeLabel+"|"+body.slice(0,180)).replace(/\\s+/g," ").slice(0,240);
+          const key=(timeLabel+"|"+body.slice(0,180)).replace(/\s+/g," ").slice(0,240);
           if(collected.has(key))continue;
           collected.set(key,{
             postId:key,
@@ -227,7 +227,7 @@
       };
       const report={
         url:groupUrl(location.href),
-        groupName:document.title.replace(/\\s*\\|\\s*Facebook.*$/i,"").trim(),
+        groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),
         checkedAt:new Date().toISOString(),
         recentPostsFound:recentPosts.length,
         recentPosts:recentPosts.map((p,i)=>({postNumber:i+1,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
