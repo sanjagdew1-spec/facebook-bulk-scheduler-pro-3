@@ -3,7 +3,7 @@
   if (location.origin === WEBSITE_ORIGIN) {
     if (window.__gfpWebsiteBridge) return;
     window.__gfpWebsiteBridge = true;
-    chrome.runtime.sendMessage({type:"CLEAR_ACTIVITY_STORAGE"}).catch(()=>{});
+    // Clear stale activity state only on the main finder page. Activity Lab must not\n    // clear a newly-created scan job while its startup handshake is in progress.\n    if (location.pathname !== "/activity-lab.html") {\n      chrome.runtime.sendMessage({type:"CLEAR_ACTIVITY_STORAGE"}).catch(()=>{});\n    }
     const sendState = async () => {
       try {
         const state = await chrome.runtime.sendMessage({type:"GET_STATE"});
@@ -44,7 +44,7 @@
       } else if (msg.type === "START_ACTIVITY_CHECK") {
         try {
           const response = await chrome.runtime.sendMessage({type:"START_ACTIVITY_CHECK",group:msg.payload?.group,sessionId:msg.payload?.sessionId});
-          if (!response?.ok) window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:response?.error||"Could not start group activity check."},WEBSITE_ORIGIN);
+          if (!response?.ok) window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:response?.error||"Could not start group activity check."},WEBSITE_ORIGIN);\n          else window.postMessage({source:"gfp-chrome-helper",type:"STARTED",fbTabId:response.fbTabId},WEBSITE_ORIGIN);
           await sendState();
         } catch (error) {
           window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:String(error)},WEBSITE_ORIGIN);
