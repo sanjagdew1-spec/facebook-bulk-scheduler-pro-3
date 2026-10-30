@@ -337,7 +337,9 @@
         const feedUnits=[...feed.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
         const articleRoots=[...feed.querySelectorAll('[role="article"]')].filter(visible)
           .filter(el=>!el.parentElement?.closest('[role="article"]'));
-        const roots=articleRoots.length?articleRoots.slice(0,3):feedUnits.slice(0,3);
+        const dataFtRoots=[...feed.querySelectorAll('[data-ft]')].filter(visible)
+          .filter(el=>!el.parentElement?.closest('[data-ft]'));
+        const roots=articleRoots.length?articleRoots.slice(0,3):(feedUnits.length?feedUnits.slice(0,3):dataFtRoots.slice(0,3));
         const snapshots=[];
         for(const root of roots){
           const clone=root.cloneNode(true);
