@@ -123,72 +123,124 @@
       return {isPublic:isPublic?true:(isPrivate?false:null),members:member?countValue(member[1]):null,postsPerDay:dailyPosts?countValue(dailyPosts[1]):null,postsPerDayLabel:dailyPosts?dailyPosts[1].replace(/\s+/g," ").trim()+" posts/day":null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
     }
     if(isGroupPage){
-      const parseMetric=(text,kind)=>{
-        const pattern=kind==="shares"?/([\d,.]+\s*[KMB]?)\s+shares?\b/i:kind==="comments"?/([\d,.]+\s*[KMB]?)\s+comments?\b/i:/([\d,.]+\s*[KMB]?)\s+(?:likes?|reactions?)\b/i;
-        const m=String(text||"").match(pattern);
-        return m?countValue(m[1]):null;
+      const parseCount=(raw)=>{
+        const m=String(raw||"").replace(/,/g,"").match(/(\d+(?:\.\d+)?)\s*([KMB])?/i);
+        if(!m)return null;
+        return Math.round(Number(m[1])*({K:1e3,M:1e6,B:1e9}[(m[2]||"").toUpperCase()]||1));
       };
-      const isRecent24h=text=>{
-        const t=String(text||"").toLowerCase().replace(/\s+/g," ").trim();
-        if(/\b(just now|today|moments? ago|a few seconds ago)\b/.test(t))return true;
-        if(/\byesterday\b/.test(t))return true;
-        const m=t.match(/\b(\d+|an?|one)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours)\b/);
-        if(m){
-          const n=/^(?:a|an|one)$/.test(m[1])?1:Number(m[1]);
-          const unit=m[2];
-          return /^(?:h|hr|hrs|hour|hours)$/.test(unit)?n<=24:n<=1440;
-        }
-        const dateMatch=t.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*\d{4})?\b/i);
-        if(dateMatch){
-          const parsed=new Date(dateMatch[0]+(dateMatch[0].match(/\d{4}/)?"":", "+new Date().getFullYear()));
-          const age=Date.now()-parsed.getTime();
-          return Number.isFinite(age)&&age>=0&&age<=86400000;
-        }
-        return false;
+      const metric=(text,kind)=>{
+        const escaped=kind==="likes"?"likes?|reactions?":kind;
+        const patterns=[
+          new RegExp("(\\\\d[\\\\d,.]*\\\\s*[KMB]?)\\\\s*"+escaped+"\\\\b","i"),
+          new RegExp("\\\\b"+escaped+"\\\\s*(\\\\d[\\\\d,.]*\\\\s*[KMB]?)","i")
+        ];
+        for(const re of patterns){const m=String(text||"").match(re);if(m)return parseCount(m[1]);}
+        return null;
       };
-      const recentPostsByKey=new Map();
-      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0;
+      const parseAgeHours=(label,article)=>{
+        const now=Date.now();
+        const utime=article.querySelector("[data-utime]")?.getAttribute("data-utime");
+        if(utime&&/^\\d{9,13}$/.test(utime)){
+          const n=Number(utime),stamp=n>1e12?n:n*1000;
+          const age=(now-stamp)/3600000;
+          if(age>=0)return age;
+        }
+        const dt=article.querySelector("time[datetime]")?.getAttribute("datetime");
+        if(dt){const stamp=Date.parse(dt);if(Number.isFinite(stamp)){const age=(now-stamp)/3600000;if(age>=0)return age;}}
+        const t=String(label||"").toLowerCase().replace(/\\s+/g," ").trim();
+        if(/\\b(just now|moments? ago|a few seconds ago)\\b/.test(t))return 0;
+        const rel=t.match(/\\b(\\d+|a|an|one)\\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\\b/);
+        if(rel){
+          const n=/^(a|an|one)$/.test(rel[1])?1:Number(rel[1]);
+          const u=rel[2];
+          return /^(m|min|mins|minute|minutes)$/.test(u)?n/60:/^(h|hr|hrs|hour|hours)$/.test(u)?n:/^(d|day|days)$/.test(u)?n*24:n*168;
+        }
+        const dated=t.match(/\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\s+\\d{1,2}(?:,\\s*\\d{4})?(?:\\s+at\\s+\\d{1,2}:\\d{2}\\s*(?:am|pm)?)?\\b/i);
+        if(dated){
+          let value=dated[0];
+          if(!/\\d{4}/.test(value))value+=", "+new Date().getFullYear();
+          const stamp=Date.parse(value),age=(now-stamp)/3600000;
+          if(Number.isFinite(stamp)&&age>=0)return age;
+        }
+        if(/\\byesterday\\b/.test(t)){
+          const at=t.match(/yesterday(?:\\s+at\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?)?/);
+          const d=new Date();d.setDate(d.getDate()-1);
+          if(at&&at[1]){let h=Number(at[1]);if(at[3]==="pm"&&h<12)h+=12;if(at[3]==="am"&&h===12)h=0;d.setHours(h,Number(at[2]||0),0,0);}else d.setHours(12,0,0,0);
+          const age=(now-d.getTime())/3600000;if(age>=0)return age;
+        }
+        return null;
+      };
+      const collected=new Map();
+      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false;
       const articleSelector='[role="article"],[data-pagelet*="FeedUnit"]';
       const collectVisiblePosts=()=>{
         const articles=[...document.querySelectorAll(articleSelector)].filter(visible);
         articlesObserved=Math.max(articlesObserved,articles.length);
         uniqueArticleSamples+=articles.length;
+        let visibleTimestampAges=[];
         for(const article of articles){
-          const postText=(article.innerText||"").trim();
-          if(postText.length<20)continue;
+          const body=(article.innerText||"").trim();
+          if(body.length<12)continue;
           const timeEls=[...article.querySelectorAll('a[aria-label],abbr[title],time,[aria-label],[data-utime]')];
-          const timeText=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(' ')).join(' ');
-          const combined=timeText+" "+postText;
-          if(timeText.trim())timestampedArticles++;
-          if(!isRecent24h(combined))continue;
-          const key=(timeText+" "+postText.slice(0,220)).replace(/\s+/g," ").slice(0,260);
-          if(recentPostsByKey.has(key))continue;
-          recentPostsByKey.set(key,{
-            time:timeText.trim().slice(0,160)||"Recent timestamp visible; exact time unavailable",
-            reactions:parseMetric(postText,"reactions"),
-            comments:parseMetric(postText,"comments"),
-            shares:parseMetric(postText,"shares"),
-            snippet:postText.slice(0,320)
+          const timeLabel=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(" ")).join(" ");
+          const age=parseAgeHours(timeLabel,article);
+          if(age==null)continue;
+          timestampedArticles++;
+          visibleTimestampAges.push(age);
+          oldestAgeHours=Math.max(oldestAgeHours,age);
+          if(age>168){olderThanSevenDaysSeen=true;continue;}
+          if(age>24)continue;
+          const key=(timeLabel+"|"+body.slice(0,180)).replace(/\\s+/g," ").slice(0,240);
+          if(collected.has(key))continue;
+          collected.set(key,{
+            postId:key,
+            time:timeLabel.trim().slice(0,120)||"Timestamp visible; exact label unavailable",
+            ageHours:Math.round(age*10)/10,
+            likes:metric(body,"likes"),
+            comments:metric(body,"comments"),
+            shares:metric(body,"shares")
           });
         }
-        return articles.length;
+        return {count:articles.length,oldestVisibleAge:visibleTimestampAges.length?Math.max(...visibleTimestampAges):null,timestampedVisible:visibleTimestampAges.length};
       };
-      // Facebook virtualizes its feed: collect posts after every scroll step,
-      // otherwise earlier posts may disappear from the DOM before inspection.
       await sleep(2200);
-      let observedArticles=collectVisiblePosts();
-      for(let step=0;step<16;step++){
+      let observed=collectVisiblePosts();
+      let consecutiveOldBatches=0;
+      for(let step=0;step<60;step++){
         const before=window.scrollY;
-        window.scrollBy({top:Math.max(450,Math.floor(window.innerHeight*0.7)),behavior:"instant"});
-        await sleep(1050);
+        window.scrollBy({top:Math.max(420,Math.floor(window.innerHeight*0.68)),behavior:"instant"});
+        await sleep(900);
         scrollSteps++;
-        observedArticles=Math.max(observedArticles,collectVisiblePosts());
+        observed=collectVisiblePosts();
+        if(observed.oldestVisibleAge!=null&&observed.oldestVisibleAge>168)consecutiveOldBatches++;else consecutiveOldBatches=0;
+        if(consecutiveOldBatches>=2)break;
         if(window.scrollY===before||window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5)break;
       }
-      const recentPosts=[...recentPostsByKey.values()];
-      const known=(key)=>recentPosts.filter(p=>p[key]!=null).length;
-      const sum=(key)=>recentPosts.reduce((n,p)=>n+(p[key]||0),0);
-      const report={url:groupUrl(location.href),groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),checkedAt:new Date().toISOString(),observedArticles,recentPostsFound:recentPosts.length,reactionsTotal:known("reactions")?sum("reactions"):null,commentsTotal:known("comments")?sum("comments"):null,sharesTotal:known("shares")?sum("shares"):null,reactionsPostsCount:known("reactions"),commentsPostsCount:known("comments"),sharesPostsCount:known("shares"),recentPosts:recentPosts.slice(0,30),scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,recentPostsFound:recentPosts.length},baseEvidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false};
+      const all=[...collected.values()].sort((a,b)=>a.ageHours-b.ageHours);
+      const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
+      const recentPosts=all.filter(p=>p.ageHours<=24);
+      const totals=(posts,key)=>{const known=posts.filter(p=>p[key]!=null);return {count:known.length,total:known.length?known.reduce((n,p)=>n+p[key],0):null};};
+      const maxEngagement=(posts)=>{
+        if(!posts.length)return null;
+        return posts.map(p=>({...p,engagementTotal:[p.likes,p.comments,p.shares].reduce((n,v)=>n+(v||0),0)}))
+          .sort((a,b)=>b.engagementTotal-a.engagementTotal)[0];
+      };
+      const report={
+        url:groupUrl(location.href),
+        groupName:document.title.replace(/\\s*\\|\\s*Facebook.*$/i,"").trim(),
+        checkedAt:new Date().toISOString(),
+        recentPostsFound:recentPosts.length,
+        recentPosts:recentPosts.map((p,i)=>({postNumber:i+1,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        weekPostsFound:weekPosts.length,
+        weekPosts:weekPosts.map((p,i)=>({postNumber:i+1,time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        recentTopEngagement:maxEngagement(recentPosts),
+        weekTopEngagement:maxEngagement(weekPosts),
+        recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
+        weekTotals:{likes:totals(weekPosts,"likes"),comments:totals(weekPosts,"comments"),shares:totals(weekPosts,"shares")},
+        scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
+        blocked:false,
+        note:"Only visible post timestamps and visible like/comment/share counts were read. No post was opened and no comment or liker list was inspected."
+      };
       chrome.runtime.sendMessage({type:"PAGE_DETAILS",...report});return;
     }
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
