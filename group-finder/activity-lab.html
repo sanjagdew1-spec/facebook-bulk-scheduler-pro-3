@@ -86,7 +86,7 @@ async function analyzeTemporarySession(meta){
  const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id));
  const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary session expired before analysis.');
  const batches=data.batches||[];let snapshots=0,htmlBytes=0,articleNodes=0,timeNodes=0,actionSignals=0,viewMoreMarkers=0,feedUnits=0;
- const sampleTexts=[];
+ const sampleTexts=[],snapshotEvidence=[];
  for(const batch of batches){
   for(const snap of (batch.snapshots||[])){
    snapshots++;htmlBytes+=String(snap.html||'').length;
@@ -98,6 +98,11 @@ async function analyzeTemporarySession(meta){
    viewMoreMarkers+=doc.querySelectorAll('[data-gfp-boundary-marker="true"]').length;
    const root=doc.body.innerText.replace(/\s+/g,' ').trim();
    if(root)sampleTexts.push(root.slice(0,180));
+   if(snapshotEvidence.length<3){
+    const times=[...doc.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]')].slice(0,5).map(el=>({text:(el.innerText||el.textContent||'').trim().slice(0,80),title:el.getAttribute('title'),aria:el.getAttribute('aria-label'),datetime:el.getAttribute('datetime'),utime:el.getAttribute('data-utime')}));
+    const controls=[...doc.querySelectorAll('button,[role="button"],[aria-label],[title],[data-testid]')].slice(-18).map(el=>[el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-testid'),(el.innerText||el.textContent||'').trim()].filter(Boolean).join(' ').replace(/\s+/g,' ').slice(0,90)).filter(Boolean);
+    snapshotEvidence.push({tag:snap.tag||doc.body.firstElementChild?.tagName||'?',role:snap.role||'',pagelet:snap.pagelet||'',text:root.slice(0,420),images:doc.querySelectorAll('img').length,video:doc.querySelectorAll('video,[role="img"]').length,times,controls});
+   }
   }
  }
  const parseCount=(value)=>{
@@ -154,7 +159,8 @@ async function analyzeTemporarySession(meta){
    const time=[timeNode?.innerText||timeNode?.textContent,timeNode?.getAttribute('aria-label'),timeNode?.getAttribute('title'),timeNode?.getAttribute('datetime'),timeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
    const relativeAge=parseAge(time);
    const unix=Number(timeNode?.getAttribute('data-utime'));
-   const dateStamp=Date.parse(timeNode?.getAttribute('datetime')||'');
+   const absoluteTime=timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.getAttribute('aria-label')||'';
+   const dateStamp=Date.parse(absoluteTime);
    const age=relativeAge!=null?relativeAge:(unix>0?(Date.now()-unix*1000)/3600000:(Number.isFinite(dateStamp)?(Date.now()-dateStamp)/3600000:null));
    const preview=(story?.innerText||story?.textContent||'').replace(/\s+/g,' ').trim().slice(0,220);
    const marker=[...article.querySelectorAll('[data-gfp-boundary-marker="true"]')][0]||null;
@@ -173,7 +179,7 @@ async function analyzeTemporarySession(meta){
  const recent=rows.filter(p=>p.ageHours<=24),week=rows.filter(p=>p.ageHours>24&&p.ageHours<=168);
  const totals=(items,key)=>{const values=items.map(x=>x[key]).filter(v=>v!=null);return {count:values.length,total:values.length?values.reduce((a,b)=>a+b,0):null};};
  const top=items=>{const scored=items.map(p=>({...p,engagementTotal:[p.likes,p.comments,p.shares].filter(v=>v!=null).reduce((a,b)=>a+b,0),knownMetricCount:[p.likes,p.comments,p.shares].filter(v=>v!=null).length})).filter(p=>p.knownMetricCount);return scored.sort((a,b)=>b.engagementTotal-a.engagementTotal)[0]||null;};
- const report={status:'complete',groupName:meta?.groupName||'Not available',url:meta?.url||'Not available',scannedUrl:meta?.url||'Not available',checkedAt:meta?.checkedAt||new Date().toISOString(),recentPostsFound:recent.length,weekPostsFound:week.length,recentPosts:recent.map((p,i)=>({...p,postNumber:i+1})),weekPosts:week.map((p,i)=>({...p,postNumber:i+1})),recentTotals:{likes:totals(recent,'likes'),comments:totals(recent,'comments'),shares:totals(recent,'shares')},weekTotals:{likes:totals(week,'likes'),comments:totals(week,'comments'),shares:totals(week,'shares')},recentTopEngagement:top(recent),weekTopEngagement:top(week),scanDiagnostics:{scrollSteps:meta?.scrollSteps||batches.length,authorsIdentified:rows.filter(p=>p.author!=='Not available').length,authorsUnavailable:rows.filter(p=>p.author==='Not available').length,nestedArticlesExcluded:articleNodes,rawBatches:batches.length,rawSnapshots:snapshots,feedUnits,timeNodes,actionSignals,viewMoreBoundariesFound:viewMoreMarkers},note:'Activity Lab analyzed the temporary DOM snapshots. Comment/reply article text was redacted before transfer. Counts are shown only when explicitly linked to a matching visible action control; missing values remain Not available.'};
+ const report={status:'complete',groupName:meta?.groupName||'Not available',url:meta?.url||'Not available',scannedUrl:meta?.url||'Not available',checkedAt:meta?.checkedAt||new Date().toISOString(),recentPostsFound:recent.length,weekPostsFound:week.length,recentPosts:recent.map((p,i)=>({...p,postNumber:i+1})),weekPosts:week.map((p,i)=>({...p,postNumber:i+1})),recentTotals:{likes:totals(recent,'likes'),comments:totals(recent,'comments'),shares:totals(recent,'shares')},weekTotals:{likes:totals(week,'likes'),comments:totals(week,'comments'),shares:totals(week,'shares')},recentTopEngagement:top(recent),weekTopEngagement:top(week),scanDiagnostics:{scrollSteps:meta?.scrollSteps||batches.length,authorsIdentified:rows.filter(p=>p.author!=='Not available').length,authorsUnavailable:rows.filter(p=>p.author==='Not available').length,nestedArticlesExcluded:articleNodes,rawBatches:batches.length,rawSnapshots:snapshots,feedUnits,timeNodes,actionSignals,viewMoreBoundariesFound:viewMoreMarkers,snapshotEvidence},note:'Activity Lab analyzed temporary visible-DOM snapshots. Comment/reply text was redacted before transfer. Snapshot evidence below shows what was actually present; counts remain Not available unless tied to a matching visible action control.'};
  $('activityStatus').textContent='ANALYSIS COMPLETE';
  renderActivityReport(report,{status:'complete'});
  data.batches=[];batches.length=0;
