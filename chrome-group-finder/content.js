@@ -398,7 +398,8 @@
             const author=root.querySelector('a[href*="profile.php"],a[href*="/people/"]')||[...root.querySelectorAll('a[href]')].find(a=>/^\/[^/]+\/?$/.test(new URL(a.href,location.origin).pathname));
             const timeNode=root.querySelector('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]');
             const story=root.querySelector('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
-            const fallback=[author?.getAttribute('href')||'',timeNode?.getAttribute('data-utime')||timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.innerText||'',(story?.innerText||'').replace(/\\s+/g,' ').trim().slice(0,300)].join('|');
+            const fallbackText=(story?.innerText||root.innerText||'').replace(/\\s+/g,' ').trim().slice(0,300);
+            const fallback=[author?.getAttribute('href')||'',timeNode?.getAttribute('data-utime')||timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.innerText||'',fallbackText].join('|');
             const snapshotKey=permalink?'url:'+permalink:stableFt?'story:'+stableFt:'fallback:'+fallback;
             snapshots.push({snapshotKey,tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',html:html.slice(0,45000)});
           }
