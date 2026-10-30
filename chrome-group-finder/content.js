@@ -205,7 +205,7 @@
         const candidates=postNodes(article,'[role="group"],[role="toolbar"],[role="contentinfo"],div')
           .filter(group=>{
             const r=group.getBoundingClientRect();
-            if(r.top<mediaBottom-2||r.top>mediaBottom+145||r.top>=cutoff)return false;
+            if(r.top<mediaBottom-2||r.top>mediaBottom+145||(Number.isFinite(cutoff)&&r.top>=cutoff))return false;
             const controls=[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title],[data-testid]')]
               .filter(visible);
             const kinds=new Set(controls.map(actionKind).filter(Boolean));
@@ -230,7 +230,7 @@
           const nearby=[control,control.parentElement,control.parentElement?.parentElement].filter(Boolean);
           for(const el of nearby){
             const r=el.getBoundingClientRect();
-            if(r.top>=info.cutoff)continue;
+            if(Number.isFinite(info.cutoff)&&r.top>=info.cutoff)continue;
             const text=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ").trim();
             const counts=[...text.matchAll(/(\\d[\\d,.]*(?:\\s*[KMB])?)/ig)];
             // If a parent contains multiple action counts, it is not a safe association.
@@ -239,7 +239,7 @@
           // Sometimes Facebook renders the count in a sibling immediately beside
           // the icon control; only inspect siblings within the same action row.
           for(const sibling of [control.previousElementSibling,control.nextElementSibling]){
-            if(!sibling||!visible(sibling)||sibling.getBoundingClientRect().top>=info.cutoff)continue;
+            if(!sibling||!visible(sibling)||(Number.isFinite(info.cutoff)&&sibling.getBoundingClientRect().top>=info.cutoff))continue;
             const text=(sibling.innerText||sibling.getAttribute("aria-label")||"").trim();
             const count=text.match(/^(\\d[\\d,.]*(?:\\s*[KMB])?)$/i);
             if(count)return {value:parseCount(count[1]),source:"adjacent-count-in-action-row"};
@@ -332,10 +332,9 @@
         const isCompleteMainPost=el=>{
           const media=mediaAnchor(el);
           if(!media)return false;
-          const mediaBottom=media.getBoundingClientRect().bottom;
-          const hasHardCommentCutoff=Number.isFinite(commentsBoundary(el,mediaBottom));
-          const hasHeaderTime=postHeaderTimeNodes(el).length>0;
-          return hasHardCommentCutoff&&hasHeaderTime;
+          // View More Comments is a hard stop when present, not a requirement:
+          // Facebook omits that control on many otherwise valid posts.
+          return postHeaderTimeNodes(el).length>0;
         };
         let articles=topLevel.filter(el=>isCompleteMainPost(el));
         if(!articles.length){
