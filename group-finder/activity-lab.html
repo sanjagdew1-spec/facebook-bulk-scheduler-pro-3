@@ -109,8 +109,9 @@ async function analyzeTemporarySession(meta){
    if(!after(el,afterNode)||!before(el,cutoffNode))continue;
    const label=[el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('data-tooltip-content'),el.getAttribute('data-testid'),el.innerText].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
    if(!words.some(w=>new RegExp('\\b'+w+'s?\\b','i').test(label)))continue;
-   const direct=parseCount(label);
-   if(direct!=null)return direct;
+   const kindPattern=words.join('|');
+   const directMatch=label.match(new RegExp('(\\d[\\d,.]*\\s*[KMB]?)\\s*(?:'+kindPattern+')s?\\b','i'))||label.match(new RegExp('(?:'+kindPattern+')s?\\D{0,12}(\\d[\\d,.]*\\s*[KMB]?)','i'));
+   if(directMatch){const direct=parseCount(directMatch[1]);if(direct!=null)return direct;}
    let parent=el;
    for(let i=0;i<2&&parent;i++,parent=parent.parentElement){
     const text=(parent.innerText||'').replace(/\s+/g,' ').trim();
