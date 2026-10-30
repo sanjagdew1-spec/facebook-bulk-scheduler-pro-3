@@ -147,15 +147,19 @@
         return false;
       };
       const recentPostsByKey=new Map();
+      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0;
       const articleSelector='[role="article"],[data-pagelet*="FeedUnit"]';
       const collectVisiblePosts=()=>{
         const articles=[...document.querySelectorAll(articleSelector)].filter(visible);
+        articlesObserved=Math.max(articlesObserved,articles.length);
+        uniqueArticleSamples+=articles.length;
         for(const article of articles){
           const postText=(article.innerText||"").trim();
           if(postText.length<20)continue;
           const timeEls=[...article.querySelectorAll('a[aria-label],abbr[title],time,[aria-label],[data-utime]')];
           const timeText=timeEls.map(el=>[el.innerText,el.getAttribute('aria-label'),el.getAttribute('title'),el.getAttribute('datetime')].filter(Boolean).join(' ')).join(' ');
           const combined=timeText+" "+postText;
+          if(timeText.trim())timestampedArticles++;
           if(!isRecent24h(combined))continue;
           const key=(timeText+" "+postText.slice(0,220)).replace(/\s+/g," ").slice(0,260);
           if(recentPostsByKey.has(key))continue;
@@ -177,13 +181,14 @@
         const before=window.scrollY;
         window.scrollBy({top:Math.max(450,Math.floor(window.innerHeight*0.7)),behavior:"instant"});
         await sleep(1050);
+        scrollSteps++;
         observedArticles=Math.max(observedArticles,collectVisiblePosts());
         if(window.scrollY===before||window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5)break;
       }
       const recentPosts=[...recentPostsByKey.values()];
       const known=(key)=>recentPosts.filter(p=>p[key]!=null).length;
       const sum=(key)=>recentPosts.reduce((n,p)=>n+(p[key]||0),0);
-      const report={url:groupUrl(location.href),groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),checkedAt:new Date().toISOString(),observedArticles,recentPostsFound:recentPosts.length,reactionsTotal:known("reactions")?sum("reactions"):null,commentsTotal:known("comments")?sum("comments"):null,sharesTotal:known("shares")?sum("shares"):null,reactionsPostsCount:known("reactions"),commentsPostsCount:known("comments"),sharesPostsCount:known("shares"),recentPosts:recentPosts.slice(0,30),baseEvidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false};
+      const report={url:groupUrl(location.href),groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),checkedAt:new Date().toISOString(),observedArticles,recentPostsFound:recentPosts.length,reactionsTotal:known("reactions")?sum("reactions"):null,commentsTotal:known("comments")?sum("comments"):null,sharesTotal:known("shares")?sum("shares"):null,reactionsPostsCount:known("reactions"),commentsPostsCount:known("comments"),sharesPostsCount:known("shares"),recentPosts:recentPosts.slice(0,30),scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,recentPostsFound:recentPosts.length},baseEvidence:evidence(pageText),snippet:pageText.slice(0,1600),blocked:false};
       chrome.runtime.sendMessage({type:"PAGE_DETAILS",...report});return;
     }
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
