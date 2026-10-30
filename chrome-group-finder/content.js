@@ -184,25 +184,25 @@
       const collected=new Map();
       let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false;
-      const articleSelector='[role="article"],[data-pagelet*="FeedUnit"]';
       const collectVisiblePosts=()=>{
-        // DOM query order is Facebook's current top-to-bottom feed order.
-        // Keep a permanent serial number from the first encounter.
-        const articles=[...document.querySelectorAll(articleSelector)].filter(visible);
+        // Prefer actual Facebook post articles. FeedUnit wrappers can contain
+        // multiple cards and mix one post's timestamp with another post's metrics.
+        let articles=[...document.querySelectorAll('[role="article"]')].filter(visible);
+        if(!articles.length)articles=[...document.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
+        // Drop nested duplicate article wrappers; each remaining node represents one card.
+        articles=articles.filter(el=>!el.parentElement?.closest('[role="article"]'));
         articlesObserved=Math.max(articlesObserved,articles.length);
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
-          const primaryTimeEl=article.querySelector('abbr[title]')||
-            article.querySelector('time[datetime]')||
-            article.querySelector('[data-utime]')||
-            article.querySelector('a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]');
-          const timeEls=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')];
-          // Use one timestamp node only; combining nested labels can mix unrelated times.
-          const timeLabel=primaryTimeEl
-            ?[primaryTimeEl.innerText,primaryTimeEl.getAttribute("aria-label"),primaryTimeEl.getAttribute("title")].filter(Boolean).join(" · ").trim()
-            :String(timeEls.find(el=>String(el.innerText||el.getAttribute("aria-label")||el.getAttribute("title")||"").trim())?.innerText||"").trim();
-          const age=parseAgeHours(timeLabel,article,primaryTimeEl);
+          const timeEls=[...article.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]')].filter(visible);
+          // Pick the timestamp whose visible text is a relative age (10h, 4d, etc.)
+          // before considering an absolute title. This avoids a neighboring card's date.
+          const primaryTimeEl=timeEls.find(el=>/\b(?:just now|\d+\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks))\b/i.test([el.innerText,el.getAttribute("aria-label")].filter(Boolean).join(" ")))||timeEls[0]||null;
+          const relativeLabel=primaryTimeEl?[primaryTimeEl.innerText,primaryTimeEl.getAttribute("aria-label")].filter(Boolean).join(" · ").trim():"";
+          const absoluteLabel=primaryTimeEl?[primaryTimeEl.getAttribute("title"),primaryTimeEl.getAttribute("datetime")].filter(Boolean).join(" · ").trim():"";
+          const timeLabel=[relativeLabel,absoluteLabel].filter(Boolean).join(" · ");
+          const age=parseAgeHours(relativeLabel||timeLabel,article,primaryTimeEl);
           if(age==null)continue;
           timestampedArticles++;
           visibleTimestampAges.push(age);
@@ -218,7 +218,7 @@
           collected.set(key,{
             postId:key,
             postNumber:nextFeedOrder++,
-            time:timeLabel.trim().slice(0,120)||"Timestamp visible; exact label unavailable",
+            time:timeLabel.trim().slice(0,180)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
             likes:metric(article,"likes"),
             comments:metric(article,"comments"),
