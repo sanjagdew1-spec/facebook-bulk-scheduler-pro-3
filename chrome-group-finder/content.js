@@ -145,7 +145,7 @@
           .filter(el=>el.getBoundingClientRect().top>top+190)
           .map(el=>el.getBoundingClientRect().top);
         if(laterTimes.length)return Math.min(...laterTimes);
-        const laterProfiles=postNodes(article,'a[href][data-hovercard],a[href][data-hovercard-id],a[href*="profile.php"],a[href^="/people/"]')
+        const laterProfiles=postNodes(article,"a[href]")
           .filter(el=>el.getBoundingClientRect().top>top+190&&profileLink(el))
           .map(el=>el.getBoundingClientRect().top);
         return laterProfiles.length?Math.min(...laterProfiles):null;
