@@ -329,7 +329,8 @@
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
-          const boundaryCheck=postBoundaryInfo(article);\n          if(boundaryCheck.mediaFound)mediaAnchorsFound++;\n          if(boundaryCheck.viewMoreFound)viewMoreBoundariesFound++;\n          if(boundaryCheck.commentComposerFound)commentComposersFound++;\n          if(postActionBar(article).bar)actionRowsFound++;\n          const timeEls=postHeaderTimeNodes(article);
+          const boundaryCheck=postBoundaryInfo(article);
+          if(boundaryCheck.mediaFound)mediaAnchorsFound++;\n          if(boundaryCheck.viewMoreFound)viewMoreBoundariesFound++;\n          if(boundaryCheck.commentComposerFound)commentComposersFound++;\n          if(postActionBar(article).bar)actionRowsFound++;\n          const timeEls=postHeaderTimeNodes(article);
           // Pick the timestamp whose visible text is a relative age (10h, 4d, etc.)
           // before considering an absolute title. This avoids a neighboring card's date.
           const primaryTimeEl=timeEls.find(el=>/\b(?:just now|\d+\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks))\b/i.test([el.innerText,el.getAttribute("aria-label")].filter(Boolean).join(" ")))||timeEls[0]||null;
