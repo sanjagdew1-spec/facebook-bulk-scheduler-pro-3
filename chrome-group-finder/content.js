@@ -153,8 +153,9 @@
       return {isPublic:isPublic?true:(isPrivate?false:null),members:member?countValue(member[1]):null,postsPerDay:dailyPosts?countValue(dailyPosts[1]):null,postsPerDayLabel:dailyPosts?dailyPosts[1].replace(/\s+/g," ").trim()+" posts/day":null,visibleReactionCounts:reactions,visibleCommentCounts:comments,recentTimeLabels:[...new Set(times)].slice(0,12),recentEvidence:times.some(x=>/just now|\d+\s*(?:m|min|minutes?|h|hr|hours?)\s+ago|yesterday/i.test(x)),visiblePostSignals:Math.max(reactions.length,comments.length,times.length),...countryEvidence(text)};
     }
     if(isGroupPage){
-      // Wait for the user to click the extension icon on this Facebook tab. This grants narrow activeTab screenshot access without asking for all websites.
-      await waitForVisualCapturePermission();
+      // Scanning must never wait for screenshot permission. The user can enable
+      // temporary screenshots from the extension toolbar at any point while scanning.
+      // Without that optional permission, DOM collection and scrolling still proceed.
       const parseCount=(raw)=>{
         const m=String(raw||"").replace(/,/g,"").match(/(\d+(?:\.\d+)?)\s*([KMB])?/i);
         if(!m)return null;
@@ -484,17 +485,67 @@
       await sleep(2200);
       await captureRawDomBatch();
       let observed=collectVisiblePosts();
-      let consecutiveOldBatches=0;
+      // Facebook frequently places the feed inside its own scrollable pane.
+      // Scrolling window alone can leave that pane stationary, so locate the
+      // nearest scrollable ancestor of a real feed article first.
+      const findFeedScroller=()=>{
+        const firstArticle=[...document.querySelectorAll('[role="article"]')].find(visible);
+        let node=firstArticle;
+        while(node&&node!==document.body&&node!==document.documentElement){
+          const style=getComputedStyle(node);
+          const room=node.scrollHeight-node.clientHeight;
+          if(room>180&&/(auto|scroll|overlay|hidden)/.test(style.overflowY||""))return node;
+          node=node.parentElement;
+        }
+        const root=document.scrollingElement||document.documentElement;
+        if(root.scrollHeight-root.clientHeight>100)return root;
+        // Last-resort: select the largest visible scrollable region that contains
+        // a visible article. This covers Facebook's changing nested feed layouts.
+        const candidates=[...document.querySelectorAll("div,main,section")]
+          .filter(el=>visible(el)&&el.scrollHeight-el.clientHeight>220&&
+            (!firstArticle||el.contains(firstArticle)))
+          .sort((a,b)=>(b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight));
+        return candidates[0]||root;
+      };
+      const feedScroller=findFeedScroller();
+      const isDocumentScroller=feedScroller===document.scrollingElement||
+        feedScroller===document.documentElement||feedScroller===document.body;
+      const currentScroll=()=>isDocumentScroller
+        ?(window.scrollY||feedScroller.scrollTop||0):feedScroller.scrollTop;
+      const scrollViewport=async()=>{
+        const distance=Math.max(420,Math.floor((isDocumentScroller?window.innerHeight:feedScroller.clientHeight)*0.68));
+        const before=currentScroll();
+        if(isDocumentScroller)window.scrollBy({top:distance,behavior:"instant"});
+        else feedScroller.scrollTop=before+distance;
+        await sleep(1050);
+        let after=currentScroll();
+        if(after<=before+2){
+          // Facebook can swap its feed scroller after lazy-loading. Re-detect once
+          // and fall back to the document only if the selected pane did not move.
+          const fresh=findFeedScroller();
+          if(fresh!==feedScroller){
+            const freshRoot=fresh===document.scrollingElement||fresh===document.documentElement||fresh===document.body;
+            if(freshRoot)window.scrollBy({top:distance,behavior:"instant"});
+            else fresh.scrollTop+=distance;
+            await sleep(700);
+            after=freshRoot?(window.scrollY||fresh.scrollTop||0):fresh.scrollTop;
+          }
+        }
+        return {before,after,moved:after>before+2};
+      };
+      let consecutiveOldBatches=0,stalledScrolls=0;
       for(let step=0;step<60;step++){
-        const before=window.scrollY;
-        window.scrollBy({top:Math.max(420,Math.floor(window.innerHeight*0.68)),behavior:"instant"});
-        await sleep(900);
-        scrollSteps++;
+        const moved=await scrollViewport();
+        if(moved.moved){scrollSteps++;stalledScrolls=0;}
+        else stalledScrolls++;
         await captureRawDomBatch();
         observed=collectVisiblePosts();
         if(observed.oldestVisibleAge!=null&&observed.oldestVisibleAge>168)consecutiveOldBatches++;else consecutiveOldBatches=0;
-        if(consecutiveOldBatches>=2)break;
-        if(window.scrollY===before||window.innerHeight+window.scrollY>=document.documentElement.scrollHeight-5)break;
+        if(consecutiveOldBatches>=2||stalledScrolls>=2)break;
+        const top=isDocumentScroller?(window.scrollY||feedScroller.scrollTop||0):feedScroller.scrollTop;
+        const height=isDocumentScroller?document.documentElement.scrollHeight:feedScroller.scrollHeight;
+        const client=isDocumentScroller?window.innerHeight:feedScroller.clientHeight;
+        if(top+client>=height-20)break;
       }
       const all=[...collected.values()]; // Preserve original feed order; never sort by age.
       const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
