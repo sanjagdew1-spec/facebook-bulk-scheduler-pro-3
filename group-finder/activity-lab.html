@@ -285,7 +285,7 @@ async function analyzeTemporarySession(meta){
   if(group.count&&indexes.length<group.count)continue;
   htmlBytes+=html.length;snapshots++;
   const doc=new DOMParser().parseFromString(html,'text/html');
-  const articleEls=[...doc.querySelectorAll('[role="article"],[data-pagelet*="FeedUnit"]')].filter(el=>!el.parentElement?.closest('[role="article"],[data-pagelet*="FeedUnit"]'));
+  const articleEls=[...doc.querySelectorAll('[role="article"]')].filter(el=>!el.parentElement?.closest('[role="article"]'));
   articleNodes+=articleEls.length;rawArticlesSeen+=articleEls.length;
   timeNodes+=doc.querySelectorAll('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]').length;
   feedUnits+=doc.querySelectorAll('[data-pagelet*="FeedUnit"]').length;
