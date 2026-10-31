@@ -1,5 +1,5 @@
 (() => {
-  const WEBSITE_ORIGIN = "https://top-facebook-group-finder-preview.onrender.com";
+  const WEBSITE_ORIGIN = "https://group-finder-pro-main-post-v2-preview.onrender.com";
   if (location.origin === WEBSITE_ORIGIN) {
     if (window.__gfpWebsiteBridge) return;
     window.__gfpWebsiteBridge = true;
