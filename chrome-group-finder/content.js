@@ -399,13 +399,14 @@
       const collected=new Map();
       let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
-      let rawBatchSequence=0;
+      let rawBatchSequence=0,sentMainPostKey="";
       const captureRawDomBatch=async()=>{
         if(rawCaptureStopped)return;
         // Structured capture only: never upload the full Facebook document or comment text.
         collectVisiblePosts();
         const post=[...collected.values()].find(item=>item.mainPostVerified===true);
-        if(!post)return;
+        if(!post||post.postId===sentMainPostKey)return;
+        sentMainPostKey=post.postId;
         const firstScreenshot=initialVisualScreenshot;initialVisualScreenshot="";
         const payload={captureMode:"main-post-records-v1",scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),
           pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},
