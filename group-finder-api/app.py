@@ -6,7 +6,7 @@ from xml.etree import ElementTree as ET
 
 PORT = int(os.environ.get("PORT", "10000"))
 ACTIVITY_TTL_SECONDS = 300
-ACTIVITY_MAX_SESSION_BYTES = 15_000_000
+ACTIVITY_MAX_SESSION_BYTES = 250_000_000
 ACTIVITY_SESSIONS = {}
 ACTIVITY_LOCK = threading.RLock()
 
@@ -347,8 +347,8 @@ class Handler(BaseHTTPRequestHandler):
             sid = batch_match.group(1)
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0 or length > 1_500_000:
-                    return self._send(413, {"ok": False, "error": "Activity batch must be between 1 byte and 1.5 MB."})
+                if length <= 0 or length > 1_200_000:
+                    return self._send(413, {"ok": False, "error": "Activity batch must be between 1 byte and 1.2 MB."})
                 payload = json.loads(self.rfile.read(length) or b"{}")
                 with ACTIVITY_LOCK:
                     item = ACTIVITY_SESSIONS.get(sid)
@@ -356,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
                         ACTIVITY_SESSIONS.pop(sid, None)
                         return self._send(410, {"ok": False, "error": "Temporary activity session expired."})
                     if item["bytes"] + length > ACTIVITY_MAX_SESSION_BYTES:
-                        return self._send(413, {"ok": False, "error": "Temporary activity session reached its 15 MB safety limit."})
+                        return self._send(413, {"ok": False, "error": "Temporary activity session reached its 250 MB temporary safety limit."})
                     item["batches"].append(payload)
                     item["bytes"] += length
                 return self._send(202, {"ok": True, "accepted": True, "batchCount": len(item["batches"]), "expiresAt": item["expiresAt"]})
