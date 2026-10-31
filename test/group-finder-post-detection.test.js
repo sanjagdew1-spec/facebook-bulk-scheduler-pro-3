@@ -61,3 +61,11 @@ test("screenshot capture accepts Facebook Group URLs and forwards into an alread
  assert.match(background,/chrome\.scripting\.executeScript\(\{target:\{tabId:labTab\.id\},files:\["content\.js"\]\}\)/);
  assert.ok(manifest.permissions.includes("scripting"));
 });
+test("screenshot countdown runs by direct tab injection without a content-script listener",()=>{
+ const popup=readFileSync(new URL("../chrome-group-finder/popup.js",import.meta.url),"utf8");
+ const background=readFileSync(new URL("../chrome-group-finder/background.js",import.meta.url),"utf8");
+ assert.match(popup,/chrome\.scripting\.executeScript\(/);
+ assert.match(popup,/Capturing screenshot in 10 seconds/);
+ assert.match(popup,/sourceTabId,pageUrl:location\.href/);
+ assert.match(background,/chrome\.tabs\.get\(Number\(msg\.sourceTabId\)\)/);
+});
