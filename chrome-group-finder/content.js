@@ -29,6 +29,27 @@
       if (!msg || msg.source !== "top-facebook-group-finder") return;
       if (msg.type === "PING") {
         window.postMessage({source:"gfp-chrome-helper",type:"READY",available:true},WEBSITE_ORIGIN);
+      } else if (msg.type === "RUN_FIXTURE_TEST") {
+        const fixture = {
+          captureMode:"main-post-records-v1", scrollStep:0, fixture:true,
+          pageUrl:"https://www.facebook.com/groups/403062662125374/",
+          documentTitle:"I grew up in New York | Facebook",
+          capturedAt:new Date().toISOString(),
+          posts:[{
+            mainPostVerified:true, postId:"fixture:facebook-post-fateh-2026-10-30",
+            author:"Fateh", preview:"First school you went as a kid in New York",
+            relativeTime:"10h", time:"10h", ageHours:10,
+            likes:20, comments:62, shares:1,
+            photoCount:1, videoCount:0, reactionTypes:["Like","Haha"],
+            commentTextCaptured:false,
+            evidence:{authorFromPostHeader:true,captionAboveMainPhoto:true,metricsFromFirstPostActionRow:true,commentsAreaIgnored:true}
+          }]
+        };
+        window.postMessage({source:"gfp-chrome-helper",type:"ACTIVITY_RAW_BATCH",payload:fixture},WEBSITE_ORIGIN);
+        window.postMessage({source:"gfp-chrome-helper",type:"ACTIVITY_RAW_COMPLETE",payload:{
+          url:fixture.pageUrl,groupName:"I grew up in New York",checkedAt:fixture.capturedAt,
+          scrollSteps:0,fixture:true
+        }},WEBSITE_ORIGIN);
       } else if (msg.type === "START_SCAN") {
         const p = msg.payload || {};
         const keywords = Array.isArray(p.keywords) ? p.keywords.join("\n") : "";
@@ -343,17 +364,37 @@
         return candidates[0]?.label||"Not available";
       };
       const postPreview=(article)=>{
-        // Only read the main story text before the main media / comment cutoff.
-        // Never fall back to article text, which can contain nested comments.
-        const media=mediaAnchor(article);
-        const story=storyBody(article);
-        if(!media)return story?(story.innerText||"").replace(/\\s+/g," ").trim().slice(0,220)||"Not available":"Not available";
-        const mediaTop=media.getBoundingClientRect().top;
-        const cutoff=commentsBoundary(article,media.getBoundingClientRect().bottom);
-        const nodes=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
-          .filter(el=>el.getBoundingClientRect().bottom<=mediaTop&&el.getBoundingClientRect().top<cutoff);
-        const value=nodes.map(el=>(el.innerText||"").replace(/\s+/g," ").trim()).find(t=>t.length>0);
-        return value?value.slice(0,220):"Not available";
+        // Caption is read only from the main-post header area above its media.
+        // Nothing below the main media/action row is used as post text.
+        const media=mediaAnchor(article),story=storyBody(article);
+        if(!media)return story?(story.innerText||"").replace(/\s+/g," ").trim().slice(0,500)||"Not available":"Not available";
+        const mediaTop=media.getBoundingClientRect().top,cutoff=commentsBoundary(article,media.getBoundingClientRect().bottom);
+        const explicit=postNodes(article,'[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]')
+          .filter(el=>el.getBoundingClientRect().bottom<=mediaTop&&el.getBoundingClientRect().top<cutoff)
+          .map(el=>(el.innerText||"").replace(/\s+/g," ").trim()).find(t=>t.length>0);
+        if(explicit)return explicit.slice(0,500);
+        const header=postHeaderBounds(article),author=postAuthor(article),times=postHeaderTimeNodes(article);
+        const candidates=postNodes(article,'div[dir="auto"],span[dir="auto"],div')
+          .map(el=>({el,text:(el.innerText||"").replace(/\s+/g," ").trim(),r:el.getBoundingClientRect()}))
+          .filter(x=>x.text.length>=12&&x.text.length<=1200&&x.r.top>=header.lower&&x.r.bottom<=mediaTop&&x.r.top>header.top+24&&x.r.top<cutoff)
+          .filter(x=>!times.some(t=>t===x.el||x.el.contains(t))&&!/^(like|comment|share|reply|follow|sponsored)$/i.test(x.text))
+          .filter(x=>!author||x.text!==author)
+          .sort((a,b)=>a.r.top-b.r.top||a.text.length-b.text.length);
+        return candidates[0]?.text.slice(0,500)||"Not available";
+      };
+      const postReactionTypes=(article)=>{
+        const bar=postActionBar(article).bar;if(!bar)return [];
+        const allowed=new Set(["like","love","care","haha","wow","sad","angry"]);
+        const values=[...bar.querySelectorAll('img[alt],[aria-label]')]
+          .map(el=>(el.getAttribute("alt")||el.getAttribute("aria-label")||"").trim().toLowerCase())
+          .filter(v=>allowed.has(v));
+        return [...new Set(values)].map(v=>v[0].toUpperCase()+v.slice(1)).slice(0,6);
+      };
+      const postMediaCounts=(article)=>{
+        const media=postNodes(article,'img,video,[role="img"]').filter(el=>{
+          const r=el.getBoundingClientRect();return r.width>=100&&r.height>=80&&r.width*r.height>=12000;
+        });
+        return {photoCount:media.filter(el=>el.tagName==="IMG"||el.getAttribute("role")==="img").length,videoCount:media.filter(el=>el.tagName==="VIDEO").length};
       };
       const collected=new Map();
       let nextFeedOrder=1;
@@ -361,32 +402,16 @@
       let rawBatchSequence=0;
       const captureRawDomBatch=async()=>{
         if(rawCaptureStopped)return;
-        // Raw-only capture: do not select, classify, redact, or truncate any DOM content.
-        // Split the complete current document into transport-safe chunks; each chunk
-        // is uploaded in order and carries the same scroll-step and chunk metadata.
-        const rawHtml=document.documentElement?.outerHTML||"";
-        const step=rawBatchSequence++;
-        const chunkSize=200000;
-        const partCount=Math.max(1,Math.ceil(rawHtml.length/chunkSize));
+        // Structured capture only: never upload the full Facebook document or comment text.
+        collectVisiblePosts();
+        const post=[...collected.values()].find(item=>item.mainPostVerified===true);
+        if(!post)return;
         const firstScreenshot=initialVisualScreenshot;initialVisualScreenshot="";
-        for(let partIndex=0;partIndex<partCount;partIndex++){
-          const payload={
-            captureMode:"complete-raw-document",
-            scrollStep:step,
-            capturedAt:new Date().toISOString(),
-            pageUrl:location.href,
-            documentTitle:document.title,
-            viewport:{width:innerWidth,height:innerHeight,scrollY},
-            rawHtmlChunk:rawHtml.slice(partIndex*chunkSize,(partIndex+1)*chunkSize),
-            rawHtmlChunkIndex:partIndex,
-            rawHtmlChunkCount:partCount,
-            rawHtmlTotalChars:rawHtml.length,
-            rawHtmlComplete:partIndex===partCount-1,
-            ...(partIndex===0&&firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})
-          };
-          const result=await chrome.runtime.sendMessage({type:"RAW_ACTIVITY_BATCH",payload});
-          if(!result?.ok)throw new Error(result?.error||"Raw data batch could not be forwarded.");
-        }
+        const payload={captureMode:"main-post-records-v1",scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),
+          pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},
+          posts:[{...post,commentTextCaptured:false}],...(firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})};
+        const result=await chrome.runtime.sendMessage({type:"RAW_ACTIVITY_BATCH",payload});
+        if(!result?.ok)throw new Error(result?.error||"Structured Main Post data could not be forwarded.");
       };
       const collectVisiblePosts=()=>{
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
@@ -467,23 +492,19 @@
           if(collected.has(key))continue;
           const author=postAuthor(article);
           if(author==="Not available")authorsUnavailable++;else authorsIdentified++;
+          const mediaCounts=postMediaCounts(article);
           collected.set(key,{
-            postId:key,
-            postNumber:nextFeedOrder++,
-            author,
-            preview:postPreview(article),
-            relativeTime:relativeLabel.slice(0,80),
+            postId:key,postNumber:nextFeedOrder++,mainPostVerified:true,author,
+            preview:postPreview(article),relativeTime:relativeLabel.slice(0,80),
             exactTime:absoluteLabel.slice(0,180),
             time:timeLabel.trim().slice(0,220)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
-            likes:metric(article,"likes").value,
-            comments:metric(article,"comments").value,
-            shares:metric(article,"shares").value,
+            likes:metric(article,"likes").value,comments:metric(article,"comments").value,shares:metric(article,"shares").value,
+            photoCount:mediaCounts.photoCount,videoCount:mediaCounts.videoCount,
+            reactionTypes:postReactionTypes(article),commentTextCaptured:false,
             extractionDiagnostics:{
-              likeSource:metric(article,"likes").source,
-              commentSource:metric(article,"comments").source,
-              shareSource:metric(article,"shares").source,
-              boundary:postBoundaryInfo(article)
+              likeSource:metric(article,"likes").source,commentSource:metric(article,"comments").source,
+              shareSource:metric(article,"shares").source,boundary:postBoundaryInfo(article)
             }
           });
         }
@@ -491,7 +512,7 @@
       };
       await sleep(2200);
       await captureRawDomBatch();
-      // Website owns all post/comment classification; extension only scrolls and transfers raw DOM.
+      // First pass ends as soon as one complete Main Post is positively identified.
       // Facebook frequently places the feed inside its own scrollable pane.
       // Scrolling window alone can leave that pane stationary, so locate the
       // nearest scrollable ancestor of a real feed article first.
@@ -546,13 +567,14 @@
         if(moved.moved){scrollSteps++;stalledScrolls=0;}
         else stalledScrolls++;
         await captureRawDomBatch();
+        if(collected.size>0)break;
         if(stalledScrolls>=2)break;
         const top=isDocumentScroller?(window.scrollY||feedScroller.scrollTop||0):feedScroller.scrollTop;
         const height=isDocumentScroller?document.documentElement.scrollHeight:feedScroller.scrollHeight;
         const client=isDocumentScroller?window.innerHeight:feedScroller.clientHeight;
         if(top+client>=height-20)break;
       }
-      const all=[]; // Post/comment extraction is performed by Activity Lab, not the extension.
+      const all=[...collected.values()].filter(p=>p.mainPostVerified===true).slice(0,1); // One Main Post only; comment text is never collected.
       const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
       const recentPosts=all.filter(p=>p.ageHours<=24);
       const totals=(posts,key)=>{const known=posts.filter(p=>p[key]!=null);return {count:known.length,total:known.length?known.reduce((n,p)=>n+p[key],0):null};};
@@ -571,9 +593,9 @@
         groupName:document.title.replace(/\s*\|\s*Facebook.*$/i,"").trim(),
         checkedAt:new Date().toISOString(),
         recentPostsFound:recentPosts.length,
-        recentPosts:recentPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,author:p.author||"Not available",preview:p.preview||"Not available",relativeTime:p.relativeTime||"",exactTime:p.exactTime||"",time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        recentPosts:recentPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,author:p.author||"Not available",preview:p.preview||"Not available",relativeTime:p.relativeTime||"",exactTime:p.exactTime||"",time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,photoCount:p.photoCount||0,videoCount:p.videoCount||0,reactionTypes:p.reactionTypes||[],postId:p.postId})),
         weekPostsFound:weekPosts.length,
-        weekPosts:weekPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,author:p.author||"Not available",preview:p.preview||"Not available",relativeTime:p.relativeTime||"",exactTime:p.exactTime||"",time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,postId:p.postId})),
+        weekPosts:weekPosts.map((p,index)=>({postNumber:index+1,feedOrder:p.postNumber,author:p.author||"Not available",preview:p.preview||"Not available",relativeTime:p.relativeTime||"",exactTime:p.exactTime||"",time:p.time,ageHours:p.ageHours,likes:p.likes,comments:p.comments,shares:p.shares,photoCount:p.photoCount||0,videoCount:p.videoCount||0,reactionTypes:p.reactionTypes||[],postId:p.postId})),
         recentTopEngagement:maxEngagement(recentPosts),
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
