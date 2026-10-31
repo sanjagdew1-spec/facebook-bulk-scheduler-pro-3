@@ -57,6 +57,7 @@ async function runActualContentScriptAgainstDom() {
     runScripts: "outside-only"
   });
   const { window } = dom;
+  Object.defineProperty(window.HTMLElement.prototype, "innerText", { configurable: true, get() { return this.textContent || ""; }, set(value) { this.textContent = value; } });
   const listeners = new Set();
   const messages = [];
   Object.defineProperty(window, "innerHeight", { value: 900, configurable: true });
