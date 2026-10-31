@@ -495,15 +495,16 @@
           const datetime=postNodes(article,"time[datetime]")[0]?.getAttribute("datetime");
           const author=postAuthor(article);
           const preview=postPreview(article);
-          if(author==="Not available"||preview==="Not available"){authorsUnavailable++;continue;}
-          // When Facebook does not expose a permalink or stable story id, combine
-          // the post's own header identity and caption so same-author posts made
-          // at similar times do not collapse into one record.
-          const identity=permalink||dataFt||utime||datetime||[author,timeLabel,preview].join("|");
+          const mediaCounts=postMediaCounts(article);
+          if(author==="Not available"||
+            (preview==="Not available"&&mediaCounts.photoCount===0&&mediaCounts.videoCount===0)){
+            authorsUnavailable++;continue;
+          }
+          // Image/video-only Main Posts are valid even without a caption.
+          const identity=permalink||dataFt||utime||datetime||[author,timeLabel,preview,mediaCounts.photoCount,mediaCounts.videoCount].join("|");
           const key=String(identity||"visible-post").replace(/\s+/g," ").slice(0,500);
           if(collected.has(key))continue;
           authorsIdentified++;
-          const mediaCounts=postMediaCounts(article);
           collected.set(key,{
             postId:key,postNumber:nextFeedOrder++,mainPostVerified:true,author,
             preview,relativeTime:relativeLabel.slice(0,80),
