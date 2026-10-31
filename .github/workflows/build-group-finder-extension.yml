@@ -26,7 +26,11 @@ jobs:
         run: node -e "JSON.parse(require('fs').readFileSync('chrome-group-finder/manifest.json','utf8'))"
       - name: Install isolated DOM test dependency
         run: npm --prefix test install --no-audit --no-fund
-      - name: Run Main Post extraction and pipeline tests
+      - name: Fetch the currently deployed Activity Lab page for end-to-end testing
+        run: |
+          git fetch --no-tags origin prototype/top-facebook-group-finder-2026-10-28
+          git show FETCH_HEAD:group-finder/activity-lab.html > test/activity-lab-under-test.html
+      - name: Run Main Post extraction and website pipeline tests
         run: node --test test/group-finder-main-post-contract.test.js test/group-finder-main-post-dom-pipeline.test.js
       - name: Package extension folder
         run: cd chrome-group-finder && zip -r ../group-finder-pro-chrome-extension.zip .
