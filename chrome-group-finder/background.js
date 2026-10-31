@@ -99,7 +99,7 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
  }
  if(msg.type==="CAPTURE_SCREENSHOT_TO_ACTIVITY_LAB"){
   const sourceTab=sender.tab;
-  if(!sourceTab?.id||!/^https:\/\/www\\.facebook\\.com\\/groups\\//i.test(sourceTab.url||"")){
+  if(!sourceTab?.id||!/^https:\/\/www\.facebook\.com\/groups\//i.test(sourceTab.url||"")){
    sendResponse({ok:false,error:"Open a Facebook Group tab before starting the screenshot countdown."});return;
   }
   try{
@@ -114,13 +114,22 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
    const screenshotDataUrl=await compactScreenshot(rawShot);
    if(!screenshotDataUrl)throw new Error("The screenshot could not be compressed.");
    const capturedAt=new Date().toISOString();
-   await chrome.tabs.sendMessage(labTab.id,{
+   const screenshotMessage={
     type:"ACTIVITY_SCREENSHOT_RECEIVED",
     screenshotDataUrl,
     capturedAt,
     pageUrl:String(msg.pageUrl||sourceTab.url||""),
     groupName:String(msg.groupName||"Facebook Group")
-   });
+   };
+   // Activity Lab may stay open across an extension update. Inject its bridge
+   // on demand so the user does not need to reopen the website tab.
+   try{
+    await chrome.tabs.sendMessage(labTab.id,screenshotMessage);
+   }catch(firstError){
+    await chrome.scripting.executeScript({target:{tabId:labTab.id},files:["content.js"]});
+    await new Promise(resolve=>setTimeout(resolve,100));
+    await chrome.tabs.sendMessage(labTab.id,screenshotMessage);
+   }
    sendResponse({ok:true,forwarded:true,capturedAt});
   }catch(error){
    sendResponse({ok:false,error:"Could not capture or deliver the screenshot: "+String(error)});
