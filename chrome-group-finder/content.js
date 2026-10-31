@@ -442,7 +442,7 @@
           // Comment cards expose Like/Reply/Share and are therefore rejected.
           return hasMainContent&&postHeaderTimeNodes(el).length>0&&Boolean(postActionBar(el).bar);
         };
-        let articles=topLevel.filter(el=>isCompleteMainPost(el));
+        let articles=topLevel.filter(el=>isCompleteMainPost(el)&&el.getBoundingClientRect().bottom>0&&el.getBoundingClientRect().top<innerHeight);
         // When the user has positioned a target post, prefer the complete
         // Main Post nearest the middle of the viewport instead of DOM-first order.
         const viewportCenter=innerHeight/2;
