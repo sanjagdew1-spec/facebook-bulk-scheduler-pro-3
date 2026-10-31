@@ -193,14 +193,15 @@ async function analyzeTemporarySession(meta){
    for(const data of batch.posts){
     if(!data||data.mainPostVerified!==true||!String(data.author||'').trim()||data.ageHours==null||!Number.isFinite(Number(data.ageHours)))continue;
     const author=String(data.author).trim(),preview=String(data.preview||'').replace(/\s+/g,' ').trim();
-    if(!preview||preview==='Not available')continue;
-    const postId=String(data.postId||[author.toLowerCase(),data.time||'',preview].join('|'));
+    const photoCount=Number(data.photoCount)||0,videoCount=Number(data.videoCount)||0;
+    if((!preview||preview==='Not available')&&photoCount===0&&videoCount===0)continue;
+    const postId=String(data.postId||[author.toLowerCase(),data.time||'',preview,photoCount,videoCount].join('|'));
     if(seen.has(postId))continue;seen.add(postId);
     rows.push({author,time:String(data.time||'Not available'),ageHours:Number(data.ageHours),preview,
      likes:data.likes!=null&&Number.isFinite(Number(data.likes))?Number(data.likes):null,
      comments:data.comments!=null&&Number.isFinite(Number(data.comments))?Number(data.comments):null,
      shares:data.shares!=null&&Number.isFinite(Number(data.shares))?Number(data.shares):null,
-     photoCount:Number(data.photoCount)||0,videoCount:Number(data.videoCount)||0,
+     photoCount,videoCount,
      reactionTypes:Array.isArray(data.reactionTypes)?data.reactionTypes.filter(x=>typeof x==='string').slice(0,6):[],
      postId,feedOrder:++feedOrder,source:'extension-structured-main-post'});
     structuredPostsAccepted++;
