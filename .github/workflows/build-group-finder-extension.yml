@@ -1,16 +1,29 @@
-name: Build Group Finder Pro Chrome Extension ZIP
+name: Build and Test Group Finder Pro Chrome Extension
 on:
   push:
     branches:
-      - prototype/chrome-group-finder-automation
+      - prototype/group-main-post-v2-extension
     paths:
       - "chrome-group-finder/**"
+      - "test/group-finder-main-post-contract.test.js"
       - ".github/workflows/build-group-finder-extension.yml"
 jobs:
-  package:
+  test-and-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check extension JavaScript syntax
+        run: |
+          node --check chrome-group-finder/content.js
+          node --check chrome-group-finder/background.js
+          node --check chrome-group-finder/popup.js
+      - name: Validate manifest JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('chrome-group-finder/manifest.json','utf8'))"
+      - name: Run Main Post contract tests
+        run: node --test test/group-finder-main-post-contract.test.js
       - name: Package extension folder
         run: cd chrome-group-finder && zip -r ../group-finder-pro-chrome-extension.zip .
       - uses: actions/upload-artifact@v4
