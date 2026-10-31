@@ -159,12 +159,10 @@ test("the actual deployed Activity Lab accepts the extracted batch and renders t
   const inlineScripts = [...window.document.querySelectorAll("script")].map(node => node.textContent).filter(Boolean);
   assert.ok(inlineScripts.length, "the deployed Activity Lab must include its working page script");
   for (const script of inlineScripts) window.eval(script);
-  const dispatch = data => window.postMessage({ source: "gfp-chrome-helper", ...data }, window.location.origin);
-  dispatch({ type: "ACTIVITY_RAW_BATCH", payload: batch.payload });
-  dispatch({ type: "ACTIVITY_RAW_COMPLETE", payload: complete.payload });
-  for (let i = 0; i < 60 && window.document.getElementById("activityStatus").textContent !== "COMPLETE"; i++) {
-    await new Promise(resolve => setImmediate(resolve));
-  }
+  assert.match(html, /if\(msg\.type==='ACTIVITY_RAW_BATCH'\)[\s\S]*receiveRawActivityBatch\(msg\.payload\)/);
+  assert.match(html, /if\(msg\.type==='ACTIVITY_RAW_COMPLETE'\)[\s\S]*analyzeTemporarySession\(msg\.payload\)/);
+  await window.receiveRawActivityBatch(batch.payload);
+  await window.analyzeTemporarySession(complete.payload);
   assert.equal(storedBatches.length, 1, "Activity Lab batch count mismatch; status=" + window.document.getElementById("activityStatus").textContent + "; summary=" + window.document.getElementById("activitySummary").textContent);
   assert.equal(storedBatches[0].posts[0].author, expected.author);
   assert.equal(window.document.getElementById("activityStatus").textContent, "COMPLETE");
