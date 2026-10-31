@@ -108,11 +108,11 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
    }
    if(rawShot){
     const compacted=await compactScreenshot(rawShot);
-    if(compacted&&visualCaptureBytes+compacted.length<=9000000){
+    if(compacted&&visualCaptureBytes+compacted.length<=250000){
      payload.screenshotDataUrl=compacted;
      payload.screenshotCapturedAt=new Date().toISOString();
      visualCaptureBytes+=compacted.length;
-    }else payload.screenshotSkipped="temporary screenshot size budget reached";
+    }else payload.screenshotSkipped="temporary screenshot size budget reached (250 KB)";
    }
   }
   if(a.websiteTabId){
