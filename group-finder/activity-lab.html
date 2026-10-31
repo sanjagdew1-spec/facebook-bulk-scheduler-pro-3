@@ -103,10 +103,10 @@ function receiveRawActivityBatch(payload){
   const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id)+'/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary data upload failed.');
   if(id!==activitySessionId)return;
-  activityBatchCount++;activityRawBytes+=new Blob([JSON.stringify(payload)]).size;
+  activityBatchCount++;activityRawBytes+=new Blob([JSON.stringify(payload)]).size;activityRawHtmlChars+=String(payload.rawHtmlChunk||'').length;if(payload.rawHtmlChunk!=null)activityRawChunks++;
   if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
   $('activityStatus').textContent='RECEIVING';
-  $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' temporary raw-data batches ('+activityRawBytes.toLocaleString()+' bytes). Server expiry: maximum 5 minutes.';
+  $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' temporary raw-data batches; complete raw HTML: '+activityRawHtmlChars.toLocaleString()+' characters in '+activityRawChunks.toLocaleString()+' chunks ('+activityRawBytes.toLocaleString()+' uploaded bytes). Server expiry: maximum 5 minutes.';
  });
  return activityUploadQueue;
 }
@@ -115,13 +115,14 @@ async function analyzeTemporarySession(meta){
  const id=activitySessionId;if(!id)return;
  const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id));
  const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary session expired before analysis.');
- const batches=data.batches||[];const visualScreenshots=[];let snapshots=0,htmlBytes=0,articleNodes=0,timeNodes=0,actionSignals=0,viewMoreMarkers=0,feedUnits=0;
+ const batches=data.batches||[];const visualScreenshots=[];let snapshots=0,htmlBytes=0,articleNodes=0,timeNodes=0,actionSignals=0,viewMoreMarkers=0,feedUnits=0,rawHtmlChars=0,rawHtmlChunks=0,rawScrollSteps=new Set();
  const sampleTexts=[],snapshotEvidence=[];
  // Merge repeated views of the same post across overlapping scroll windows.
  // Keep the richest/fullest DOM copy, so a tall post seen in two partial
  // viewport positions is represented once rather than as two half-snapshots.
  const uniqueSnapshotMap=new Map();
  for(const batch of batches){
+  if(typeof batch.rawHtmlChunk==='string'){rawHtmlChars+=batch.rawHtmlChunk.length;rawHtmlChunks++;rawScrollSteps.add(Number(batch.scrollStep||0));}
   if(typeof batch.screenshotDataUrl==='string'&&batch.screenshotDataUrl.startsWith('data:image/jpeg;base64,')){
    visualScreenshots.push({scrollStep:Number(batch.scrollStep||0),capturedAt:batch.screenshotCapturedAt||batch.capturedAt||'',dataUrl:batch.screenshotDataUrl});
   }
@@ -218,12 +219,12 @@ async function analyzeTemporarySession(meta){
  const recent=rows.filter(p=>p.ageHours<=24),week=rows.filter(p=>p.ageHours>24&&p.ageHours<=168);
  const totals=(items,key)=>{const values=items.map(x=>x[key]).filter(v=>v!=null);return {count:values.length,total:values.length?values.reduce((a,b)=>a+b,0):null};};
  const top=items=>{const scored=items.map(p=>({...p,engagementTotal:[p.likes,p.comments,p.shares].filter(v=>v!=null).reduce((a,b)=>a+b,0),knownMetricCount:[p.likes,p.comments,p.shares].filter(v=>v!=null).length})).filter(p=>p.knownMetricCount);return scored.sort((a,b)=>b.engagementTotal-a.engagementTotal)[0]||null;};
- const report={status:'complete',groupName:meta?.groupName||'Not available',url:meta?.url||'Not available',scannedUrl:meta?.url||'Not available',checkedAt:meta?.checkedAt||new Date().toISOString(),recentPostsFound:recent.length,weekPostsFound:week.length,recentPosts:recent.map((p,i)=>({...p,postNumber:i+1})),weekPosts:week.map((p,i)=>({...p,postNumber:i+1})),recentTotals:{likes:totals(recent,'likes'),comments:totals(recent,'comments'),shares:totals(recent,'shares')},weekTotals:{likes:totals(week,'likes'),comments:totals(week,'comments'),shares:totals(week,'shares')},recentTopEngagement:top(recent),weekTopEngagement:top(week),scanDiagnostics:{scrollSteps:meta?.scrollSteps||batches.length,authorsIdentified:rows.filter(p=>p.author!=='Not available').length,authorsUnavailable:rows.filter(p=>p.author==='Not available').length,nestedArticlesExcluded:articleNodes,rawBatches:batches.length,rawSnapshots:snapshots,feedUnits,timeNodes,actionSignals,viewMoreBoundariesFound:viewMoreMarkers,rawHtmlCharacters:htmlBytes,visualScreenshotsCaptured:visualScreenshots.length,snapshotEvidence},note:'Activity Lab analyzed temporary visible-DOM snapshots. Comment/reply text was redacted before transfer. Snapshot evidence below shows what was actually present; counts remain Not available unless tied to a matching visible action control.'};
+ const report={status:'complete',groupName:meta?.groupName||'Not available',url:meta?.url||'Not available',scannedUrl:meta?.url||'Not available',checkedAt:meta?.checkedAt||new Date().toISOString(),recentPostsFound:recent.length,weekPostsFound:week.length,recentPosts:recent.map((p,i)=>({...p,postNumber:i+1})),weekPosts:week.map((p,i)=>({...p,postNumber:i+1})),recentTotals:{likes:totals(recent,'likes'),comments:totals(recent,'comments'),shares:totals(recent,'shares')},weekTotals:{likes:totals(week,'likes'),comments:totals(week,'comments'),shares:totals(week,'shares')},recentTopEngagement:top(recent),weekTopEngagement:top(week),scanDiagnostics:{scrollSteps:meta?.scrollSteps||batches.length,authorsIdentified:rows.filter(p=>p.author!=='Not available').length,authorsUnavailable:rows.filter(p=>p.author==='Not available').length,nestedArticlesExcluded:articleNodes,rawBatches:batches.length,rawSnapshots:snapshots,feedUnits,timeNodes,actionSignals,viewMoreBoundariesFound:viewMoreMarkers,rawHtmlCharacters:rawHtmlChars||htmlBytes,rawHtmlChunks,rawScrollSteps:rawScrollSteps.size,visualScreenshotsCaptured:visualScreenshots.length,snapshotEvidence},note:'Extension transferred unclassified raw document HTML in ordered chunks at each scroll step. Activity Lab receives raw evidence first; post/comment classification is a separate website-side step.'};
  $('activityStatus').textContent='ANALYSIS COMPLETE';
  renderActivityReport(report,{status:'complete'});
  renderActivityScreenshots(visualScreenshots);
  data.batches=[];batches.length=0;
- if(!snapshots)$('activitySummary').innerHTML+='<div class="hint">No eligible feed DOM snapshots were captured. Check that the extension is reloaded and the Facebook group tab was allowed to finish scanning.</div>';
+ if(!snapshots&&rawHtmlChunks)$('activitySummary').innerHTML+='<div class="hint">Raw document data was received successfully. No legacy post snapshots were used; the full raw HTML remains available in this temporary session for website-side parsing.</div>';else if(!snapshots)$('activitySummary').innerHTML+='<div class="hint">No raw document chunks or legacy snapshots were received. Check the extension connection.</div>';
 }
 $('startActivityScan').onclick=async()=>{
  const name=$('gname').value.trim(),url=$('gurl').value.trim();
