@@ -51,3 +51,13 @@ test("Capture One Post button starts the original 10-second countdown",()=>{
  assert.match(popup,/10-second countdown started on the Facebook Group tab/);
  assert.doesNotMatch(popup,/type:"DETECT_POST_COUNT"/);
 });
+
+test("screenshot capture accepts Facebook Group URLs and forwards into an already-open Activity Lab",()=>{
+ const background=readFileSync(new URL("../chrome-group-finder/background.js",import.meta.url),"utf8");
+ const manifest=JSON.parse(readFileSync(new URL("../chrome-group-finder/manifest.json",import.meta.url),"utf8"));
+ assert.match(background,/!\/^https:\/\/www\\.facebook\\.com\/groups\//);
+ assert.match(background,/chrome\.tabs\.captureVisibleTab\(sourceTab\.windowId/);
+ assert.match(background,/ACTIVITY_SCREENSHOT_RECEIVED/);
+ assert.match(background,/chrome\.scripting\.executeScript\(\{target:\{tabId:labTab\.id\},files:\["content\.js"\]\}\)/);
+ assert.ok(manifest.permissions.includes("scripting"));
+});
