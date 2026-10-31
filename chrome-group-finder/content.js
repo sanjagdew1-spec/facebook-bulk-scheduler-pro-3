@@ -491,11 +491,13 @@
           const key=String(identity||"visible-post").replace(/\s+/g," ").slice(0,240);
           if(collected.has(key))continue;
           const author=postAuthor(article);
-          if(author==="Not available")authorsUnavailable++;else authorsIdentified++;
+          const preview=postPreview(article);
+          if(author==="Not available"||preview==="Not available"){authorsUnavailable++;continue;}
+          authorsIdentified++;
           const mediaCounts=postMediaCounts(article);
           collected.set(key,{
             postId:key,postNumber:nextFeedOrder++,mainPostVerified:true,author,
-            preview:postPreview(article),relativeTime:relativeLabel.slice(0,80),
+            preview,relativeTime:relativeLabel.slice(0,80),
             exactTime:absoluteLabel.slice(0,180),
             time:timeLabel.trim().slice(0,220)||"Timestamp visible; exact label unavailable",
             ageHours:Math.round(age*10)/10,
