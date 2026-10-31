@@ -34,7 +34,7 @@ test("fixture data contract is represented in the website test button", () => {
   assert.match(lab, /runFixtureTest/);
   assert.match(lab, /RUN_FIXTURE_TEST/);
   assert.match(lab, /main-post-records-v1/);
-  assert.match(lab, /commentTextCaptured:false/);
+  assert.match(lab, /Sending the built-in one-post fixture through the Extension bridge/);
 });
 
 test("one Main Post is rendered as one row with main post engagement fields", () => {
