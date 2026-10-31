@@ -102,7 +102,7 @@ async function runActualContentScriptAgainstDom() {
 }
 
 test("real content.js DOM extraction reads the reference post, not a hardcoded sample payload", async () => {
-  const { batch, complete, details } = await runActualContentScriptAgainstDom();
+  const { batch, complete, details, messages } = await runActualContentScriptAgainstDom();
   assert.ok(batch, "actual content.js must send RAW_ACTIVITY_BATCH; diagnostics=" + JSON.stringify({complete,details,messageTypes:messages.map(m=>m.type)}));
   assert.equal(batch.payload.fixture, undefined, "this payload must not use the SAMPLE fixture path");
   assert.equal(batch.payload.captureMode, "main-post-records-v1");
