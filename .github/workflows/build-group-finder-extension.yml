@@ -6,6 +6,8 @@ on:
     paths:
       - "chrome-group-finder/**"
       - "test/group-finder-main-post-contract.test.js"
+      - "test/group-finder-main-post-dom-pipeline.test.js"
+      - "test/package.json"
       - ".github/workflows/build-group-finder-extension.yml"
 jobs:
   test-and-package:
@@ -22,8 +24,10 @@ jobs:
           node --check chrome-group-finder/popup.js
       - name: Validate manifest JSON
         run: node -e "JSON.parse(require('fs').readFileSync('chrome-group-finder/manifest.json','utf8'))"
-      - name: Run Main Post contract tests
-        run: node --test test/group-finder-main-post-contract.test.js
+      - name: Install isolated DOM test dependency
+        run: npm --prefix test install --no-audit --no-fund
+      - name: Run Main Post extraction and pipeline tests
+        run: node --test test/group-finder-main-post-contract.test.js test/group-finder-main-post-dom-pipeline.test.js
       - name: Package extension folder
         run: cd chrome-group-finder && zip -r ../group-finder-pro-chrome-extension.zip .
       - uses: actions/upload-artifact@v4
