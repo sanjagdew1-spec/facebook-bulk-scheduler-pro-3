@@ -1,6 +1,7 @@
 (() => {
-  const WEBSITE_ORIGIN = "https://top-facebook-group-finder-preview.onrender.com";
-  if (location.origin === WEBSITE_ORIGIN) {
+  const WEBSITE_ORIGINS = new Set(["https://top-facebook-group-finder-preview.onrender.com","https://group-finder-one-post-test-v2.onrender.com"]);
+  const WEBSITE_ORIGIN = location.origin;
+  if (WEBSITE_ORIGINS.has(location.origin)) {
     if (window.__gfpWebsiteBridge) return;
     window.__gfpWebsiteBridge = true;
     // Clear stale activity state only on the main finder page. Activity Lab must not\n    // clear a newly-created scan job while its startup handshake is in progress.\n    if (location.pathname !== "/activity-lab.html") {\n      chrome.runtime.sendMessage({type:"CLEAR_ACTIVITY_STORAGE"}).catch(()=>{});\n    }
