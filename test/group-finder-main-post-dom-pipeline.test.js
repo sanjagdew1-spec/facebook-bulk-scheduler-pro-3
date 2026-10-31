@@ -98,12 +98,12 @@ async function runActualContentScriptAgainstDom() {
   const complete = messages.find(m => m.type === "RAW_ACTIVITY_COMPLETE");
   const details = messages.find(m => m.type === "PAGE_DETAILS");
   dom.window.close();
-  return { batch, complete, details };
+  return { batch, complete, details, messages };
 }
 
 test("real content.js DOM extraction reads the reference post, not a hardcoded sample payload", async () => {
   const { batch, complete, details } = await runActualContentScriptAgainstDom();
-  assert.ok(batch, "actual content.js must send RAW_ACTIVITY_BATCH");
+  assert.ok(batch, "actual content.js must send RAW_ACTIVITY_BATCH; diagnostics=" + JSON.stringify({complete,details,messageTypes:messages.map(m=>m.type)}));
   assert.equal(batch.payload.fixture, undefined, "this payload must not use the SAMPLE fixture path");
   assert.equal(batch.payload.captureMode, "main-post-records-v1");
   assert.equal(batch.payload.posts.length, 1);
