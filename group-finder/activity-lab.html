@@ -39,6 +39,7 @@ function renderActivityReport(report,job){
  $('activitySummary').innerHTML=identity+'<div class="activity-kpis"><div class="activity-kpi"><small>Posts · last 24 hours</small><b>'+Number(report.recentPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Posts · days 2–7</small><b>'+Number(report.weekPostsFound||0).toLocaleString()+'</b></div><div class="activity-kpi"><small>Scroll steps</small><b>'+Number(report.scanDiagnostics?.scrollSteps||0).toLocaleString()+'</b></div></div><div class="hint">Post authors identified: <b>'+Number(report.scanDiagnostics?.authorsIdentified||0).toLocaleString()+'</b> · Author unavailable: <b>'+Number(report.scanDiagnostics?.authorsUnavailable||0).toLocaleString()+'</b> · Article DOM nodes seen (not a comment count): <b>'+Number(report.scanDiagnostics?.nestedArticlesExcluded||0).toLocaleString()+'</b> · Raw batches: <b>'+Number(report.scanDiagnostics?.rawBatches||0).toLocaleString()+'</b> · Snapshots: <b>'+Number(report.scanDiagnostics?.rawSnapshots||0).toLocaleString()+'</b> · HTML characters: <b>'+Number(report.scanDiagnostics?.rawHtmlCharacters||0).toLocaleString()+'</b> · Raw chunks: <b>'+Number(report.scanDiagnostics?.rawHtmlChunks||0).toLocaleString()+'</b> · Scroll views: <b>'+Number(report.scanDiagnostics?.rawScrollSteps||0).toLocaleString()+'</b> · FeedUnits: <b>'+Number(report.scanDiagnostics?.feedUnits||0).toLocaleString()+'</b> · Time nodes: <b>'+Number(report.scanDiagnostics?.timeNodes||0).toLocaleString()+'</b> · Like/comment/share signals: <b>'+Number(report.scanDiagnostics?.actionSignals||0).toLocaleString()+'</b> · Visual screenshots: <b>'+Number(report.scanDiagnostics?.visualScreenshotsCaptured||0).toLocaleString()+'</b> · Scan time: '+esc(report.checkedAt?new Date(report.checkedAt).toLocaleString():'Not available')+'</div>'+((report.scanDiagnostics?.snapshotEvidence||[]).length?'<div class="activity-section-title">Raw Snapshot Evidence · first samples</div>'+report.scanDiagnostics.snapshotEvidence.map((s,i)=>'<div class="hint" style="border:1px solid #293b59;border-radius:9px;padding:10px;margin:7px 0"><b>Snapshot '+(i+1)+'</b> · '+esc(s.tag)+' · '+esc(s.role||'no role')+' · '+esc(s.pagelet||'no FeedUnit')+'<br>Images: '+Number(s.images||0)+' · Video/media nodes: '+Number(s.video||0)+'<br><b>Visible text sample:</b> '+esc(s.text||'No text in snapshot')+'<br><b>Time elements:</b> '+esc((s.times||[]).map(t=>[t.text,t.title,t.aria,t.datetime,t.utime].filter(Boolean).join(' | ')).join(' ; ')||'None detected')+'<br><b>Action/control labels:</b> '+esc((s.controls||[]).join(' · ')||'None detected')+'</div>').join(''):'<div class="hint">No raw snapshot evidence was available to inspect.</div>')+'<div class="activity-section-title">Last 24 hours · visible totals</div><div class="hint">Likes: '+metricText(r.likes?.total,'likes')+' · Comments: '+metricText(r.comments?.total,'comments')+' · Shares: '+metricText(r.shares?.total,'shares')+'</div>'+topLine('Highest 24-hour engagement',report.recentTopEngagement)+activityRows(report.recentPosts)+'<div class="activity-section-title">Older posts · days 2–7 · visible totals</div><div class="hint">Likes: '+metricText(w.likes?.total,'likes')+' · Comments: '+metricText(w.comments?.total,'comments')+' · Shares: '+metricText(w.shares?.total,'shares')+'</div>'+topLine('Highest days 2–7 engagement',report.weekTopEngagement)+activityRows(report.weekPosts)+'<div class="hint">'+esc(report.note||'Only visible information is reported.')+'</div>';
 }
 const ACTIVITY_API='https://group-finder-search-api.onrender.com';
+let activityDataLimitReached=false;
 let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityRawHtmlChars=0,activityRawChunks=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null,activityNoDataTimer=null,activityExpiresAt=0;
 async function deleteActivitySession(keepalive=false){
  const id=activitySessionId;activitySessionId=null;activityExpiresAt=0;
@@ -77,7 +78,7 @@ function waitForActivityBridge(timeoutMs=10000){
  });
 }
 function activateActivitySession(sessionId){
- activitySessionId=sessionId;activityBatchCount=0;activityRawBytes=0;activityUploadQueue=Promise.resolve();activityExpiresAt=Date.now()+300000;
+ activitySessionId=sessionId;activityDataLimitReached=false;activityBatchCount=0;activityRawBytes=0;activityUploadQueue=Promise.resolve();activityExpiresAt=Date.now()+300000;
  $('activityRows').innerHTML='';$('activityScreenshots').innerHTML='<div class="activity-section-title">Visual Facebook Screenshots</div><div class="hint">Scan started. Scrolling and data collection run automatically. Click the Group Finder Pro extension icon on the Facebook Group tab if you also want visual screenshots.</div>';
  if(activityNoDataTimer)clearTimeout(activityNoDataTimer);
  activityNoDataTimer=setTimeout(()=>{
@@ -97,12 +98,21 @@ async function createActivitySession(){
 }
 
 function receiveRawActivityBatch(payload){
- const id=activitySessionId;if(!id||!payload)return activityUploadQueue;
+ const id=activitySessionId;if(!id||!payload||activityDataLimitReached)return activityUploadQueue;
  activityUploadQueue=activityUploadQueue.catch(()=>{}).then(async()=>{
   if(id!==activitySessionId)return;
   const response=await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id)+'/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  const data=await response.json();if(!response.ok)throw new Error(data.error||'Temporary data upload failed.');
+  const data=await response.json();
+  if(response.status===413&&data.limitReached){
+   activityDataLimitReached=true;
+   window.postMessage({source:'top-facebook-group-finder',type:'STOP_ACTIVITY_RAW_CAPTURE'},location.origin);
+   $('activityStatus').textContent='DATA LIMIT REACHED';
+   $('activitySummary').textContent=(data.error||'Temporary data limit reached. Further raw data is no longer accepted.')+' Scrolling continues to its normal finish; already accepted data remains available until expiry.';
+   return;
+  }
+  if(!response.ok)throw new Error(data.error||'Temporary data upload failed.');
   if(id!==activitySessionId)return;
+  if(data.duplicate)return;
   activityBatchCount++;activityRawBytes+=new Blob([JSON.stringify(payload)]).size;activityRawHtmlChars+=String(payload.rawHtmlChunk||'').length;if(payload.rawHtmlChunk!=null)activityRawChunks++;
   if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
   $('activityStatus').textContent='RECEIVING';
