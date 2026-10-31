@@ -132,7 +132,7 @@ test("the extension-to-website bridge forwards the structured batch using the Ac
 
 test("the actual deployed Activity Lab accepts the extracted batch and renders the post plus scan diagnostics", async () => {
   const html = readFileSync(new URL("./activity-lab-under-test.html", import.meta.url), "utf8");
-  const { batch, complete } = await runActualContentScriptAgainstDom();
+  const { batch, complete, details } = await runActualContentScriptAgainstDom();
   assert.ok(batch, "content.js must produce a real structured batch before the website test starts");
   const dom = new JSDOM(html, {
     url: "https://group-finder-pro-main-post-v2-preview.onrender.com/activity-lab.html?groupName=I%20grew%20up%20in%20New%20York&groupUrl=https%3A%2F%2Fwww.facebook.com%2Fgroups%2F403062662125374%2F&sessionId=dom-pipeline-test",
@@ -166,12 +166,12 @@ test("the actual deployed Activity Lab accepts the extracted batch and renders t
   }));
   dispatch({ type: "ACTIVITY_RAW_BATCH", payload: batch.payload });
   dispatch({ type: "ACTIVITY_RAW_COMPLETE", payload: complete.payload });
-  for (let i = 0; i < 60 && window.document.getElementById("activityStatus").textContent !== "ANALYSIS COMPLETE"; i++) {
+  for (let i = 0; i < 60 && window.document.getElementById("activityStatus").textContent !== "COMPLETE"; i++) {
     await new Promise(resolve => setImmediate(resolve));
   }
   assert.equal(storedBatches.length, 1, "Activity Lab must upload the extension's exact structured batch");
   assert.equal(storedBatches[0].posts[0].author, expected.author);
-  assert.equal(window.document.getElementById("activityStatus").textContent, "ANALYSIS COMPLETE");
+  assert.equal(window.document.getElementById("activityStatus").textContent, "COMPLETE");
   const rows = window.document.getElementById("activityRows").textContent;
   for (const value of [expected.author, expected.preview, "10h", "Like, Haha", "20", "62", "1"]) {
     assert.ok(rows.includes(value), "rendered Activity Lab row must contain " + value + "; got: " + rows);
