@@ -97,6 +97,36 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   if(a?.fbTabId){try{await chrome.tabs.sendMessage(a.fbTabId,{type:"STOP_ACTIVITY_RAW_CAPTURE"});}catch{}}
   sendResponse({ok:true,stopped:true});return;
  }
+ if(msg.type==="CAPTURE_SCREENSHOT_TO_ACTIVITY_LAB"){
+  const sourceTab=sender.tab;
+  if(!sourceTab?.id||!/^https:\/\/www\\.facebook\\.com\\/groups\\//i.test(sourceTab.url||"")){
+   sendResponse({ok:false,error:"Open a Facebook Group tab before starting the screenshot countdown."});return;
+  }
+  try{
+   const labTabs=await chrome.tabs.query({url:"https://group-finder-pro-main-post-v2-preview.onrender.com/activity-lab.html*"});
+   const labTab=labTabs.find(t=>t.id!==sourceTab.id);
+   if(!labTab?.id){sendResponse({ok:false,error:"Activity Lab is not open. Open its tab once and keep it available; Facebook does not need to be reconnected."});return;}
+   const current=await chrome.tabs.get(sourceTab.id);
+   if(!current.active)await chrome.tabs.update(sourceTab.id,{active:true});
+   await new Promise(resolve=>setTimeout(resolve,250));
+   const rawShot=await chrome.tabs.captureVisibleTab(sourceTab.windowId,{format:"jpeg",quality:88});
+   if(!rawShot)throw new Error("Chrome returned an empty screenshot.");
+   const screenshotDataUrl=await compactScreenshot(rawShot);
+   if(!screenshotDataUrl)throw new Error("The screenshot could not be compressed.");
+   const capturedAt=new Date().toISOString();
+   await chrome.tabs.sendMessage(labTab.id,{
+    type:"ACTIVITY_SCREENSHOT_RECEIVED",
+    screenshotDataUrl,
+    capturedAt,
+    pageUrl:String(msg.pageUrl||sourceTab.url||""),
+    groupName:String(msg.groupName||"Facebook Group")
+   });
+   sendResponse({ok:true,forwarded:true,capturedAt});
+  }catch(error){
+   sendResponse({ok:false,error:"Could not capture or deliver the screenshot: "+String(error)});
+  }
+  return;
+ }
  if(msg.type==="RAW_ACTIVITY_BATCH"||msg.type==="RAW_ACTIVITY_COMPLETE"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
