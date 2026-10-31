@@ -45,13 +45,13 @@ test("detects two visible Main Posts and caps the result at DOUBLE POST",async()
  assert.equal(result.ok,true);assert.equal(result.found,true);assert.equal(result.count,2);
  assert.equal(result.label,"DOUBLE POST");assert.deepEqual(JSON.parse(JSON.stringify(result.posts)),[{number:1,width:540,height:500},{number:2,width:540,height:430}]);
 });
-test("Capture One Post button starts the original 10-second countdown",()=>{
+test("Capture One Post button injects the 10-second screenshot countdown directly",()=>{
  const popup=readFileSync(new URL("../chrome-group-finder/popup.js",import.meta.url),"utf8");
- assert.match(popup,/sendMessage\(tab\.id,\{type:"CAPTURE_ONE_POST"\}\)/);
- assert.match(popup,/10-second countdown started on the Facebook Group tab/);
- assert.doesNotMatch(popup,/type:"DETECT_POST_COUNT"/);
+ assert.match(popup,/chrome\.scripting\.executeScript\(/);
+ assert.match(popup,/Capturing screenshot in 10 seconds/);
+ assert.match(popup,/CAPTURE_SCREENSHOT_TO_ACTIVITY_LAB/);
+ assert.match(popup,/10-second screenshot countdown started/);
 });
-
 test("screenshot capture accepts Facebook Group URLs and forwards into an already-open Activity Lab",()=>{
  const background=readFileSync(new URL("../chrome-group-finder/background.js",import.meta.url),"utf8");
  const manifest=JSON.parse(readFileSync(new URL("../chrome-group-finder/manifest.json",import.meta.url),"utf8"));
