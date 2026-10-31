@@ -398,7 +398,7 @@
       };
       const collected=new Map();
       let nextFeedOrder=1;
-      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
+      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0,roleArticleNodes=0,visibleRoleArticleNodes=0,topLevelRoleArticles=0,visibleTopLevelRoleArticles=0,mainContentCandidates=0,headerTimestampCandidates=0,mainActionRowCandidates=0;
       let rawBatchSequence=0;const sentMainPostKeys=new Set();
       const captureRawDomBatch=async()=>{
         if(rawCaptureStopped)return;
@@ -421,11 +421,19 @@
       const collectVisiblePosts=()=>{
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
         // multiple cards and mix one post's timestamp with another post's metrics.
-        const allArticles=[...document.querySelectorAll('[role="article"]')].filter(visible);
+        const roleArticles=[...document.querySelectorAll('[role="article"]')];
+        roleArticleNodes=roleArticles.length;
+        const allArticles=roleArticles.filter(visible);
+        visibleRoleArticleNodes=allArticles.length;
         // Prefer outermost cards that own their own timestamp. Nested article nodes
         // are often comments/replies, not feed posts. If Facebook wraps the post in
         // an extra article, fall back only to nested cards with an explicit story body.
         const topLevel=allArticles.filter(el=>!el.parentElement?.closest('[role="article"]'));
+        topLevelRoleArticles=topLevel.length;
+        visibleTopLevelRoleArticles=topLevel.filter(el=>el.getBoundingClientRect().bottom>0&&el.getBoundingClientRect().top<innerHeight).length;
+        mainContentCandidates=topLevel.filter(el=>Boolean(mediaAnchor(el)||storyBody(el))).length;
+        headerTimestampCandidates=topLevel.filter(el=>postHeaderTimeNodes(el).length>0).length;
+        mainActionRowCandidates=topLevel.filter(el=>Boolean(postActionBar(el).bar)).length;
         const timeSelector='abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]';
         // A candidate must look like a complete Main Post: its own visible
         // header timestamp, main story text or media, and first-level action row.
@@ -580,11 +588,11 @@
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
         weekTotals:{likes:totals(weekPosts,"likes"),comments:totals(weekPosts,"comments"),shares:totals(weekPosts,"shares")},
-        scanDiagnostics:{scrollSteps,articlesObserved,uniqueArticleSamples,timestampedArticles,authorsIdentified,authorsUnavailable,nestedArticlesExcluded,mediaAnchorsFound,viewMoreBoundariesFound,commentComposersFound,actionRowsFound,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
+        scanDiagnostics:{scrollSteps,roleArticleNodes,visibleRoleArticleNodes,topLevelRoleArticles,visibleTopLevelRoleArticles,mainContentCandidates,headerTimestampCandidates,mainActionRowCandidates,articlesObserved,uniqueArticleSamples,timestampedArticles,authorsIdentified,authorsUnavailable,nestedArticlesExcluded,mediaAnchorsFound,viewMoreBoundariesFound,commentComposersFound,actionRowsFound,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
         blocked:false,
         note:"Only visible post timestamps and visible like/comment/share counts were read. No post was opened and no comment or liker list was inspected."
       };
-      try{await chrome.runtime.sendMessage({type:"RAW_ACTIVITY_COMPLETE",payload:{url:report.url,groupName:report.groupName,checkedAt:report.checkedAt,scrollSteps,rawBatchesSent:rawBatchSequence}});}catch{}
+      try{await chrome.runtime.sendMessage({type:"RAW_ACTIVITY_COMPLETE",payload:{url:report.url,groupName:report.groupName,checkedAt:report.checkedAt,scrollSteps,rawBatchesSent:rawBatchSequence,scanDiagnostics:report.scanDiagnostics,postsFound:all.length,captureMode:"main-post-records-v1",onePostMode:true}});}catch{}
       chrome.runtime.sendMessage({type:"PAGE_DETAILS",...report});return;
     }
     window.scrollBy({top:Math.min(window.innerHeight*0.7,500),behavior:"instant"});
