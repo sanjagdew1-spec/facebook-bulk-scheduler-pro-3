@@ -98,9 +98,12 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
   sendResponse({ok:true,stopped:true});return;
  }
  if(msg.type==="CAPTURE_SCREENSHOT_TO_ACTIVITY_LAB"){
-  const sourceTab=sender.tab;
+  let sourceTab=sender.tab||null;
+  if(!sourceTab?.id&&Number.isInteger(Number(msg.sourceTabId))){
+   try{sourceTab=await chrome.tabs.get(Number(msg.sourceTabId));}catch{}
+  }
   if(!sourceTab?.id||!/^https:\/\/www\.facebook\.com\/groups\//i.test(sourceTab.url||"")){
-   sendResponse({ok:false,error:"Open a Facebook Group tab before starting the screenshot countdown."});return;
+   sendResponse({ok:false,error:"The selected tab is not an available Facebook Group tab. Keep the Group tab open and try again."});return;
   }
   try{
    const labTabs=await chrome.tabs.query({url:"https://group-finder-pro-main-post-v2-preview.onrender.com/activity-lab.html*"});
