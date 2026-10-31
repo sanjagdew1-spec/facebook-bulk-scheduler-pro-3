@@ -112,7 +112,7 @@
       const media=[...el.querySelectorAll('img,video,[role="img"]')].some(node=>{const r=node.getBoundingClientRect();return r.width>=180&&r.height>=100&&r.width*r.height>=30000;});
       const story=Boolean(el.querySelector('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]'));
       const time=Boolean(el.querySelector('abbr[title],time[datetime],[data-utime]'));
-      const profile=Boolean([...el.querySelectorAll('a[href]')].some(a=>{let p="";try{p=new URL(a.getAttribute("href"),location.origin).pathname;}catch{}return /profile\\.php|^\\/people\\//i.test(p)||(/^\\/[^/]+\\/?$/.test(p)&&!/^\\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\\//i.test(p));}));
+      const profile=Boolean([...el.querySelectorAll('a[href]')].some(a=>{let p="";try{p=new URL(a.getAttribute("href"),location.origin).pathname;}catch{}return /profile\.php|^\/people\//i.test(p)||(/^\/[^/]+\/?$/.test(p)&&!/^\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\//i.test(p));}));
       return media||story||(time&&profile);
     };
     const roleCards=[...document.querySelectorAll('[role="article"]')]
