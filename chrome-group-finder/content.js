@@ -57,7 +57,6 @@
           if (panel.isConnected) panel.remove();
           window.postMessage({source:"gfp-chrome-helper",type:"ACTIVITY_SCREENSHOT_EXPIRED",receiptId},WEBSITE_ORIGIN);
         }, 5 * 60 * 1000);
-        close.addEventListener("click", () => window.clearTimeout(expiryTimer), {once:true});
         return;
       }
       // Background forwards the scanner's RAW_ACTIVITY_* messages. Translate
