@@ -2,7 +2,7 @@ name: Test Group Finder Activity Lab
 on:
   push:
     branches:
-      - prototype/group-main-post-v2-web
+      - prototype/group-main-post-v2-web\n      - prototype/top-facebook-group-finder-2026-10-28
     paths:
       - "group-finder/activity-lab.html"
       - "test/group-finder-activity-lab-contract.test.js"
