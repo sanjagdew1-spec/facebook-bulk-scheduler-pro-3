@@ -42,6 +42,22 @@
         close.addEventListener("click", () => panel.remove());
         panel.append(heading, details, image, close);
         (document.body || document.documentElement).appendChild(panel);
+        const receivedAt = Date.now();
+        const receiptId = "gfp-shot-" + receivedAt;
+        const receipt = {
+          receiptId, status:"received",
+          groupName:String(message.groupName || "Facebook Group"),
+          pageUrl:String(message.pageUrl || ""),
+          capturedAt:String(message.capturedAt || new Date(receivedAt).toISOString()),
+          receivedAt:new Date(receivedAt).toISOString(),
+          expiresAt:new Date(receivedAt + 5 * 60 * 1000).toISOString()
+        };
+        window.postMessage({source:"gfp-chrome-helper",type:"ACTIVITY_SCREENSHOT_STATUS",receipt},WEBSITE_ORIGIN);
+        const expiryTimer = window.setTimeout(() => {
+          if (panel.isConnected) panel.remove();
+          window.postMessage({source:"gfp-chrome-helper",type:"ACTIVITY_SCREENSHOT_EXPIRED",receiptId},WEBSITE_ORIGIN);
+        }, 5 * 60 * 1000);
+        close.addEventListener("click", () => window.clearTimeout(expiryTimer), {once:true});
         return;
       }
       // Background forwards the scanner's RAW_ACTIVITY_* messages. Translate
