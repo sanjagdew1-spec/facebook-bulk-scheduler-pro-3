@@ -1,4 +1,4 @@
-import html, json, os, re, time, uuid, threading, urllib.parse, urllib.request, urllib.error
+import html, json, os, re, time, uuid, threading, hashlib, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -6,7 +6,8 @@ from xml.etree import ElementTree as ET
 
 PORT = int(os.environ.get("PORT", "10000"))
 ACTIVITY_TTL_SECONDS = 300
-ACTIVITY_MAX_SESSION_BYTES = 250_000_000
+ACTIVITY_MAX_SESSION_BYTES = 32 * 1024 * 1024
+ACTIVITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024
 ACTIVITY_SESSIONS = {}
 ACTIVITY_LOCK = threading.RLock()
 
@@ -340,7 +341,7 @@ class Handler(BaseHTTPRequestHandler):
             sid = str(uuid.uuid4())
             now = time.time()
             with ACTIVITY_LOCK:
-                ACTIVITY_SESSIONS[sid] = {"createdAt": now, "expiresAt": now + ACTIVITY_TTL_SECONDS, "bytes": 0, "batches": []}
+                ACTIVITY_SESSIONS[sid] = {"createdAt": now, "expiresAt": now + ACTIVITY_TTL_SECONDS, "bytes": 0, "batches": [], "batchHashes": set()}
             return self._send(201, {"ok": True, "sessionId": sid, "ttlSeconds": ACTIVITY_TTL_SECONDS, "expiresAt": now + ACTIVITY_TTL_SECONDS})
         batch_match = re.fullmatch(r"/api/activity/sessions/([a-f0-9-]{36})/batches", path)
         if batch_match:
@@ -349,17 +350,27 @@ class Handler(BaseHTTPRequestHandler):
                 length = int(self.headers.get("Content-Length", "0"))
                 if length <= 0 or length > 1_200_000:
                     return self._send(413, {"ok": False, "error": "Activity batch must be between 1 byte and 1.2 MB."})
-                payload = json.loads(self.rfile.read(length) or b"{}")
+                raw_body = self.rfile.read(length)
+                payload = json.loads(raw_body or b"{}")
+                chunk = payload.get("rawHtmlChunk")
+                dedupe_source = chunk if isinstance(chunk, str) else raw_body.decode("utf-8", "replace")
+                digest = hashlib.sha256(dedupe_source.encode("utf-8") if isinstance(dedupe_source, str) else dedupe_source).hexdigest()
                 with ACTIVITY_LOCK:
                     item = ACTIVITY_SESSIONS.get(sid)
                     if not item or time.time() >= item["expiresAt"]:
                         ACTIVITY_SESSIONS.pop(sid, None)
                         return self._send(410, {"ok": False, "error": "Temporary activity session expired."})
+                    if digest in item["batchHashes"]:
+                        return self._send(200, {"ok": True, "accepted": False, "duplicate": True, "batchCount": len(item["batches"]), "storedBytes": item["bytes"], "expiresAt": item["expiresAt"]})
+                    total_bytes = sum(session["bytes"] for session in ACTIVITY_SESSIONS.values())
                     if item["bytes"] + length > ACTIVITY_MAX_SESSION_BYTES:
-                        return self._send(413, {"ok": False, "error": "Temporary activity session reached its 250 MB temporary safety limit."})
+                        return self._send(413, {"ok": False, "limitReached": True, "error": "This scan reached its 32 MiB temporary data limit. Further data is no longer accepted; the 60-step scroll can finish."})
+                    if total_bytes + length > ACTIVITY_MAX_TOTAL_BYTES:
+                        return self._send(413, {"ok": False, "limitReached": True, "error": "The Activity Lab temporary memory budget is full (64 MiB across active scans). Further data is no longer accepted."})
                     item["batches"].append(payload)
+                    item["batchHashes"].add(digest)
                     item["bytes"] += length
-                return self._send(202, {"ok": True, "accepted": True, "batchCount": len(item["batches"]), "expiresAt": item["expiresAt"]})
+                return self._send(202, {"ok": True, "accepted": True, "batchCount": len(item["batches"]), "storedBytes": item["bytes"], "expiresAt": item["expiresAt"]})
             except Exception:
                 return self._send(400, {"ok": False, "error": "Invalid activity batch JSON."})
         if path != "/api/search":
