@@ -103,6 +103,38 @@
     const r=el.getBoundingClientRect(),s=getComputedStyle(el);
     return r.width>0&&r.height>0&&s.visibility!=="hidden"&&s.display!=="none";
   }
+  // Lightweight one/two-post detector. It reads only visible card geometry and
+  // structural post markers; it does not inspect post text, authors, timestamps,
+  // reactions, counters, media contents, or comment areas.
+  function detectVisiblePostCards(){
+    const inViewport=el=>{const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight;};
+    const hasPostStructure=el=>{
+      const media=[...el.querySelectorAll('img,video,[role="img"]')].some(node=>{const r=node.getBoundingClientRect();return r.width>=180&&r.height>=100&&r.width*r.height>=30000;});
+      const story=Boolean(el.querySelector('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]'));
+      const time=Boolean(el.querySelector('abbr[title],time[datetime],[data-utime]'));
+      const profile=Boolean([...el.querySelectorAll('a[href]')].some(a=>{let p="";try{p=new URL(a.getAttribute("href"),location.origin).pathname;}catch{}return /profile\\.php|^\\/people\\//i.test(p)||(/^\\/[^/]+\\/?$/.test(p)&&!/^\\/(groups|pages|watch|marketplace|events|reel|stories|posts|photo|videos)\\//i.test(p));}));
+      return media||story||(time&&profile);
+    };
+    const roleCards=[...document.querySelectorAll('[role="article"]')]
+      .filter(el=>!el.parentElement?.closest('[role="article"]'))
+      .filter(el=>visible(el)&&inViewport(el)&&hasPostStructure(el));
+    let cards=roleCards;
+    let source="top-level-role-article";
+    if(!cards.length){
+      const units=[...document.querySelectorAll('[data-pagelet*="FeedUnit"]')]
+        .filter(el=>visible(el)&&inViewport(el)&&hasPostStructure(el));
+      cards=units;source="feed-unit-fallback";
+    }
+    const unique=[...new Set(cards)].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).slice(0,2);
+    return unique.map((el,index)=>{const r=el.getBoundingClientRect();return {number:index+1,width:Math.round(r.width),height:Math.round(r.height)};});
+  }
+  chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
+    if(message?.type!=="DETECT_POST_COUNT")return;
+    try{
+      const posts=detectVisiblePostCards();
+      sendResponse({ok:true,found:posts.length>0,count:posts.length,label:posts.length===0?"NO POST":posts.length===1?"SINGLE POST":"DOUBLE POST",posts,source:posts.length?"visible-facebook-post-cards":"no-visible-post-card"});
+    }catch(error){sendResponse({ok:false,error:String(error)});}
+  });
   function groupUrl(raw){
     try{
       const u=new URL(raw,location.origin);
