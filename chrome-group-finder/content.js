@@ -457,6 +457,7 @@
         uniqueArticleSamples+=articles.length;
         let visibleTimestampAges=[];
         for(const article of articles){
+          if(collected.size>=1)break; // exactly one real Main Post in first-post test mode
           const boundaryCheck=postBoundaryInfo(article);
           if(boundaryCheck.mediaFound)mediaAnchorsFound++;
           if(boundaryCheck.viewMoreFound)viewMoreBoundariesFound++;
@@ -528,65 +529,12 @@
       // Facebook frequently places the feed inside its own scrollable pane.
       // Scrolling window alone can leave that pane stationary, so locate the
       // nearest scrollable ancestor of a real feed article first.
-      const findFeedScroller=()=>{
-        const firstArticle=[...document.querySelectorAll('[role="article"]')].find(visible);
-        let node=firstArticle;
-        while(node&&node!==document.body&&node!==document.documentElement){
-          const style=getComputedStyle(node);
-          const room=node.scrollHeight-node.clientHeight;
-          if(room>180&&/(auto|scroll|overlay|hidden)/.test(style.overflowY||""))return node;
-          node=node.parentElement;
-        }
-        const root=document.scrollingElement||document.documentElement;
-        if(root.scrollHeight-root.clientHeight>100)return root;
-        // Last-resort: select the largest visible scrollable region that contains
-        // a visible article. This covers Facebook's changing nested feed layouts.
-        const candidates=[...document.querySelectorAll("div,main,section")]
-          .filter(el=>visible(el)&&el.scrollHeight-el.clientHeight>220&&
-            (!firstArticle||el.contains(firstArticle)))
-          .sort((a,b)=>(b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight));
-        return candidates[0]||root;
-      };
-      const feedScroller=findFeedScroller();
-      const isDocumentScroller=feedScroller===document.scrollingElement||
-        feedScroller===document.documentElement||feedScroller===document.body;
-      const currentScroll=()=>isDocumentScroller
-        ?(window.scrollY||feedScroller.scrollTop||0):feedScroller.scrollTop;
-      const scrollViewport=async()=>{
-        const distance=Math.max(420,Math.floor((isDocumentScroller?window.innerHeight:feedScroller.clientHeight)*0.68));
-        const before=currentScroll();
-        if(isDocumentScroller)window.scrollBy({top:distance,behavior:"instant"});
-        else feedScroller.scrollTop=before+distance;
-        await sleep(1050);
-        let after=currentScroll();
-        if(after<=before+2){
-          // Facebook can swap its feed scroller after lazy-loading. Re-detect once
-          // and fall back to the document only if the selected pane did not move.
-          const fresh=findFeedScroller();
-          if(fresh!==feedScroller){
-            const freshRoot=fresh===document.scrollingElement||fresh===document.documentElement||fresh===document.body;
-            if(freshRoot)window.scrollBy({top:distance,behavior:"instant"});
-            else fresh.scrollTop+=distance;
-            await sleep(700);
-            after=freshRoot?(window.scrollY||fresh.scrollTop||0):fresh.scrollTop;
-          }
-        }
-        return {before,after,moved:after>before+2};
-      };
-      let stalledScrolls=0;
-      for(let step=0;step<60;step++){
-        const moved=await scrollViewport();
-        if(moved.moved){scrollSteps++;stalledScrolls=0;}
-        else stalledScrolls++;
+      // FIRST-POST TEST MODE: read the first verified Main Post already visible
+      // on the Group page. Never scroll or move the feed during this test.
+      await sleep(2200);
+      for(let attempt=0;attempt<5&&collected.size===0;attempt++){
         await captureRawDomBatch();
-        // Keep scanning after the first valid post; each newly verified Main Post
-        // is sent once. The feed scan stops at the age boundary, page end or safety cap.
-        if(olderThanSevenDaysSeen)break;
-        if(stalledScrolls>=2)break;
-        const top=isDocumentScroller?(window.scrollY||feedScroller.scrollTop||0):feedScroller.scrollTop;
-        const height=isDocumentScroller?document.documentElement.scrollHeight:feedScroller.scrollHeight;
-        const client=isDocumentScroller?window.innerHeight:feedScroller.clientHeight;
-        if(top+client>=height-20)break;
+        if(collected.size===0)await sleep(900);
       }
       const all=[...collected.values()].filter(p=>p.mainPostVerified===true); // Every verified Main Post; comment text is never collected.
       const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
