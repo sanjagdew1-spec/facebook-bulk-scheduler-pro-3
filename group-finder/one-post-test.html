@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Group Finder Pro · One Post Test Bench</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#09111f;--panel:#142139;--line:#304462;--text:#f4f7ff;--muted:#9eb0ca;--blue:#8ca4ff;--green:#55d6a2;--amber:#f0c66e}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 400px at 85% 0,#233b6a,transparent 65%),var(--bg);color:var(--text);font:14px system-ui,Segoe UI,sans-serif}
+main{max-width:1180px;margin:auto;padding:28px 18px 60px}h1{margin:6px 0;font-size:30px}.muted{color:var(--muted);line-height:1.6}.panel{background:linear-gradient(180deg,#172641,#111c30);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:16px}
+.grid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(320px,1.1fr);gap:16px}.btn{border:0;border-radius:9px;padding:11px 15px;font-weight:800;background:linear-gradient(100deg,#9aabff,#58dbe5);color:#09111f;cursor:pointer}.btn:disabled{opacity:.5;cursor:wait}.alt{background:#101b2e;color:#e5edff;border:1px solid #3a5277}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}input[type=file]{display:block;margin:12px 0;color:var(--muted)}img{max-width:100%;height:auto;border-radius:10px;border:1px solid var(--line);background:#080e18}
+.status{padding:10px 12px;border:1px solid var(--line);border-radius:9px;color:var(--muted);margin-top:12px}.status.good{border-color:#28654f;color:#a6f0d0}.status.warn{border-color:#725b2d;color:#f2d99c}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{background:#0c1729;border:1px solid #2c405f;border-radius:10px;padding:11px;min-width:0}.field small{display:block;color:var(--muted);font-size:10px;margin-bottom:5px}.field b{font-size:13px;overflow-wrap:anywhere}.field.wide{grid-column:1/-1}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1425;padding:12px;border-radius:9px;border:1px solid #2c405f;color:#d4e2fa;font-size:11px;max-height:250px;overflow:auto}
+h2{font-size:16px;margin:0 0 10px}.tag{display:inline-block;border:1px solid #405a81;border-radius:99px;padding:5px 9px;font-size:10px;color:#c8d8f5;margin-bottom:8px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}.fields{grid-template-columns:1fr 1fr}}
+</style></head><body><main>
+<div class="tag">GROUP FINDER PRO · LOCAL ONE-POST TEST BENCH</div>
+<h1>One Post Recognition Test</h1>
+<p class="muted">यह अलग टेस्ट पेज है। पहले Extension fixture payload बनाता है, फिर वेबसाइट OCR और नियमों से उसी Screenshot को पढ़ती है। इस टेस्ट में Facebook खोलने या स्क्रॉल करने की जरूरत नहीं है। Screenshot में जो हिस्सा दिखाई नहीं देता, उसे सिस्टम अनुमान से नहीं भरेगा।</p>
+<div class="grid">
+<section class="panel"><h2>01 · Screenshot input</h2><p class="muted">वास्तविक Facebook पोस्ट का पूरा Screenshot अपलोड करें।</p>
+<input id="file" type="file" accept="image/png,image/jpeg,image/webp">
+<img id="preview" alt="Uploaded Facebook post screenshot" hidden>
+<div class="actions"><button class="btn" id="run" disabled>Run Extension + Website Test</button><button class="btn alt" id="reset">Reset</button></div>
+<div class="status" id="status">Waiting for screenshot.</div>
+</section>
+<section class="panel"><h2>02 · Website recognition result</h2><div class="fields" id="fields"><div class="field"><small>Post author</small><b>Not tested</b></div><div class="field"><small>Post time</small><b>Not tested</b></div><div class="field wide"><small>Caption</small><b>Not tested</b></div><div class="field"><small>Likes</small><b>Not tested</b></div><div class="field"><small>Comments counter</small><b>Not tested</b></div><div class="field"><small>Shares</small><b>Not tested</b></div><div class="field wide"><small>Visible comments</small><b>Not tested</b></div></div>
+<div id="confidence" class="status">No result yet.</div></section>
+</div>
+<section class="panel"><h2>03 · Extension payload sent to website</h2><p class="muted">यह payload envelope है: screenshot bytes, dimensions, source और capture timestamp. पहचान वेबसाइट करेगी, Extension नहीं।</p><pre id="payload">No extension payload yet.</pre></section>
+<section class="panel"><h2>04 · OCR evidence</h2><p class="muted">हर field के साथ OCR text रखा जाएगा ताकि गलत पहचान का कारण छिपे नहीं।</p><pre id="evidence">No OCR evidence yet.</pre></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let file=null,dataUrl="",lastResult=null;
+function setStatus(s,kind=""){const el=$("status");el.textContent=s;el.className="status "+kind}
+function toDataUrl(f){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(f)})}
+$("file").addEventListener("change",async e=>{file=e.target.files?.[0]||null;if(!file)return;dataUrl=await toDataUrl(file);$("preview").src=dataUrl;$("preview").hidden=false;$("run").disabled=false;setStatus("Screenshot loaded: "+file.name+" · "+Math.round(file.size/1024)+" KB","good")});
+function sendThroughExtension(payload){return new Promise(resolve=>{let done=false;const finish=v=>{if(done)return;done=true;window.removeEventListener("message",onMessage);resolve(v)};const onMessage=e=>{if(e.source===window&&e.data?.source==="gfp-chrome-helper"&&e.data?.type==="ONE_POST_FIXTURE_RESULT")finish(e.data.result||null)};window.addEventListener("message",onMessage);window.postMessage({source:"top-facebook-group-finder",type:"ONE_POST_FIXTURE",payload},location.origin);setTimeout(()=>finish(null),1800)})}
+async function ocrCrop(img,x1,y1,x2,y2,psm="6",digits=false){const canvas=document.createElement("canvas"),sx=Math.round(img.naturalWidth*x1),sy=Math.round(img.naturalHeight*y1),sw=Math.max(1,Math.round(img.naturalWidth*(x2-x1))),sh=Math.max(1,Math.round(img.naturalHeight*(y2-y1)));canvas.width=sw*4;canvas.height=sh*4;canvas.getContext("2d").drawImage(img,sx,sy,sw,sh,0,0,canvas.width,canvas.height);const result=await Tesseract.recognize(canvas,"eng",{logger:m=>{if(m.status==="recognizing text")setStatus("Website OCR: "+Math.round((m.progress||0)*100)+"%")},tessedit_pageseg_mode:psm, tessedit_char_whitelist:digits?"0123456789":undefined});return {text:(result.data.text||"").trim(),confidence:result.data.confidence,box:{x:sx,y:sy,width:sw,height:sh}}}
+function firstLine(s){return String(s||"").split(/\n/).map(x=>x.trim()).filter(Boolean)[0]||"Not available"}
+function parseComments(raw){const lines=String(raw||"").split(/\n/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);const comments=[];for(let i=0;i<lines.length;i++){const line=lines[i];if(/^(view more comments|view \d+ reply|reply|share|like|comment as)\b/i.test(line))continue;let nameMatch=line.match(/^([A-Z][A-Za-z.'’-]+(?:\s+[A-Z][A-Za-z.'’-]+){1,3})\s*[·•-]\s*(?:\d+\s*[mhdw]|just now)/i);if(nameMatch){const next=lines.slice(i+1,i+3).find(x=>!/^((like|reply|share|view)\b)/i.test(x));if(next)comments.push({author:nameMatch[1],text:next})}}return comments}
+async function analyze(){if(!dataUrl)return;const img=$("preview");await new Promise(r=>{if(img.complete)r();else img.onload=r});
+setStatus("Sending screenshot through Extension bridge…");
+const bytes=dataUrl.length;const envelope={schema:"gfp.one-post-fixture.v1",captureMode:"screenshot-fixture",source:"uploaded-facebook-screenshot",fileName:file.name,mimeType:file.type,width:img.naturalWidth,height:img.naturalHeight,byteLength:bytes,capturedAt:new Date().toISOString(),imageDataUrl:dataUrl};
+const extensionResult=await sendThroughExtension(envelope);
+$("payload").textContent=JSON.stringify({schema:envelope.schema,captureMode:envelope.captureMode,source:envelope.source,fileName:envelope.fileName,mimeType:envelope.mimeType,width:envelope.width,height:envelope.height,byteLength:envelope.byteLength,capturedAt:envelope.capturedAt,extensionBridge:extensionResult||"Extension not detected — website used the identical local fixture envelope."},null,2);
+setStatus("Website OCR started. Reading fixed post regions…");
+const crops={header:await ocrCrop(img,.075,.008,.56,.068,"6"),caption:await ocrCrop(img,.075,.065,.94,.12,"6"),likes:await ocrCrop(img,.125,.69,.17,.735,"8",true),commentsCount:await ocrCrop(img,.22,.69,.265,.735,"8",true),shares:await ocrCrop(img,.30,.69,.35,.735,"8",true),visibleComments:await ocrCrop(img,.085,.765,.65,.94,"6")};
+const headerLines=crops.header.text.split(/\n/).map(x=>x.trim()).filter(Boolean);const author=firstLine(headerLines[0]);const time=(headerLines.join(" ").match(/\b(?:just now|\d+\s*(?:m|min|h|hr|d|day|w|week)s?)\b/i)||[])[0]||"Not available";
+const caption=crops.caption.text.replace(/\s+/g," ").trim();
+const digits=k=>{const m=crops[k].text.match(/\d+/);return m?Number(m[0]):null};
+const visibleComments=parseComments(crops.visibleComments.text);
+const result={postAuthor:author,postTime:time,caption:caption||"Not available",likes:digits("likes"),comments:digits("commentsCount"),shares:digits("shares"),visibleComments,commentCountNote:"Visible comment samples only; total counter is not the number of comments extracted.",image:{width:img.naturalWidth,height:img.naturalHeight},evidence:{header:crops.header,caption:crops.caption,likes:crops.likes,commentsCounter:crops.commentsCount,shares:crops.shares,visibleComments:crops.visibleComments}};
+lastResult=result;
+const field=(label,value)=>'<div class="field"><small>'+label+'</small><b>'+String(value??"Not available").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))+'</b></div>';
+$("fields").innerHTML=field("Post author",result.postAuthor)+field("Post time",result.postTime)+'<div class="field wide"><small>Caption</small><b>'+result.caption+'</b></div>'+field("Likes",result.likes)+field("Comments counter",result.comments)+field("Shares",result.shares)+'<div class="field wide"><small>Visible comments ('+visibleComments.length+')</small><b>'+(visibleComments.length?visibleComments.map(x=>x.author+": "+x.text).join(" | "):"OCR could not confidently separate comment author and text; see evidence.")+'</b></div>';
+const checks=[result.postAuthor!=="Not available",result.postTime!=="Not available",result.caption!=="Not available",result.likes!==null,result.comments!==null,result.shares!==null];
+const passed=checks.filter(Boolean).length;
+$("confidence").textContent="Core post fields read: "+passed+"/6. Visible comments detected: "+visibleComments.length+". This is an OCR result, not yet a verified live Facebook extraction.";
+$("confidence").className="status "+(passed===6?"good":"warn");
+$("evidence").textContent=JSON.stringify({rawOCR:Object.fromEntries(Object.entries(crops).map(([k,v])=>[k,v.text])),parsed:result},null,2);
+setStatus("Website analysis finished. Review the evidence and parsed fields.","good");
+}
+$("run").onclick=async()=>{ $("run").disabled=true;try{await analyze()}catch(e){setStatus("Test error: "+String(e),"warn")}finally{$("run").disabled=false}};
+$("reset").onclick=()=>{file=null;dataUrl="";lastResult=null;$("file").value="";$("preview").hidden=true;$("run").disabled=true;$("fields").innerHTML='<div class="field"><small>Post author</small><b>Not tested</b></div><div class="field"><small>Post time</small><b>Not tested</b></div><div class="field wide"><small>Caption</small><b>Not tested</b></div><div class="field"><small>Likes</small><b>Not tested</b></div><div class="field"><small>Comments counter</small><b>Not tested</b></div><div class="field"><small>Shares</small><b>Not tested</b></div>'; $("payload").textContent="No extension payload yet.";$("evidence").textContent="No OCR evidence yet.";$("confidence").textContent="No result yet.";setStatus("Waiting for screenshot.")};
+</script></body></html>
