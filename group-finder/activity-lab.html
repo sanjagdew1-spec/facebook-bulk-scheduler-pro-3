@@ -40,12 +40,12 @@ function renderActivityReport(report,job){
 }
 const ACTIVITY_API='https://group-finder-search-api.onrender.com';
 let activityDataLimitReached=false;
-let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityRawHtmlChars=0,activityRawChunks=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null,activityNoDataTimer=null,activityExpiresAt=0;
+let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityRawHtmlChars=0,activityRawChunks=0,activityRawReferences=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null,activityNoDataTimer=null,activityExpiresAt=0;
 async function deleteActivitySession(keepalive=false){
  const id=activitySessionId;activitySessionId=null;activityExpiresAt=0;
  if(activityExpiryTimer){clearTimeout(activityExpiryTimer);activityExpiryTimer=null;}
  if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
- activityUploadQueue=Promise.resolve();activityBatchCount=0;activityRawBytes=0;activityRawHtmlChars=0;activityRawChunks=0;
+ activityUploadQueue=Promise.resolve();activityBatchCount=0;activityRawBytes=0;activityRawHtmlChars=0;activityRawChunks=0;activityRawReferences=0;activityRawReferences=0;
  if(!id)return;
  try{await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id),{method:'DELETE',keepalive,headers:{'Content-Type':'application/json'}})}catch{}
 }
@@ -112,11 +112,13 @@ function receiveRawActivityBatch(payload){
   }
   if(!response.ok)throw new Error(data.error||'Temporary data upload failed.');
   if(id!==activitySessionId)return;
-  if(data.duplicate)return;
-  activityBatchCount++;activityRawBytes+=new Blob([JSON.stringify(payload)]).size;activityRawHtmlChars+=String(payload.rawHtmlChunk||'').length;if(payload.rawHtmlChunk!=null)activityRawChunks++;
+  if(data.duplicate&&data.accepted===false)return;
+  activityBatchCount++;
+  if(data.duplicate)activityRawReferences++;
+  else{activityRawBytes+=new Blob([JSON.stringify(payload)]).size;activityRawHtmlChars+=String(payload.rawHtmlChunk||'').length;if(payload.rawHtmlChunk!=null)activityRawChunks++;}
   if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
   $('activityStatus').textContent='RECEIVING';
-  $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' temporary raw-data batches; complete raw HTML: '+activityRawHtmlChars.toLocaleString()+' characters in '+activityRawChunks.toLocaleString()+' chunks ('+activityRawBytes.toLocaleString()+' uploaded bytes). Server expiry: maximum 5 minutes.';
+  $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' scroll-chunk records; '+activityRawChunks.toLocaleString()+' unique HTML chunks + '+activityRawReferences.toLocaleString()+' reused chunk references ('+activityRawBytes.toLocaleString()+' new-chunk upload bytes). Server expiry: maximum 5 minutes.';
  });
  return activityUploadQueue;
 }
