@@ -324,7 +324,9 @@ class Handler(BaseHTTPRequestHandler):
                 item = ACTIVITY_SESSIONS.get(sid)
                 if not item:
                     return self._send(404, {"ok": False, "error": "Temporary activity session expired or not found."})
-                return self._send(200, {"ok": True, "sessionId": sid, "createdAt": item["createdAt"], "expiresAt": item["expiresAt"], "batchCount": len(item["batches"]), "uniqueChunkCount": len(item["chunks"]), "storedBytes": item["bytes"], "batches": item["batches"], "rawChunks": item["chunks"]})
+                chunks = item.setdefault("chunks", {})
+                item.setdefault("batchHashes", set())
+                return self._send(200, {"ok": True, "sessionId": sid, "createdAt": item["createdAt"], "expiresAt": item["expiresAt"], "batchCount": len(item["batches"]), "uniqueChunkCount": len(chunks), "storedBytes": item["bytes"], "batches": item["batches"], "rawChunks": chunks})
         return self._send(404, {"error":"Not found"})
     def do_DELETE(self):
         path = urllib.parse.urlparse(self.path).path.rstrip("/")
@@ -362,6 +364,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not item or time.time() >= item["expiresAt"]:
                         ACTIVITY_SESSIONS.pop(sid, None)
                         return self._send(410, {"ok": False, "error": "Temporary activity session expired."})
+                    item.setdefault("chunks", {})
+                    item.setdefault("batchHashes", set())
                     if identity in item["batchHashes"]:
                         return self._send(200, {"ok": True, "accepted": False, "duplicate": True, "batchCount": len(item["batches"]), "storedBytes": item["bytes"], "expiresAt": item["expiresAt"]})
                     is_new_chunk = is_raw_chunk and digest not in item["chunks"]
