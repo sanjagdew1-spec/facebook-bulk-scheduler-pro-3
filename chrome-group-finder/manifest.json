@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Group Finder Pro — Chrome Helper",
-  "version": "0.5.21",
+  "version": "0.5.22",
   "description": "Find public Facebook Groups and capture verified visible Main Post activity without reading comments.",
   "permissions": [
     "activeTab",
