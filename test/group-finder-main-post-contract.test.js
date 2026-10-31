@@ -63,3 +63,16 @@ test("the built-in Fateh fixture matches the supplied Main Post reference", () =
   assert.match(content, /photoCount:1, videoCount:0, reactionTypes:\["Like","Haha"\]/);
   assert.match(content, /commentTextCaptured:false/);
 });
+
+test("one-post capture waits for the toolbar button and a ten-second manual positioning countdown", () => {
+  assert.match(content, /message\?\.type!==\"CAPTURE_ONE_POST\"/);
+  assert.match(content, /setTimeout\(\(\)=>\{clearInterval\(ticker\);overlay\.remove\(\);resolveManualCapture\(\);\},10000\)/);
+  assert.match(content, /chrome\.runtime\.onMessage\.addListener\(captureMessageListener\)/);
+  assert.match(content, /chrome\.runtime\.onMessage\.removeListener\(captureMessageListener\)/);
+  const groupScan = content.slice(content.indexOf("if(isGroupPage){"), content.indexOf("const all=[...collected.values()]"));
+  assert.doesNotMatch(groupScan, /scrollBy|scrollTop\s*\+=/);
+});
+test("selected post candidates are on-screen and ranked toward viewport center", () => {
+  assert.match(content, /el\.getBoundingClientRect\(\)\.bottom>0&&el\.getBoundingClientRect\(\)\.top<innerHeight/);
+  assert.match(content, /const viewportCenter=innerHeight\/2/);
+});
