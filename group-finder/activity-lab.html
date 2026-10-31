@@ -421,14 +421,17 @@ window.addEventListener('message',async event=>{
 
  // Activity Lab reads the image from the existing extension-created receipt panel.
  // The extension and its screenshot-capture flow remain unchanged.
+ const processedScreenshotImages=new WeakSet();
  const captureScreenshotFromExistingPanel=()=>{
   const panel=document.getElementById('gfp-screenshot-received');
   if(!panel)return false;
   const image=panel.querySelector('img[alt="Captured Facebook Group screenshot"]')||panel.querySelector('img');
-  if(!image)return false;
+  if(!image||processedScreenshotImages.has(image))return false;
   const readImage=()=>{
    const src=image.currentSrc||image.src||'';
    if(!src||!src.toLowerCase().startsWith('data:image/'))return;
+   if(processedScreenshotImages.has(image))return;
+   processedScreenshotImages.add(image);
    const details=panel.querySelector('div');
    const panelText=(details?.textContent||'').trim();
    const parts=panelText.split(' · ');
@@ -446,7 +449,7 @@ window.addEventListener('message',async event=>{
     preview.style.cssText='display:block;width:100%;max-width:900px;height:auto;margin:12px 0;border:1px solid #56d9e8;border-radius:10px';
     area.appendChild(preview);
    }
-   preview.src=src;
+   if(preview.src!==src)preview.src=src;
    if(window.gfpScreenshotReceiptTimer)clearTimeout(window.gfpScreenshotReceiptTimer);
    window.gfpScreenshotReceiptTimer=setTimeout(()=>{
     window.gfpActivityScreenshotDataUrl=null;
@@ -460,8 +463,10 @@ window.addEventListener('message',async event=>{
   else image.addEventListener('load',readImage,{once:true});
   return true;
  };
+ // Watch only for the extension-created panel. Watching every src attribute caused
+ // our own preview image update to retrigger this observer repeatedly.
  const screenshotPanelObserver=new MutationObserver(()=>captureScreenshotFromExistingPanel());
- screenshotPanelObserver.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+ screenshotPanelObserver.observe(document.documentElement,{childList:true,subtree:true});
  captureScreenshotFromExistingPanel();
 
 const activityParams=new URLSearchParams(location.search);
