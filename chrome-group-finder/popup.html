@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Group Finder Pro</title><link rel="stylesheet" href="popup.css"></head>
+<body><header><div class="mark">GF</div><div><h1>Group Finder Pro</h1><p>Chrome search helper · public results only</p></div></header>
+<section class="panel"><label for="keywords">Keywords <span>One per line, comma, or semicolon. No fixed keyword limit.</span></label><textarea id="keywords" rows="5" placeholder="Football&#10;Classic Cars&#10;Car Restoration"></textarea>
+<label for="country">Target country</label><select id="country"><option>Any country</option><option>United States</option><option>United Kingdom</option><option>Canada</option><option>Australia</option><option>India</option></select>
+<label class="checkline"><input type="checkbox" id="onlyUSA"> Only USA (overrides target country)</label>
+<div class="actions"><button id="start">Start search</button><button id="stop" class="secondary">Stop</button></div><p id="status" role="status">Ready. Keep Facebook logged in in Chrome.</p></section>
+<section class="panel"><div class="row"><h2>Collected groups</h2><span id="count">0</span></div><div id="results" class="results"><p class="muted">No results collected yet.</p></div>
+<div class="actions"><button id="export" class="secondary">Export CSV</button><button id="clear" class="secondary">Clear results</button></div></section>
+<footer>Reads public Group search results. For an Activity Lab scan, click this extension icon on the selected Facebook Group tab to allow temporary visible-screen screenshots. Screenshots and scan data are cleared after a maximum of five minutes. It never joins groups or posts to Facebook.</footer><script src="popup.js"></script></body></html>
