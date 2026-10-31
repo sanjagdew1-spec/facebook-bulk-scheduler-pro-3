@@ -109,7 +109,7 @@ test("real content.js DOM extraction reads the reference post, not a hardcoded s
   assert.equal(batch.payload.captureMode, "main-post-records-v1");
   assert.equal(batch.payload.posts.length, 1);
   const post = batch.payload.posts[0];
-  for (const [key, value] of Object.entries(expected)) assert.deepEqual(post[key], value, key + " · extraction=" + JSON.stringify(post.extractionDiagnostics));
+  for (const [key, value] of Object.entries(expected)) assert.deepEqual(JSON.parse(JSON.stringify(post[key])), value, key + " · extraction=" + JSON.stringify(post.extractionDiagnostics));
   assert.equal(post.mainPostVerified, true);
   assert.equal(post.commentTextCaptured, false);
   assert.equal(complete.payload.postsFound, 1);
@@ -159,11 +159,15 @@ test("the actual deployed Activity Lab accepts the extracted batch and renders t
   const inlineScripts = [...window.document.querySelectorAll("script")].map(node => node.textContent).filter(Boolean);
   assert.ok(inlineScripts.length, "the deployed Activity Lab must include its working page script");
   for (const script of inlineScripts) window.eval(script);
-  const dispatch = data => window.dispatchEvent(new window.MessageEvent("message", {
-    data: { source: "gfp-chrome-helper", ...data },
-    origin: window.location.origin,
-    source: window
-  }));
+  const dispatch = data => {
+    const event = new window.Event("message");
+    Object.defineProperties(event, {
+      data: { value: { source: "gfp-chrome-helper", ...data } },
+      origin: { value: window.location.origin },
+      source: { value: window }
+    });
+    window.dispatchEvent(event);
+  };
   dispatch({ type: "ACTIVITY_RAW_BATCH", payload: batch.payload });
   dispatch({ type: "ACTIVITY_RAW_COMPLETE", payload: complete.payload });
   for (let i = 0; i < 60 && window.document.getElementById("activityStatus").textContent !== "COMPLETE"; i++) {
