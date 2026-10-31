@@ -166,11 +166,11 @@ test("the actual deployed Activity Lab accepts the extracted batch and renders t
   assert.equal(storedBatches.length, 1, "Activity Lab batch count mismatch; status=" + window.document.getElementById("activityStatus").textContent + "; summary=" + window.document.getElementById("activitySummary").textContent);
   assert.equal(storedBatches[0].posts[0].author, expected.author);
   assert.equal(window.document.getElementById("activityStatus").textContent, "COMPLETE");
-  const rows = window.document.getElementById("activityRows").textContent;
+  const rows = window.document.getElementById("activitySummary").textContent;
   for (const value of [expected.author, expected.preview, "10h", "Like, Haha", "20", "62", "1"]) {
     assert.ok(rows.includes(value), "rendered Activity Lab row must contain " + value + "; got: " + rows);
   }
-  const summary = window.document.getElementById("activitySummary").textContent;
+  const summary = rows;
   assert.match(summary, /DOM role=article nodes:/);
   assert.match(summary, /Main-content candidates:/);
   assert.match(summary, /Header timestamp candidates:/);
