@@ -427,10 +427,11 @@
         // an extra article, fall back only to nested cards with an explicit story body.
         const topLevel=allArticles.filter(el=>!el.parentElement?.closest('[role="article"]'));
         const timeSelector='abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i],a[aria-label*=" at " i]';
-        // A candidate must look like a complete main feed post: a substantial
-        // main photo/video, its own header timestamp above that media, and the
-        // visible "View More Comments" cutoff below the first action area.
-        // Comment/reply cards do not satisfy this combination and are discarded.
+        // A candidate must look like a complete Main Post: its own visible
+        // header timestamp, main story text or media, and first-level action row.
+        // A comments preview or "View more comments" control is NOT required:
+        // posts with zero comments must pass the same recognition rules.
+        // Nested comment/reply cards are excluded by the top-level article rule.
         const isCompleteMainPost=el=>{
           // Accept photo/video posts AND text-only story posts. Requiring a large
           // media element discarded valid Facebook posts and could leave a full
