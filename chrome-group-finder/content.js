@@ -15,6 +15,35 @@
     // with START_ACTIVITY_CHECK and close the newly opened Facebook tab.
     chrome.runtime.onMessage.addListener((message) => {
       if (!message) return;
+      if (message.type === "ACTIVITY_SCREENSHOT_RECEIVED") {
+        const oldPanel = document.getElementById("gfp-screenshot-received");
+        if (oldPanel) oldPanel.remove();
+        const panel = document.createElement("section");
+        panel.id = "gfp-screenshot-received";
+        Object.assign(panel.style, {
+          position:"fixed", zIndex:"2147483647", right:"18px", bottom:"18px",
+          width:"min(560px, calc(100vw - 36px))", maxHeight:"80vh", overflow:"auto",
+          padding:"14px", borderRadius:"14px", background:"#101b30", color:"#f4f7ff",
+          border:"1px solid #56d9e8", boxShadow:"0 8px 32px rgba(0,0,0,.45)",
+          font:"13px/1.45 system-ui, sans-serif"
+        });
+        const heading = document.createElement("strong");
+        heading.textContent = "Screenshot received from Facebook Group";
+        const details = document.createElement("div");
+        details.textContent = String(message.groupName || message.pageUrl || "Facebook Group") + " · " + String(message.capturedAt || "");
+        details.style.cssText = "color:#a9bddc;font-size:11px;margin:5px 0 10px";
+        const image = document.createElement("img");
+        image.alt = "Captured Facebook Group screenshot";
+        image.src = String(message.screenshotDataUrl || "");
+        image.style.cssText = "display:block;width:100%;height:auto;border-radius:8px;border:1px solid #344765";
+        const close = document.createElement("button");
+        close.type = "button"; close.textContent = "Close";
+        close.style.cssText = "margin-top:10px;padding:7px 12px;border:1px solid #456080;border-radius:8px;background:#1b2e50;color:#fff;cursor:pointer";
+        close.addEventListener("click", () => panel.remove());
+        panel.append(heading, details, image, close);
+        (document.body || document.documentElement).appendChild(panel);
+        return;
+      }
       // Background forwards the scanner's RAW_ACTIVITY_* messages. Translate
       // them here to the Activity Lab's ACTIVITY_RAW_* browser-message names.
       const translatedType = message.type === "RAW_ACTIVITY_BATCH" ? "ACTIVITY_RAW_BATCH"
@@ -605,8 +634,26 @@
   });
       await manualCaptureReady;
       chrome.runtime.onMessage.removeListener(captureMessageListener);
-      await sleep(450);
-      // A short DOM settling retry is allowed, but it never moves or scrolls the page.
+      let captureStatus = "Screenshot capture failed.";
+      try {
+        const result = await chrome.runtime.sendMessage({
+          type:"CAPTURE_SCREENSHOT_TO_ACTIVITY_LAB",
+          pageUrl:location.href,
+          groupName:document.title.replace(/\\s*\\|\\s*Facebook.*$/i,"").trim()
+        });
+        captureStatus = result?.ok
+          ? "Screenshot captured and sent to Activity Lab."
+          : (result?.error || "Screenshot could not be sent to Activity Lab.");
+      } catch (error) {
+        captureStatus = "Screenshot transfer failed: " + String(error);
+      }
+      const notice = document.createElement("div");
+      notice.textContent = "Group Finder Pro · " + captureStatus;
+      Object.assign(notice.style,{position:"fixed",zIndex:"2147483647",left:"50%",bottom:"24px",transform:"translateX(-50%)",padding:"12px 18px",borderRadius:"12px",background:captureStatus.startsWith("Screenshot captured")?"#123b32":"#4a2028",color:"#fff",font:"600 14px/1.4 Arial,sans-serif",boxShadow:"0 4px 24px rgba(0,0,0,.35)",pointerEvents:"none",maxWidth:"90vw"});
+      (document.documentElement || document.body).appendChild(notice);
+      setTimeout(()=>notice.remove(),8000);
+      return;
+      // The screenshot-only test intentionally does not run DOM post extraction.
       for(let attempt=0;attempt<5&&collected.size===0;attempt++){
         await captureRawDomBatch();
         if(collected.size===0)await sleep(350);
