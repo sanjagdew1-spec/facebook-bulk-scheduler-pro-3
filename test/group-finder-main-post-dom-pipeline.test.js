@@ -165,7 +165,7 @@ test("the actual deployed Activity Lab accepts the extracted batch and renders t
   for (let i = 0; i < 60 && window.document.getElementById("activityStatus").textContent !== "COMPLETE"; i++) {
     await new Promise(resolve => setImmediate(resolve));
   }
-  assert.equal(storedBatches.length, 1, "Activity Lab must upload the extension's exact structured batch");
+  assert.equal(storedBatches.length, 1, "Activity Lab batch count mismatch; status=" + window.document.getElementById("activityStatus").textContent + "; summary=" + window.document.getElementById("activitySummary").textContent);
   assert.equal(storedBatches[0].posts[0].author, expected.author);
   assert.equal(window.document.getElementById("activityStatus").textContent, "COMPLETE");
   const rows = window.document.getElementById("activityRows").textContent;
