@@ -39,6 +39,11 @@ test("comment text and commenter identities are not part of the capture payload"
   assert.doesNotMatch(capture, /outerHTML|innerHTML|commenter|commentText\s*:/i);
 });
 
+test("image-only Main Posts are accepted even when caption text is unavailable", () => {
+  assert.match(content, /const mediaCounts=postMediaCounts\(article\)/);
+  assert.match(content, /preview==="Not available"&&mediaCounts\.photoCount===0&&mediaCounts\.videoCount===0/);
+});
+ 
 test("extension sends the documented structured Main Post payload", () => {
   assert.match(content, /captureMode:"main-post-records-v1"/);
   assert.match(content, /mainPostVerified:true/);
