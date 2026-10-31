@@ -39,6 +39,8 @@
         } catch (error) {
           window.postMessage({source:"gfp-chrome-helper",type:"ERROR",error:String(error)},WEBSITE_ORIGIN);
         }
+      } else if (msg.type === "STOP_ACTIVITY_RAW_CAPTURE") {
+        try { await chrome.runtime.sendMessage({type:"STOP_ACTIVITY_RAW_CAPTURE"}); } catch {}
       } else if (msg.type === "CANCEL_ACTIVITY_SESSION") {
         try { await chrome.runtime.sendMessage({type:"CANCEL_ACTIVITY_SESSION"}); } catch {}
       } else if (msg.type === "START_ACTIVITY_CHECK") {
@@ -62,6 +64,7 @@
   let visualCaptureReady=false;
   let initialVisualScreenshot="";
   chrome.runtime.onMessage.addListener(message=>{
+    if(message?.type==="STOP_ACTIVITY_RAW_CAPTURE"){rawCaptureStopped=true;return;}
     if(message?.type==="VISUAL_CAPTURE_READY"){
       visualCaptureReady=true;
       initialVisualScreenshot=String(message.screenshotDataUrl||"");
@@ -355,7 +358,9 @@
       let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
       let rawBatchSequence=0;
+      let rawCaptureStopped=false;
       const captureRawDomBatch=async()=>{
+        if(rawCaptureStopped)return;
         // Raw-only capture: do not select, classify, redact, or truncate any DOM content.
         // Split the complete current document into transport-safe chunks; each chunk
         // is uploaded in order and carries the same scroll-step and chunk metadata.
