@@ -10,7 +10,8 @@
   ],
   "host_permissions": [
     "https://www.facebook.com/*",
-    "https://top-facebook-group-finder-preview.onrender.com/*"
+    "https://top-facebook-group-finder-preview.onrender.com/*",
+    "https://group-finder-one-post-test-v2.onrender.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -24,7 +25,8 @@
       "matches": [
         "https://www.facebook.com/search/groups/*",
         "https://www.facebook.com/groups/*",
-        "https://top-facebook-group-finder-preview.onrender.com/*"
+        "https://top-facebook-group-finder-preview.onrender.com/*",
+        "https://group-finder-one-post-test-v2.onrender.com/*"
       ],
       "js": [
         "content.js"
