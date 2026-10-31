@@ -399,20 +399,24 @@
       const collected=new Map();
       let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
-      let rawBatchSequence=0,sentMainPostKey="";
+      let rawBatchSequence=0;const sentMainPostKeys=new Set();
       const captureRawDomBatch=async()=>{
         if(rawCaptureStopped)return;
-        // Structured capture only: never upload the full Facebook document or comment text.
+        // Send only verified Main Post records not sent in an earlier scroll batch.
+        // The extension never serializes full-page HTML or reads comment text.
         collectVisiblePosts();
-        const post=[...collected.values()].find(item=>item.mainPostVerified===true);
-        if(!post||post.postId===sentMainPostKey)return;
-        sentMainPostKey=post.postId;
+        const unsentPosts=[...collected.values()].filter(item=>
+          item.mainPostVerified===true&&!sentMainPostKeys.has(String(item.postId))
+        );
+        if(!unsentPosts.length)return;
         const firstScreenshot=initialVisualScreenshot;initialVisualScreenshot="";
         const payload={captureMode:"main-post-records-v1",scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),
           pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},
-          posts:[{...post,commentTextCaptured:false}],...(firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})};
+          posts:unsentPosts.map(post=>({...post,commentTextCaptured:false})),
+          ...(firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})};
         const result=await chrome.runtime.sendMessage({type:"RAW_ACTIVITY_BATCH",payload});
         if(!result?.ok)throw new Error(result?.error||"Structured Main Post data could not be forwarded.");
+        for(const post of unsentPosts)sentMainPostKeys.add(String(post.postId));
       };
       const collectVisiblePosts=()=>{
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
@@ -488,12 +492,15 @@
           const dataFt=postNodes(article,"[data-ft]")[0]?.getAttribute("data-ft");
           const utime=postNodes(article,"[data-utime]")[0]?.getAttribute("data-utime");
           const datetime=postNodes(article,"time[datetime]")[0]?.getAttribute("datetime");
-          const identity=permalink||dataFt||utime||datetime||timeLabel;
-          const key=String(identity||"visible-post").replace(/\s+/g," ").slice(0,240);
-          if(collected.has(key))continue;
           const author=postAuthor(article);
           const preview=postPreview(article);
           if(author==="Not available"||preview==="Not available"){authorsUnavailable++;continue;}
+          // When Facebook does not expose a permalink or stable story id, combine
+          // the post's own header identity and caption so same-author posts made
+          // at similar times do not collapse into one record.
+          const identity=permalink||dataFt||utime||datetime||[author,timeLabel,preview].join("|");
+          const key=String(identity||"visible-post").replace(/\s+/g," ").slice(0,500);
+          if(collected.has(key))continue;
           authorsIdentified++;
           const mediaCounts=postMediaCounts(article);
           collected.set(key,{
@@ -570,14 +577,16 @@
         if(moved.moved){scrollSteps++;stalledScrolls=0;}
         else stalledScrolls++;
         await captureRawDomBatch();
-        if(collected.size>0)break;
+        // Keep scanning after the first valid post; each newly verified Main Post
+        // is sent once. The feed scan stops at the age boundary, page end or safety cap.
+        if(olderThanSevenDaysSeen)break;
         if(stalledScrolls>=2)break;
         const top=isDocumentScroller?(window.scrollY||feedScroller.scrollTop||0):feedScroller.scrollTop;
         const height=isDocumentScroller?document.documentElement.scrollHeight:feedScroller.scrollHeight;
         const client=isDocumentScroller?window.innerHeight:feedScroller.clientHeight;
         if(top+client>=height-20)break;
       }
-      const all=[...collected.values()].filter(p=>p.mainPostVerified===true).slice(0,1); // One Main Post only; comment text is never collected.
+      const all=[...collected.values()].filter(p=>p.mainPostVerified===true); // Every verified Main Post; comment text is never collected.
       const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
       const recentPosts=all.filter(p=>p.ageHours<=24);
       const totals=(posts,key)=>{const known=posts.filter(p=>p[key]!=null);return {count:known.length,total:known.length?known.reduce((n,p)=>n+p[key],0):null};};
