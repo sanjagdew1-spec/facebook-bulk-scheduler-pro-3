@@ -18,7 +18,7 @@ $('saveForm').onsubmit=e=>{e.preventDefault();const url=$('gurl').value.trim();t
 
 function renderActivityScreenshots(items){
  const host=$('activityScreenshots');
- if(!items?.length){host.innerHTML='<div class="activity-section-title">Visual Facebook Screenshots</div><div class="hint">No screenshots were captured in this scan. To enable them, click the Group Finder Pro extension icon on the Facebook Group tab while the scan is running. Scrolling and DOM data collection do not depend on screenshot permission.</div>';return;}
+ if(!items?.length){host.innerHTML='<div class="activity-section-title">Visual Facebook Screenshots</div><div class="hint">No screenshots were captured in this test. Screenshots are optional; the one-post test does not scroll and does not require screenshot permission.</div>';return;}
  host.innerHTML='<div class="activity-section-title">Visual Facebook screen snapshots · '+items.length+' captured</div><div class="activity-screenshots">'+items.map((item,i)=>'<div class="activity-shot"><img loading="lazy" alt="Facebook feed screenshot, scroll step '+Number(item.scrollStep||i)+'" src="'+esc(item.dataUrl)+'"><small>Scroll step '+Number(item.scrollStep||i)+' · '+esc(item.capturedAt?new Date(item.capturedAt).toLocaleTimeString():'Capture time unavailable')+'</small></div>').join('')+'</div>';
 }
 function metricText(v,kind){return v==null?(kind==='shares'?'Sharing not available':'Not available'):Number(v).toLocaleString('en-US')}
@@ -84,7 +84,7 @@ function activateActivitySession(sessionId){
  activityNoDataTimer=setTimeout(()=>{
   if(activitySessionId===sessionId&&activityBatchCount===0){
    $('activityStatus').textContent='WAITING FOR SCAN DATA';
-   $('activitySummary').textContent='No data batch has arrived yet. Scrolling starts automatically. If you also want screenshots, click the Group Finder Pro extension icon on the Facebook Group tab; screenshot permission is optional.';
+   $('activitySummary').textContent='No data batch has arrived yet. The first visible Main Post is checked without scrolling. Keep the selected Facebook Group tab open; screenshot permission is optional and not needed for this test.';
   }
  },15000);
  if(activityExpiryTimer)clearTimeout(activityExpiryTimer);
