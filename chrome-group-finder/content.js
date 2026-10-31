@@ -229,8 +229,8 @@
         const candidates=postNodes(article,'span,div,a,[role="button"]')
           .filter(el=>{
             const r=el.getBoundingClientRect();
-            const label=(el.innerText||el.getAttribute("aria-label")||"").replace(/\\s+/g," ").trim().toLowerCase();
-            return r.top>=mediaBottom-2&&r.top<mediaBottom+320&&/^view more comments(?:\\s*\\(\\d+\\))?$/.test(label);
+            const label=(el.innerText||el.getAttribute("aria-label")||"").replace(/\s+/g," ").trim().toLowerCase();
+            return r.top>=mediaBottom-2&&r.top<mediaBottom+320&&/^view more comments(?:\s*\(\d+\))?$/.test(label);
           })
           .sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);
         return candidates[0]?.getBoundingClientRect().top??Infinity;
@@ -270,7 +270,7 @@
             const controls=[...group.querySelectorAll('button,[role="button"],a,[aria-label],[title],[data-testid]')]
               .filter(visible);
             const kinds=new Set(controls.map(actionKind).filter(Boolean));
-            const text=(group.innerText||"").replace(/\\s+/g," ").trim();
+            const text=(group.innerText||"").replace(/\s+/g," ").trim();
             // A row needs at least two recognizable action controls, or an explicit
             // Facebook action-row test id. This avoids selecting comment text blocks.
             // Require three distinct post actions; Like/Reply/Share is a comment row.
@@ -293,8 +293,8 @@
           for(const el of nearby){
             const r=el.getBoundingClientRect();
             if(Number.isFinite(info.cutoff)&&r.top>=info.cutoff)continue;
-            const text=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\\s+/g," ").trim();
-            const counts=[...text.matchAll(/(\\d[\\d,.]*(?:\\s*[KMB])?)/ig)];
+            const text=[el.getAttribute?.("aria-label"),el.getAttribute?.("title"),el.innerText].filter(Boolean).join(" ").replace(/\s+/g," ").trim();
+            const counts=[...text.matchAll(/(\d[\d,.]*(?:\s*[KMB])?)/ig)];
             // If a parent contains multiple action counts, it is not a safe association.
             if(counts.length===1)return {value:parseCount(counts[0][1]),source:"icon-control-associated-count"};
           }
@@ -303,7 +303,7 @@
           for(const sibling of [control.previousElementSibling,control.nextElementSibling]){
             if(!sibling||!visible(sibling)||(Number.isFinite(info.cutoff)&&sibling.getBoundingClientRect().top>=info.cutoff))continue;
             const text=(sibling.innerText||sibling.getAttribute("aria-label")||"").trim();
-            const count=text.match(/^(\\d[\\d,.]*(?:\\s*[KMB])?)$/i);
+            const count=text.match(/^(\d[\d,.]*(?:\s*[KMB])?)$/i);
             if(count)return {value:parseCount(count[1]),source:"adjacent-count-in-action-row"};
           }
         }
