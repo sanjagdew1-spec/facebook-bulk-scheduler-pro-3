@@ -1,6 +1,6 @@
 # Group Finder Pro — Chrome Helper
 
-A Chrome extension that reads public Group search results and captures one verified Main Post at a time from a visible Facebook Group feed. It does not read comment text, join groups, post, message, save anything to Facebook, or bypass security checks.
+A Chrome extension that reads public Group search results and captures each verified Main Post from the visible Facebook Group feed. It does not read comment text or commenter identities, join groups, post, message, save anything to Facebook, or bypass security checks.
 
 ## Install in Chrome (Windows)
 
@@ -22,7 +22,7 @@ A Chrome extension that reads public Group search results and captures one verif
 4. Confirm the report shows Fateh, the caption, 10h, 1 photo, Like 20, Comments 62, Shares 1, and Like/Haha reactions. No comment text should appear.
 5. A later real Facebook scan captures only the first Main Post whose header, caption, time, media and first Like/Comment/Share row can be verified. It sends structured fields, not the full page HTML, and stops after one verified post.
 
-The built-in fixture verifies the extension-to-website message contract and website processing. It is not a live Facebook DOM/OCR test; the real feed extraction still needs one final live confirmation after the local fixture passes.
+The built-in fixture verifies the extension-to-website message contract and website processing. It is not a live Facebook DOM/OCR test; the real feed extraction still needs one final live confirmation after the fixture and code checks pass.
 
 ## What it does
 
@@ -44,14 +44,15 @@ The built-in fixture verifies the extension-to-website message contract and webs
 This extension is on the isolated `prototype/chrome-group-finder-automation` branch. It does not modify the deployed Group Finder Pro website, Activity Lab, or locked Facebook Bulk Scheduler features.
 
 
-## Activity Lab scan behavior (0.4.9)
+## Activity Lab scan behavior (0.5.21)
 - Opens the selected Facebook Group in a separate tab and inspects only information visible on that Group page.
-- Collects post time plus visible likes, comments, and shares for posts up to 24 hours old.
-- Separately records minimal engagement counts for visible posts older than 24 hours and up to 7 days old.
+- Captures every verified Main Post encountered in the feed, once per post, through the 24-hour and days 2–7 windows.
+- Reads the Main Post author, timestamp, caption, media count, first-level Like/Comment/Share counters and visible reaction types.
+- The “View more comments” area is optional and is never a prerequisite for recognizing a post. A post with no comments is still captured when its main header, content, timestamp and action row are visible.
 - Stops after the visible feed reaches posts older than 7 days, the page ends, or the safety scroll limit is reached.
-- Does not open individual posts, read comment threads, inspect who liked a post, inspect share destinations, or perform likes/comments/shares/joins.
+- Does not open individual posts, read comment text or commenter names, inspect who liked a post, inspect share destinations, or perform likes/comments/shares/joins.
 - Activity Lab displays only post number, time, likes, comments, and shares; missing values are shown as Not available.
 - Facebook may hide timestamps or engagement counts. The scan reports only values it can actually read and does not estimate missing data.
 
 
-Version 0.5.0: activity reports now show the visible post author beside each post when Facebook exposes it.
+Version 0.5.21: captures all verified main posts in the visible feed, supports posts with no comments or no “View more comments” control, and forwards only newly found Main Post records.
