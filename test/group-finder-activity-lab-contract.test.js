@@ -7,7 +7,7 @@ const lab = readFileSync(new URL("../group-finder/activity-lab.html", import.met
 test("Activity Lab accepts verified structured Main Post records", () => {
   assert.match(lab, /captureMode!=='main-post-records-v1'/);
   assert.match(lab, /data\.mainPostVerified!==true/);
-  assert.match(lab, /structuredPostsReceived\+\+;/);
+  assert.match(lab, /structuredPostsReceived\+=batch\.posts\.length/);
   assert.match(lab, /structuredPostsAccepted\+\+;/);
 });
 
