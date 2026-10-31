@@ -398,7 +398,7 @@
       };
       const collected=new Map();
       let nextFeedOrder=1;
-      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0,roleArticleNodes=0,visibleRoleArticleNodes=0,topLevelRoleArticles=0,visibleTopLevelRoleArticles=0,mainContentCandidates=0,headerTimestampCandidates=0,mainActionRowCandidates=0;
+      let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0,roleArticleNodes=0,visibleRoleArticleNodes=0,topLevelRoleArticles=0,visibleTopLevelRoleArticles=0,mainContentCandidates=0,headerTimestampCandidates=0,mainActionRowCandidates=0,feedUnitNodes=0,visibleFeedUnitNodes=0,feedUnitCandidates=0;
       let rawBatchSequence=0;const sentMainPostKeys=new Set();
       const captureRawDomBatch=async()=>{
         if(rawCaptureStopped)return;
@@ -422,6 +422,10 @@
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
         // multiple cards and mix one post's timestamp with another post's metrics.
         const roleArticles=[...document.querySelectorAll('[role="article"]')];
+        const feedUnits=[...document.querySelectorAll('[data-pagelet*="FeedUnit"]')];
+        const visibleFeedUnits=feedUnits.filter(visible);
+        feedUnitNodes=feedUnits.length;
+        visibleFeedUnitNodes=visibleFeedUnits.length;
         roleArticleNodes=roleArticles.length;
         const allArticles=roleArticles.filter(visible);
         visibleRoleArticleNodes=allArticles.length;
@@ -462,8 +466,19 @@
             isCompleteMainPost(el));
           articles=nestedWithStory;
         }
-        // Do not fall back to generic FeedUnit wrappers: they can contain
-        // multiple posts and nested comment timestamps, which caused false rows.
+        if(!articles.length){
+          // Some Facebook layouts place the Main Post outside role=article and
+          // use role=article only for comment cards. Accept a FeedUnit wrapper
+          // only when it owns one header time, visible main content, and its own
+          // Like/Comment/Share row; nested comment cards remain excluded.
+          const candidates=visibleFeedUnits.filter(el=>
+            Boolean(mediaAnchor(el)||storyBody(el))&&
+            postHeaderTimeNodes(el).length===1&&
+            Boolean(postActionBar(el).bar)&&
+            el.getBoundingClientRect().bottom>0&&el.getBoundingClientRect().top<innerHeight);
+          feedUnitCandidates=candidates.length;
+          articles=candidates;
+        }
         nestedArticlesExcluded=Math.max(nestedArticlesExcluded,allArticles.length-articles.length);
         articlesObserved=Math.max(articlesObserved,articles.length);
         uniqueArticleSamples+=articles.length;
@@ -588,7 +603,7 @@
         weekTopEngagement:maxEngagement(weekPosts),
         recentTotals:{likes:totals(recentPosts,"likes"),comments:totals(recentPosts,"comments"),shares:totals(recentPosts,"shares")},
         weekTotals:{likes:totals(weekPosts,"likes"),comments:totals(weekPosts,"comments"),shares:totals(weekPosts,"shares")},
-        scanDiagnostics:{scrollSteps,roleArticleNodes,visibleRoleArticleNodes,topLevelRoleArticles,visibleTopLevelRoleArticles,mainContentCandidates,headerTimestampCandidates,mainActionRowCandidates,articlesObserved,uniqueArticleSamples,timestampedArticles,authorsIdentified,authorsUnavailable,nestedArticlesExcluded,mediaAnchorsFound,viewMoreBoundariesFound,commentComposersFound,actionRowsFound,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
+        scanDiagnostics:{scrollSteps,roleArticleNodes,visibleRoleArticleNodes,topLevelRoleArticles,visibleTopLevelRoleArticles,mainContentCandidates,headerTimestampCandidates,mainActionRowCandidates,feedUnitNodes,visibleFeedUnitNodes,feedUnitCandidates,articlesObserved,uniqueArticleSamples,timestampedArticles,authorsIdentified,authorsUnavailable,nestedArticlesExcluded,mediaAnchorsFound,viewMoreBoundariesFound,commentComposersFound,actionRowsFound,recentPostsFound:recentPosts.length,weekPostsFound:weekPosts.length,oldestAgeHours:Math.round(oldestAgeHours*10)/10,olderThanSevenDaysSeen},
         blocked:false,
         note:"Only visible post timestamps and visible like/comment/share counts were read. No post was opened and no comment or liker list was inspected."
       };
