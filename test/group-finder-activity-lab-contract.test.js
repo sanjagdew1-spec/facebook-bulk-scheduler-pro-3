@@ -27,7 +27,9 @@ test("Activity Lab does not need comment text or a comments preview to accept a 
   assert.doesNotMatch(accept, /commentText|commenter|View more comments/i);
   assert.match(accept, /data\.mainPostVerified!==true/);
   assert.match(accept, /data\.ageHours==null/);
-  assert.match(accept, /if\(!preview\|\|preview==='Not available'\)continue/);
+  assert.match(accept, /const photoCount=Number\(data\.photoCount\)\|\|0/);
+  assert.match(accept, /&&photoCount===0&&videoCount===0/);
+  assert.doesNotMatch(accept, /if\(!preview\|\|preview==='Not available'\)continue/);
 });
 
 test("fixture data contract is represented in the website test button", () => {
