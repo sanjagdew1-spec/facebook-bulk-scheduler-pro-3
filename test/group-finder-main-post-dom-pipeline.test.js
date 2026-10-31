@@ -127,3 +127,60 @@ test("the extension-to-website bridge forwards the structured batch using the Ac
   assert.match(background, /chrome\.tabs\.sendMessage\(a\.websiteTabId,\{type:msg\.type,payload,sessionId:a\.sessionId\}\)/);
   assert.match(background, /msg\.type==="RAW_ACTIVITY_BATCH"\|\|msg\.type==="RAW_ACTIVITY_COMPLETE"/);
 });
+
+
+test("the actual deployed Activity Lab accepts the extracted batch and renders the post plus scan diagnostics", async () => {
+  const html = readFileSync(new URL("./activity-lab-under-test.html", import.meta.url), "utf8");
+  const { batch, complete } = await runActualContentScriptAgainstDom();
+  assert.ok(batch, "content.js must produce a real structured batch before the website test starts");
+  const dom = new JSDOM(html, {
+    url: "https://group-finder-pro-main-post-v2-preview.onrender.com/activity-lab.html?groupName=I%20grew%20up%20in%20New%20York&groupUrl=https%3A%2F%2Fwww.facebook.com%2Fgroups%2F403062662125374%2F&sessionId=dom-pipeline-test",
+    runScripts: "outside-only"
+  });
+  const { window } = dom;
+  const storedBatches = [];
+  let timerId = 0;
+  window.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (options.method === "POST" && value.includes("/batches")) {
+      storedBatches.push(JSON.parse(options.body));
+      return { ok: true, status: 200, json: async () => ({ accepted: true, duplicate: false }) };
+    }
+    if (value.endsWith("/api/activity/sessions/dom-pipeline-test")) {
+      return { ok: true, status: 200, json: async () => ({ batches: storedBatches, rawChunks: {}, uniqueChunkCount: 0, storedBytes: 0 }) };
+    }
+    throw new Error("Unexpected Activity Lab test request: " + value);
+  };
+  window.setTimeout = () => ++timerId;
+  window.clearTimeout = () => {};
+  window.setInterval = () => ++timerId;
+  window.clearInterval = () => {};
+  const inlineScripts = [...window.document.querySelectorAll("script")].map(node => node.textContent).filter(Boolean);
+  assert.ok(inlineScripts.length, "the deployed Activity Lab must include its working page script");
+  for (const script of inlineScripts) window.eval(script);
+  const dispatch = data => window.dispatchEvent(new window.MessageEvent("message", {
+    data: { source: "gfp-chrome-helper", ...data },
+    origin: window.location.origin,
+    source: window
+  }));
+  dispatch({ type: "ACTIVITY_RAW_BATCH", payload: batch.payload });
+  dispatch({ type: "ACTIVITY_RAW_COMPLETE", payload: complete.payload });
+  for (let i = 0; i < 60 && window.document.getElementById("activityStatus").textContent !== "ANALYSIS COMPLETE"; i++) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.equal(storedBatches.length, 1, "Activity Lab must upload the extension's exact structured batch");
+  assert.equal(storedBatches[0].posts[0].author, expected.author);
+  assert.equal(window.document.getElementById("activityStatus").textContent, "ANALYSIS COMPLETE");
+  const rows = window.document.getElementById("activityRows").textContent;
+  for (const value of [expected.author, expected.preview, "10h", "Like, Haha", "20", "62", "1"]) {
+    assert.ok(rows.includes(value), "rendered Activity Lab row must contain " + value + "; got: " + rows);
+  }
+  const summary = window.document.getElementById("activitySummary").textContent;
+  assert.match(summary, /DOM role=article nodes:/);
+  assert.match(summary, /Main-content candidates:/);
+  assert.match(summary, /Header timestamp candidates:/);
+  assert.match(summary, /Main action-row candidates:/);
+  assert.equal(rows.includes("Commenter Private Name"), false);
+  assert.equal(rows.includes("Private comment text"), false);
+  dom.window.close();
+});
