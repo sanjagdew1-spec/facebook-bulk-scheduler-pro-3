@@ -1,43 +1,57 @@
-# Facebook Bulk Scheduler Pro 3
+# Group Finder Pro — Chrome Helper
 
-Separate starter project for the third Meta app. This repository is intentionally separate from `facebook-bulk-scheduler`.
+A Chrome extension that reads public Group search results and captures one verified Main Post at a time from a visible Facebook Group feed. It does not read comment text, join groups, post, message, save anything to Facebook, or bypass security checks.
 
-## Current status
-- Static GitHub Pages frontend
-- Express backend with Facebook OAuth / Login for Business configuration support
-- Page listing, scheduled photo-post jobs, and SQLite-backed job history
-- Real posting and scheduled publishing must be tested with the new Meta App before production use
+## Install in Chrome (Windows)
 
-## Deploy the frontend
-Enable GitHub Pages for the `main` branch, root folder. The expected URL is:
-`https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/`
+1. Open this branch folder on GitHub: https://github.com/sanjagdew1-spec/facebook-bulk-scheduler-pro-3/tree/prototype/chrome-group-finder-automation/chrome-group-finder
+2. Download the repository branch as a ZIP using **Code → Download ZIP**, then extract it.
+3. Open the extracted repository folder and then open `chrome-group-finder`.
+4. In Chrome, open `chrome://extensions` and turn on **Developer mode**.
+5. Click **Load unpacked** and select the `chrome-group-finder` folder containing `manifest.json`.
+6. Pin **Group Finder Pro** from Chrome's Extensions menu.
+7. In that same Chrome profile, sign in to Facebook normally. Open the extension.
+8. Enter keywords (one per line, comma, or semicolon), select a country or tick **Only USA**, then press **Start search**.
+9. Keep the Facebook search tab open while it processes keywords. Reopen the extension to review results or export CSV.
 
-## Deploy the backend on Render
-Create a new Web Service from this repository. Use Docker runtime (the repository includes a Dockerfile). After deployment, set these environment variables in Render:
-- `META_APP_ID`: new Meta App ID
-- `META_APP_SECRET`: new Meta App Secret (Render only; never put it in GitHub)
-- `META_LOGIN_CONFIG_ID`: Facebook Login for Business Configuration ID
-- `APP_BASE_URL`: actual new Render service URL, with no trailing slash
-- `FRONTEND_ORIGIN`: `https://sanjagdew1-spec.github.io`
-- `FRONTEND_SUCCESS_URL`: `https://sanjagdew1-spec.github.io/facebook-bulk-scheduler-pro-3/`
-- `SESSION_SECRET`: a long random secret
+## One-post Activity Lab workflow
 
-Then add the exact callback URL `https://YOUR-RENDER-SERVICE.onrender.com/auth/facebook/callback` to Meta's Valid OAuth Redirect URIs. Replace the example host with the actual Render service hostname.
+1. Install or reload this extension in Chrome.
+2. Open the Group Finder Pro Activity Lab page: https://top-facebook-group-finder-preview.onrender.com/activity-lab.html
+3. Click **Run one-post extension + website test**. This sends a deterministic fixture based on the supplied Facebook screenshot through the extension bridge and the website parser; it does not open Facebook.
+4. Confirm the report shows Fateh, the caption, 10h, 1 photo, Like 20, Comments 62, Shares 1, and Like/Haha reactions. No comment text should appear.
+5. A later real Facebook scan captures only the first Main Post whose header, caption, time, media and first Like/Comment/Share row can be verified. It sends structured fields, not the full page HTML, and stops after one verified post.
 
-## Important
-The UI currently schedules images by public HTTPS image URL; local image upload and multi-photo albums are not implemented in this starter. Verify Meta permission access and Page publishing before using it with real Pages. Use a persistent Render disk for SQLite if scheduled jobs must survive service restarts/redeploys. Never share or commit tokens, app secrets, or passwords.
+The built-in fixture verifies the extension-to-website message contract and website processing. It is not a live Facebook DOM/OCR test; the real feed extraction still needs one final live confirmation after the local fixture passes.
+
+## What it does
+
+- Opens Facebook's group-search page for each keyword.
+- Extracts visible group names, URLs, and snippets; deduplicates by URL.
+- Stores results in Chrome extension local storage and exports CSV.
+- Stops if Facebook presents a login/checkpoint/CAPTCHA or security page.
+
+## Important limitations
+
+- The extension only reads what Facebook renders visibly. Facebook may change its page structure, so results can be incomplete.
+- It cannot guarantee that Facebook returns results for every keyword. No fake group names, member counts, or activity metrics are created.
+- The country selector adds the country to the search text; it is not a verified geographic filter.
+- This is a local Chrome extension, not a Render-hosted web app. That is what lets it use the Facebook session in the same Chrome profile.
+- The code has been reviewed and improved, but end-to-end testing must still happen in your logged-in Chrome session. Start with one keyword and confirm real results before using a large list.
+
+## Scope protection
+
+This extension is on the isolated `prototype/chrome-group-finder-automation` branch. It does not modify the deployed Group Finder Pro website, Activity Lab, or locked Facebook Bulk Scheduler features.
 
 
-## Phase 4 — Owner/Admin Control Panel
-Phase 4 is isolated on branch `phase-4/owner-admin-control-panel`. The customer-facing Phase 3 deployment is not changed by this branch.
+## Activity Lab scan behavior (0.4.9)
+- Opens the selected Facebook Group in a separate tab and inspects only information visible on that Group page.
+- Collects post time plus visible likes, comments, and shares for posts up to 24 hours old.
+- Separately records minimal engagement counts for visible posts older than 24 hours and up to 7 days old.
+- Stops after the visible feed reaches posts older than 7 days, the page ends, or the safety scroll limit is reached.
+- Does not open individual posts, read comment threads, inspect who liked a post, inspect share destinations, or perform likes/comments/shares/joins.
+- Activity Lab displays only post number, time, likes, comments, and shares; missing values are shown as Not available.
+- Facebook may hide timestamps or engagement counts. The scan reports only values it can actually read and does not estimate missing data.
 
-- Private admin interface: `/owner-admin` on the Phase 4 API service.
-- Plans: Free Demo, Starter/Standard, Pro, Business; configure duration, price, Page limits, daily post limits, schedule windows, and batch-slot limits.
-- Customers: filter by plan, inspect account ID/email verification status, dates, remaining days, connected Page usage, today's and this month's job counts, then assign/renew a plan.
-- Creators: save a sponsorship and activate Live for an existing customer account, with the selected plan duration and limits.
-- Developer: grant/revoke unlimited app entitlement for a customer ID or email.
-- Admin audit log: records plan, creator and developer entitlement changes.
-- The owner/admin allowlist is enforced server-side using `OWNER_ADMIN_EMAILS` and/or `OWNER_ADMIN_IDS`. Owner unlimited entitlement uses `OWNER_USER_EMAILS` and/or `OWNER_USER_IDS`. Use the exact customer-account email or ID; never expose these values in public frontend code.
-- `/api/customer/entitlement` reports owner/developer unlimited access or a customer's configured plan and usage.
 
-Before using the panel, set the allowlist environment variables on the Phase 4 API service and configure persistent storage for its SQLite database. The customer email field currently reports verification state from `email_verified_at`; existing accounts remain pending until an email-verification workflow is implemented. Plan limits are stored/displayed by Phase 4; enforcing those limits across every publishing route and the customer UI is a subsequent integration step, not claimed complete here.
+Version 0.5.0: activity reports now show the visible post author beside each post when Facebook exposes it.
