@@ -62,6 +62,7 @@
   window.__gfpScanStarted = true;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let visualCaptureReady=false;
+  let rawCaptureStopped=false;
   let initialVisualScreenshot="";
   chrome.runtime.onMessage.addListener(message=>{
     if(message?.type==="STOP_ACTIVITY_RAW_CAPTURE"){rawCaptureStopped=true;return;}
@@ -358,7 +359,6 @@
       let nextFeedOrder=1;
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
       let rawBatchSequence=0;
-      let rawCaptureStopped=false;
       const captureRawDomBatch=async()=>{
         if(rawCaptureStopped)return;
         // Raw-only capture: do not select, classify, redact, or truncate any DOM content.
