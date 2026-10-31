@@ -159,15 +159,7 @@ test("the actual deployed Activity Lab accepts the extracted batch and renders t
   const inlineScripts = [...window.document.querySelectorAll("script")].map(node => node.textContent).filter(Boolean);
   assert.ok(inlineScripts.length, "the deployed Activity Lab must include its working page script");
   for (const script of inlineScripts) window.eval(script);
-  const dispatch = data => {
-    const event = new window.Event("message");
-    Object.defineProperties(event, {
-      data: { value: { source: "gfp-chrome-helper", ...data } },
-      origin: { value: window.location.origin },
-      source: { value: window }
-    });
-    window.dispatchEvent(event);
-  };
+  const dispatch = data => window.postMessage({ source: "gfp-chrome-helper", ...data }, window.location.origin);
   dispatch({ type: "ACTIVITY_RAW_BATCH", payload: batch.payload });
   dispatch({ type: "ACTIVITY_RAW_COMPLETE", payload: complete.payload });
   for (let i = 0; i < 60 && window.document.getElementById("activityStatus").textContent !== "COMPLETE"; i++) {
