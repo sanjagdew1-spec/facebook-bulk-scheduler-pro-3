@@ -92,6 +92,11 @@ chrome.runtime.onMessage.addListener((msg,sender,sendResponse)=>{(async()=>{
    sendResponse({ok:true,enabled:true});return;
   }catch(error){sendResponse({ok:false,error:"Could not start visual capture: "+String(error)});return;}
  }
+ if(msg.type==="STOP_ACTIVITY_RAW_CAPTURE"){
+  const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
+  if(a?.fbTabId){try{await chrome.tabs.sendMessage(a.fbTabId,{type:"STOP_ACTIVITY_RAW_CAPTURE"});}catch{}}
+  sendResponse({ok:true,stopped:true});return;
+ }
  if(msg.type==="RAW_ACTIVITY_BATCH"||msg.type==="RAW_ACTIVITY_COMPLETE"){
   const a=(await chrome.storage.local.get(ACTIVITY_JOB_KEY))[ACTIVITY_JOB_KEY];
   if(!a||a.status!=="checking"||sender.tab?.id!==a.fbTabId){sendResponse({ok:false});return;}
