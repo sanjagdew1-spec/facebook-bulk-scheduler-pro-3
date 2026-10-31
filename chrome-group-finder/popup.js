@@ -35,8 +35,12 @@ $("captureOne").addEventListener("click",async()=>{
    $("status").textContent="Open the selected Facebook Group tab first, then click Capture One Post.";
    return;
   }
-  await chrome.tabs.sendMessage(tab.id,{type:"CAPTURE_ONE_POST"});
-  $("status").textContent="10-second countdown started on the Facebook Group tab. Keep that tab open and finish positioning the post.";
+  $("status").textContent="Checking visible post cards…";
+  const result=await chrome.tabs.sendMessage(tab.id,{type:"DETECT_POST_COUNT"});
+  if(!result?.ok){$("status").textContent=result?.error||"Could not check the visible posts.";return;}
+  if(!result.found){$("status").textContent="NO POST FOUND · No visible Main Post card was detected.";return;}
+  const sizes=(result.posts||[]).map(p=>"#"+p.number+" "+p.width+"×"+p.height+" px").join(" · ");
+  $("status").textContent="POST FOUND · "+result.label+" · "+result.count+" detected · "+sizes;
  }catch(error){
   $("status").textContent="The Group tab is not ready yet. Refresh the Facebook Group tab once, then try again. "+String(error);
  }
