@@ -443,6 +443,10 @@
           return hasMainContent&&postHeaderTimeNodes(el).length>0&&Boolean(postActionBar(el).bar);
         };
         let articles=topLevel.filter(el=>isCompleteMainPost(el));
+        // When the user has positioned a target post, prefer the complete
+        // Main Post nearest the middle of the viewport instead of DOM-first order.
+        const viewportCenter=innerHeight/2;
+        articles.sort((a,b)=>Math.abs((a.getBoundingClientRect().top+a.getBoundingClientRect().bottom)/2-viewportCenter)-Math.abs((b.getBoundingClientRect().top+b.getBoundingClientRect().bottom)/2-viewportCenter));
         if(!articles.length){
           const nestedWithStory=allArticles.filter(el=>
             el.parentElement?.closest('[role="article"]')&&
@@ -523,18 +527,32 @@
         }
         return {count:articles.length,oldestVisibleAge:visibleTimestampAges.length?Math.max(...visibleTimestampAges):null,timestampedVisible:visibleTimestampAges.length};
       };
-      await sleep(2200);
-      await captureRawDomBatch();
-      // First pass ends as soon as one complete Main Post is positively identified.
-      // Facebook frequently places the feed inside its own scrollable pane.
-      // Scrolling window alone can leave that pane stationary, so locate the
-      // nearest scrollable ancestor of a real feed article first.
-      // FIRST-POST TEST MODE: read the first verified Main Post already visible
-      // on the Group page. Never scroll or move the feed during this test.
-      await sleep(2200);
+      // Manual one-post test: wait for the user to position a single post.
+      // The extension itself never scrolls. The toolbar button starts a 10-second
+      // countdown so the user can finish positioning the desired post.
+      let resolveManualCapture;
+      let manualCaptureStarted=false;
+      const manualCaptureReady=new Promise(resolve=>{resolveManualCapture=resolve;});
+      const captureMessageListener=(message)=>{
+        if(message?.type!=="CAPTURE_ONE_POST"||manualCaptureStarted)return;
+        manualCaptureStarted=true;
+        const overlay=document.createElement("div");
+        overlay.id="gfp-one-post-countdown";
+        overlay.textContent="Group Finder Pro · Capturing one post in 10 seconds";
+        Object.assign(overlay.style,{position:"fixed",zIndex:"2147483647",left:"50%",bottom:"24px",transform:"translateX(-50%)",padding:"12px 18px",borderRadius:"12px",background:"#172554",color:"#fff",font:"600 14px/1.4 Arial,sans-serif",boxShadow:"0 4px 24px rgba(0,0,0,.35)",pointerEvents:"none"});
+        (document.documentElement||document.body).appendChild(overlay);
+        let remaining=10;
+        const ticker=setInterval(()=>{remaining--;overlay.textContent=remaining>0?"Group Finder Pro · Capturing one post in "+remaining+" seconds":"Group Finder Pro · Reading the selected post…";},1000);
+        setTimeout(()=>{clearInterval(ticker);overlay.remove();resolveManualCapture();},10000);
+      };
+      chrome.runtime.onMessage.addListener(captureMessageListener);
+      await manualCaptureReady;
+      chrome.runtime.onMessage.removeListener(captureMessageListener);
+      await sleep(450);
+      // A short DOM settling retry is allowed, but it never moves or scrolls the page.
       for(let attempt=0;attempt<5&&collected.size===0;attempt++){
         await captureRawDomBatch();
-        if(collected.size===0)await sleep(900);
+        if(collected.size===0)await sleep(350);
       }
       const all=[...collected.values()].filter(p=>p.mainPostVerified===true); // Every verified Main Post; comment text is never collected.
       const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
