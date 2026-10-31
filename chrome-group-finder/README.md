@@ -1,6 +1,6 @@
 # Group Finder Pro — Chrome Helper
 
-A local Chrome extension that reads group names and links rendered visibly in Facebook's own group-search results. It does not join groups, post, message, save anything to Facebook, or bypass security checks.
+A Chrome extension that reads public Group search results and captures one verified Main Post at a time from a visible Facebook Group feed. It does not read comment text, join groups, post, message, save anything to Facebook, or bypass security checks.
 
 ## Install in Chrome (Windows)
 
@@ -13,6 +13,16 @@ A local Chrome extension that reads group names and links rendered visibly in Fa
 7. In that same Chrome profile, sign in to Facebook normally. Open the extension.
 8. Enter keywords (one per line, comma, or semicolon), select a country or tick **Only USA**, then press **Start search**.
 9. Keep the Facebook search tab open while it processes keywords. Reopen the extension to review results or export CSV.
+
+## One-post Activity Lab workflow
+
+1. Install or reload this extension in Chrome.
+2. Open the Group Finder Pro Activity Lab page: https://top-facebook-group-finder-preview.onrender.com/activity-lab.html
+3. Click **Run one-post extension + website test**. This sends a deterministic fixture based on the supplied Facebook screenshot through the extension bridge and the website parser; it does not open Facebook.
+4. Confirm the report shows Fateh, the caption, 10h, 1 photo, Like 20, Comments 62, Shares 1, and Like/Haha reactions. No comment text should appear.
+5. A later real Facebook scan captures only the first Main Post whose header, caption, time, media and first Like/Comment/Share row can be verified. It sends structured fields, not the full page HTML, and stops after one verified post.
+
+The built-in fixture verifies the extension-to-website message contract and website processing. It is not a live Facebook DOM/OCR test; the real feed extraction still needs one final live confirmation after the local fixture passes.
 
 ## What it does
 
