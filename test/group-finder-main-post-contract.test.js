@@ -22,11 +22,15 @@ test("post recognition does not require comments or a View more comments boundar
   assert.match(content, /posts with zero comments must pass the same recognition rules/i);
 });
 
-test("scan continues after its first post and retains every verified post", () => {
-  assert.doesNotMatch(content, /if\(collected\.size>0\)break/);
+test("first-post test reads exactly one visible Main Post and never scrolls", () => {
+  assert.match(content, /if\(collected\.size>=1\)break/);
+  assert.match(content, /for\(let attempt=0;attempt<5&&collected\.size===0;attempt\+\+\)/);
+  const groupScan = content.slice(content.indexOf("if(isGroupPage){"));
+  const report = groupScan.indexOf("const all=[...collected.values()]");
+  assert.ok(report > 0, "group scan report is generated after the one-post capture");
+  const captureFlow = groupScan.slice(0, report);
+  assert.doesNotMatch(captureFlow, /scrollBy|scrollTop\s*\+=|for\(let step=0;step<60/);
   assert.match(content, /const all=\[\.\.\.collected\.values\(\)\]\.filter\(p=>p\.mainPostVerified===true\)/);
-  assert.doesNotMatch(content, /mainPostVerified===true\)\.slice\(0,1\)/);
-  assert.match(content, /if\(olderThanSevenDaysSeen\)break/);
 });
 
 test("comment text and commenter identities are not part of the capture payload", () => {
