@@ -4,15 +4,12 @@ A Chrome extension that reads public Group search results and captures one verif
 
 ## Install in Chrome (Windows)
 
-1. Open this branch folder on GitHub: https://github.com/sanjagdew1-spec/facebook-bulk-scheduler-pro-3/tree/prototype/chrome-group-finder-automation/chrome-group-finder
-2. Download the repository branch as a ZIP using **Code → Download ZIP**, then extract it.
-3. Open the extracted repository folder and then open `chrome-group-finder`.
-4. In Chrome, open `chrome://extensions` and turn on **Developer mode**.
-5. Click **Load unpacked** and select the `chrome-group-finder` folder containing `manifest.json`.
+1. Download this extension-only ZIP and extract it.
+2. Open the extracted folder. Its top level must contain `manifest.json`, `content.js`, and `background.js`.
+3. In Chrome, open `chrome://extensions` and turn on **Developer mode**.
+4. Click **Load unpacked** and select the extracted folder containing `manifest.json`.
+5. If an older Group Finder Pro extension is installed, remove the old one first or reload it from the new folder.
 6. Pin **Group Finder Pro** from Chrome's Extensions menu.
-7. In that same Chrome profile, sign in to Facebook normally. Open the extension.
-8. Enter keywords (one per line, comma, or semicolon), select a country or tick **Only USA**, then press **Start search**.
-9. Keep the Facebook search tab open while it processes keywords. Reopen the extension to review results or export CSV.
 
 ## One-post Activity Lab workflow
 
