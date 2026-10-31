@@ -356,74 +356,32 @@
       let scrollSteps=0,articlesObserved=0,uniqueArticleSamples=0,timestampedArticles=0,oldestAgeHours=0,olderThanSevenDaysSeen=false,authorsIdentified=0,authorsUnavailable=0,nestedArticlesExcluded=0,mediaAnchorsFound=0,viewMoreBoundariesFound=0,commentComposersFound=0,actionRowsFound=0;
       let rawBatchSequence=0;
       const captureRawDomBatch=async()=>{
-        // Send visible DOM evidence to Activity Lab without classifying posts here.
-        // Nested comment cards are structurally retained but their text/labels are redacted.
-        const feed=document.querySelector('[role="main"]')||document.body;
-        const feedUnits=[...feed.querySelectorAll('[data-pagelet*="FeedUnit"]')].filter(visible);
-        // Only snapshot cards that actually intersect the browser viewport.
-        // The old CSS-visible check included off-screen feed cards, and slice(0,3)
-        // repeatedly captured the first three posts on every scroll.
-        const intersectsViewport=el=>{
-          const r=el.getBoundingClientRect();
-          return r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth;
-        };
-        const articleRoots=[...feed.querySelectorAll('[role="article"]')].filter(visible)
-          .filter(el=>!el.parentElement?.closest('[role="article"]'))
-          .filter(intersectsViewport);
-        const dataFtRoots=[...feed.querySelectorAll('[data-ft]')].filter(visible)
-          .filter(el=>!el.parentElement?.closest('[data-ft]'))
-          .filter(intersectsViewport);
-        const feedUnitRoots=feedUnits.filter(intersectsViewport);
-        const roots=(articleRoots.length?articleRoots:(feedUnitRoots.length?feedUnitRoots:dataFtRoots)).slice(0,8);
-        const snapshots=[];
-        for(const root of roots){
-          const clone=root.cloneNode(true);
-          const nested=[...clone.querySelectorAll('[role="article"]')];
-          nested.forEach((node,index)=>{
-            // Keep the first main article's content; redact nested comment/reply bodies.
-            if(index===0&&!clone.matches('[role="article"]'))return;
-            const marker=[...node.querySelectorAll('*')].find(el=>/^view more comments$/i.test((el.innerText||'').trim()));
-            for(const attr of ['aria-label','title','data-tooltip-content','alt'])node.removeAttribute(attr);
-            node.replaceChildren();
-            node.setAttribute('data-gfp-comment-content-redacted','true');
-            if(marker){const label=document.createElement('span');label.textContent='View More Comments';label.setAttribute('data-gfp-boundary-marker','true');node.appendChild(label);}
-          });
-          const html=clone.outerHTML||'';
-          if(html){
-            const permalink=root.querySelector('a[href*="/posts/"],a[href*="/permalink/"],a[href*="story_fbid"]')?.getAttribute('href')||'';
-            const dataFt=root.getAttribute('data-ft')||root.querySelector('[data-ft]')?.getAttribute('data-ft')||'';
-            let stableFt='';
-            try{
-              const parsed=JSON.parse(dataFt);
-              stableFt=String(parsed.mf_story_key||parsed.story_fbid||parsed.feedback_id||parsed.post_id||'');
-            }catch{stableFt=(dataFt.match(/(?:mf_story_key|story_fbid|feedback_id|post_id)["':= ]+([0-9]+)/i)||[])[1]||'';}
-            const author=root.querySelector('a[href*="profile.php"],a[href*="/people/"]')||[...root.querySelectorAll('a[href]')].find(a=>/^\/[^/]+\/?$/.test(new URL(a.href,location.origin).pathname));
-            const timeNode=root.querySelector('abbr[title],time[datetime],[data-utime],a[aria-label*="ago" i],a[aria-label*="yesterday" i]');
-            const story=root.querySelector('[data-ad-preview="message"],[data-ad-comet-preview="message"],[data-ad-rendering-role="story_message"]');
-            const fallbackText=(story?.innerText||root.innerText||'').replace(/\\s+/g,' ').trim().slice(0,300);
-            const fallback=[author?.getAttribute('href')||'',timeNode?.getAttribute('data-utime')||timeNode?.getAttribute('datetime')||timeNode?.getAttribute('title')||timeNode?.innerText||'',fallbackText].join('|');
-            const snapshotKey=permalink?'url:'+permalink:stableFt?'story:'+stableFt:'fallback:'+fallback;
-            const headerTimeNodes=postHeaderTimeNodes(root);
-            const postTimeNode=headerTimeNodes[0]||null;
-            const postTime=[postTimeNode?.innerText,postTimeNode?.getAttribute('aria-label'),postTimeNode?.getAttribute('title'),postTimeNode?.getAttribute('datetime'),postTimeNode?.getAttribute('data-utime')].filter(Boolean).join(' · ').trim();
-            const postData={
-              mainPostVerified:Boolean(postActionBar(root).bar)&&postHeaderTimeNodes(root).length>0&&postAuthor(root)!=="Not available",
-              author:postAuthor(root),
-              time:postTime||'Not available',
-              ageHours:parseAgeHours(postTime,root,postTimeNode),
-              preview:postPreview(root),
-              likes:metric(root,'likes').value,
-              comments:metric(root,'comments').value,
-              shares:metric(root,'shares').value,
-              photoCount:root.querySelectorAll('img').length,
-              videoCount:root.querySelectorAll('video,[role="img"]').length
-            };
-            snapshots.push({snapshotKey,tag:root.tagName,role:root.getAttribute('role')||'',pagelet:root.getAttribute('data-pagelet')||'',postData,html:html.slice(0,45000)});
-          }
-        }
+        // Raw-only capture: do not select, classify, redact, or truncate any DOM content.
+        // Split the complete current document into transport-safe chunks; each chunk
+        // is uploaded in order and carries the same scroll-step and chunk metadata.
+        const rawHtml=document.documentElement?.outerHTML||"";
+        const step=rawBatchSequence++;
+        const chunkSize=200000;
+        const partCount=Math.max(1,Math.ceil(rawHtml.length/chunkSize));
         const firstScreenshot=initialVisualScreenshot;initialVisualScreenshot="";
-        const payload={scrollStep:rawBatchSequence++,capturedAt:new Date().toISOString(),pageUrl:location.href,documentTitle:document.title,viewport:{width:innerWidth,height:innerHeight,scrollY},rootCount:snapshots.length,snapshots,...(firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})};
-        try{await chrome.runtime.sendMessage({type:'RAW_ACTIVITY_BATCH',payload});}catch{}
+        for(let partIndex=0;partIndex<partCount;partIndex++){
+          const payload={
+            captureMode:"complete-raw-document",
+            scrollStep:step,
+            capturedAt:new Date().toISOString(),
+            pageUrl:location.href,
+            documentTitle:document.title,
+            viewport:{width:innerWidth,height:innerHeight,scrollY},
+            rawHtmlChunk:rawHtml.slice(partIndex*chunkSize,(partIndex+1)*chunkSize),
+            rawHtmlChunkIndex:partIndex,
+            rawHtmlChunkCount:partCount,
+            rawHtmlTotalChars:rawHtml.length,
+            rawHtmlComplete:partIndex===partCount-1,
+            ...(partIndex===0&&firstScreenshot?{screenshotDataUrl:firstScreenshot}:{})
+          };
+          const result=await chrome.runtime.sendMessage({type:"RAW_ACTIVITY_BATCH",payload});
+          if(!result?.ok)throw new Error(result?.error||"Raw data batch could not be forwarded.");
+        }
       };
       const collectVisiblePosts=()=>{
         // Prefer actual Facebook post articles. FeedUnit wrappers can contain
@@ -528,7 +486,7 @@
       };
       await sleep(2200);
       await captureRawDomBatch();
-      let observed=collectVisiblePosts();
+      // Website owns all post/comment classification; extension only scrolls and transfers raw DOM.
       // Facebook frequently places the feed inside its own scrollable pane.
       // Scrolling window alone can leave that pane stationary, so locate the
       // nearest scrollable ancestor of a real feed article first.
@@ -577,21 +535,19 @@
         }
         return {before,after,moved:after>before+2};
       };
-      let consecutiveOldBatches=0,stalledScrolls=0;
+      let stalledScrolls=0;
       for(let step=0;step<60;step++){
         const moved=await scrollViewport();
         if(moved.moved){scrollSteps++;stalledScrolls=0;}
         else stalledScrolls++;
         await captureRawDomBatch();
-        observed=collectVisiblePosts();
-        if(observed.oldestVisibleAge!=null&&observed.oldestVisibleAge>168)consecutiveOldBatches++;else consecutiveOldBatches=0;
-        if(consecutiveOldBatches>=2||stalledScrolls>=2)break;
+        if(stalledScrolls>=2)break;
         const top=isDocumentScroller?(window.scrollY||feedScroller.scrollTop||0):feedScroller.scrollTop;
         const height=isDocumentScroller?document.documentElement.scrollHeight:feedScroller.scrollHeight;
         const client=isDocumentScroller?window.innerHeight:feedScroller.clientHeight;
         if(top+client>=height-20)break;
       }
-      const all=[...collected.values()]; // Preserve original feed order; never sort by age.
+      const all=[]; // Post/comment extraction is performed by Activity Lab, not the extension.
       const weekPosts=all.filter(p=>p.ageHours>24&&p.ageHours<=168);
       const recentPosts=all.filter(p=>p.ageHours<=24);
       const totals=(posts,key)=>{const known=posts.filter(p=>p[key]!=null);return {count:known.length,total:known.length?known.reduce((n,p)=>n+p[key],0):null};};
