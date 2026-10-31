@@ -418,6 +418,52 @@ window.addEventListener('message',async event=>{
   $('activitySummary').textContent=msg.error||'The Chrome extension could not start the scan.';
  }
 });
+
+ // Activity Lab reads the image from the existing extension-created receipt panel.
+ // The extension and its screenshot-capture flow remain unchanged.
+ const captureScreenshotFromExistingPanel=()=>{
+  const panel=document.getElementById('gfp-screenshot-received');
+  if(!panel)return false;
+  const image=panel.querySelector('img[alt="Captured Facebook Group screenshot"]')||panel.querySelector('img');
+  if(!image)return false;
+  const readImage=()=>{
+   const src=image.currentSrc||image.src||'';
+   if(!src||!/^data:image\\//i.test(src))return;
+   const details=panel.querySelector('div');
+   const panelText=(details?.textContent||'').trim();
+   const parts=panelText.split(' · ');
+   const groupName=parts[0]||'Facebook Group';
+   const capturedText=parts.slice(1).join(' · ');
+   window.gfpActivityScreenshotDataUrl=src;
+   $('screenshotReceiptStatus').textContent='SCREENSHOT RECEIVED';
+   $('screenshotReceiptStatus').style.color='#a6f0d1';
+   $('screenshotReceiptDetails').textContent='Activity Lab successfully read the screenshot image from the existing “Screenshot received from Facebook Group” panel · '+groupName+(capturedText?' · '+capturedText:'')+'. Temporary image held in this page memory for 5 minutes.';
+   const area=$('activityScreenshots');
+   let preview=document.getElementById('gfpActivityScreenshotPreview');
+   if(!preview){
+    preview=document.createElement('img');preview.id='gfpActivityScreenshotPreview';
+    preview.alt='Screenshot read by Activity Lab from the existing Facebook Group receipt panel';
+    preview.style.cssText='display:block;width:100%;max-width:900px;height:auto;margin:12px 0;border:1px solid #56d9e8;border-radius:10px';
+    area.appendChild(preview);
+   }
+   preview.src=src;
+   if(window.gfpScreenshotReceiptTimer)clearTimeout(window.gfpScreenshotReceiptTimer);
+   window.gfpScreenshotReceiptTimer=setTimeout(()=>{
+    window.gfpActivityScreenshotDataUrl=null;
+    const p=document.getElementById('gfpActivityScreenshotPreview');if(p)p.remove();
+    $('screenshotReceiptStatus').textContent='EXPIRED';
+    $('screenshotReceiptStatus').style.color='';
+    $('screenshotReceiptDetails').textContent='The temporary screenshot image was cleared from Activity Lab memory after 5 minutes.';
+   },5*60*1000);
+  };
+  if(image.complete&&image.naturalWidth>0)readImage();
+  else image.addEventListener('load',readImage,{once:true});
+  return true;
+ };
+ const screenshotPanelObserver=new MutationObserver(()=>captureScreenshotFromExistingPanel());
+ screenshotPanelObserver.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+ captureScreenshotFromExistingPanel();
+
 const activityParams=new URLSearchParams(location.search);
 const activityGroupName=activityParams.get('groupName')||'';
 const activityGroupUrl=activityParams.get('groupUrl')||'';
