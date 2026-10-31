@@ -36,7 +36,7 @@ test("fixture data contract is represented in the website test button", () => {
   assert.match(lab, /runFixtureTest/);
   assert.match(lab, /RUN_FIXTURE_TEST/);
   assert.match(lab, /main-post-records-v1/);
-  assert.match(lab, /Sending the built-in one-post fixture through the Extension bridge/);
+  assert.match(lab, /Sending the built-in one-post fixture through the Extension bridge/);\n  assert.match(lab, /Run SAMPLE fixture only · does not scan Facebook/);\n  assert.match(lab, /FIXTURE ONLY · NOT A LIVE SCAN/);\n  assert.match(lab, /SAMPLE FIXTURE ONLY — no Facebook Group was opened or scanned/);
 });
 
 test("one Main Post is rendered as one row with main post engagement fields", () => {
