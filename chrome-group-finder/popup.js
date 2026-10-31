@@ -32,14 +32,44 @@ $("captureOne").addEventListener("click",async()=>{
  try{
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
   if(!tab?.id||!/^https:\/\/www\.facebook\.com\/groups\//i.test(tab.url||"")){
-   $("status").textContent="Open the selected Facebook Group tab first, then click Capture One Post.";
+   $("status").textContent="Open any Facebook Group tab first, then click Capture One Post.";
    return;
   }
-  // Start the original in-page 10-second countdown. The content script performs
-  // the capture only after the user has positioned the desired post.
-  await chrome.tabs.sendMessage(tab.id,{type:"CAPTURE_ONE_POST"});
-  $("status").textContent="10-second countdown started on the Facebook Group tab. Keep that tab open and finish positioning the post.";
+  // Inject the countdown directly into the selected tab. This avoids relying on
+  // a content-script listener that may not yet exist after Facebook SPA navigation.
+  await chrome.scripting.executeScript({
+   target:{tabId:tab.id},
+   func:(sourceTabId)=>{
+    const old=document.getElementById("gfp-one-post-countdown");
+    if(old)old.remove();
+    const overlay=document.createElement("div");
+    overlay.id="gfp-one-post-countdown";
+    overlay.textContent="Group Finder Pro · Capturing screenshot in 10 seconds";
+    Object.assign(overlay.style,{position:"fixed",zIndex:"2147483647",left:"50%",bottom:"24px",transform:"translateX(-50%)",padding:"12px 18px",borderRadius:"12px",background:"#172554",color:"#fff",font:"600 14px/1.4 Arial,sans-serif",boxShadow:"0 4px 24px rgba(0,0,0,.35)",pointerEvents:"none"});
+    (document.documentElement||document.body).appendChild(overlay);
+    let remaining=10;
+    const ticker=setInterval(()=>{remaining--;overlay.textContent=remaining>0?"Group Finder Pro · Capturing screenshot in "+remaining+" seconds":"Group Finder Pro · Sending screenshot…";},1000);
+    setTimeout(async()=>{
+     clearInterval(ticker);
+     overlay.remove();
+     try{
+      const result=await chrome.runtime.sendMessage({type:"CAPTURE_SCREENSHOT_TO_ACTIVITY_LAB",sourceTabId,pageUrl:location.href,groupName:document.title.replace(/\\s*\\|\\s*Facebook.*$/i,"").trim()});
+      const notice=document.createElement("div");
+      notice.textContent=result?.ok?"Group Finder Pro · Screenshot sent to Activity Lab.":"Group Finder Pro · "+(result?.error||"Screenshot could not be sent.");
+      Object.assign(notice.style,{position:"fixed",zIndex:"2147483647",left:"50%",bottom:"24px",transform:"translateX(-50%)",padding:"12px 18px",borderRadius:"12px",background:result?.ok?"#123b32":"#4a2028",color:"#fff",font:"600 14px/1.4 Arial,sans-serif",boxShadow:"0 4px 24px rgba(0,0,0,.35)",pointerEvents:"none",maxWidth:"90vw"});
+      (document.documentElement||document.body).appendChild(notice);
+      setTimeout(()=>notice.remove(),8000);
+     }catch(error){
+      const notice=document.createElement("div");notice.textContent="Group Finder Pro · Screenshot transfer failed: "+String(error);
+      Object.assign(notice.style,{position:"fixed",zIndex:"2147483647",left:"50%",bottom:"24px",transform:"translateX(-50%)",padding:"12px 18px",borderRadius:"12px",background:"#4a2028",color:"#fff",font:"600 14px/1.4 Arial,sans-serif"});
+      (document.documentElement||document.body).appendChild(notice);setTimeout(()=>notice.remove(),8000);
+     }
+    },10000);
+   },
+   args:[tab.id]
+  });
+  $("status").textContent="10-second screenshot countdown started on the Facebook Group tab.";
  }catch(error){
-  $("status").textContent="The Group tab is not ready yet. Refresh the Facebook Group tab once, then try again. "+String(error);
+  $("status").textContent="Could not start screenshot countdown: "+String(error);
  }
 });
