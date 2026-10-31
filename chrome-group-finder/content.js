@@ -128,13 +128,6 @@
     const unique=[...new Set(cards)].sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top).slice(0,2);
     return unique.map((el,index)=>{const r=el.getBoundingClientRect();return {number:index+1,width:Math.round(r.width),height:Math.round(r.height)};});
   }
-  chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
-    if(message?.type!=="DETECT_POST_COUNT")return;
-    try{
-      const posts=detectVisiblePostCards();
-      sendResponse({ok:true,found:posts.length>0,count:posts.length,label:posts.length===0?"NO POST":posts.length===1?"SINGLE POST":"DOUBLE POST",posts,source:posts.length?"visible-facebook-post-cards":"no-visible-post-card"});
-    }catch(error){sendResponse({ok:false,error:String(error)});}
-  });
   function groupUrl(raw){
     try{
       const u=new URL(raw,location.origin);
@@ -601,6 +594,15 @@
         setTimeout(()=>{clearInterval(ticker);overlay.remove();resolveManualCapture();},10000);
       };
       chrome.runtime.onMessage.addListener(captureMessageListener);
+      // Register after the legacy capture listener so existing DOM tests and
+      // other extension messages retain their original listener ordering.
+  chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
+    if(message?.type!=="DETECT_POST_COUNT")return;
+    try{
+      const posts=detectVisiblePostCards();
+      sendResponse({ok:true,found:posts.length>0,count:posts.length,label:posts.length===0?"NO POST":posts.length===1?"SINGLE POST":"DOUBLE POST",posts,source:posts.length?"visible-facebook-post-cards":"no-visible-post-card"});
+    }catch(error){sendResponse({ok:false,error:String(error)});}
+  });
       await manualCaptureReady;
       chrome.runtime.onMessage.removeListener(captureMessageListener);
       await sleep(450);
