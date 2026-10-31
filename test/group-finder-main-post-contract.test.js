@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const content = readFileSync(new URL("../chrome-group-finder/content.js", import.meta.url), "utf8");
-const lab = readFileSync(new URL("../group-finder/activity-lab.html", import.meta.url), "utf8");
 
 test("capture sends only newly discovered verified Main Posts", () => {
   assert.match(content, /const sentMainPostKeys=new Set\(\)/);
@@ -40,11 +39,11 @@ test("comment text and commenter identities are not part of the capture payload"
   assert.doesNotMatch(capture, /outerHTML|innerHTML|commenter|commentText\s*:/i);
 });
 
-test("the Activity Lab accepts structured Main Post records and ignores comment text", () => {
-  assert.match(lab, /captureMode!=='main-post-records-v1'/);
-  assert.match(lab, /data\.mainPostVerified!==true/);
-  assert.match(lab, /commentTextCaptured:false/);
-  assert.match(lab, /reactionTypes:Array\.isArray\(data\.reactionTypes\)/);
+test("extension sends the documented structured Main Post payload", () => {
+  assert.match(content, /captureMode:"main-post-records-v1"/);
+  assert.match(content, /mainPostVerified:true/);
+  assert.match(content, /commentTextCaptured:false/);
+  assert.match(content, /reactionTypes:postReactionTypes\(article\)/);
 });
 
 test("the built-in Fateh fixture matches the supplied Main Post reference", () => {
