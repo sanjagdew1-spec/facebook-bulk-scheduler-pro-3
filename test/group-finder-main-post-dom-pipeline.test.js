@@ -148,7 +148,7 @@ test("the actual deployed Activity Lab accepts the extracted batch and renders t
       return { ok: true, status: 200, json: async () => ({ accepted: true, duplicate: false }) };
     }
     if (value.endsWith("/api/activity/sessions/dom-pipeline-test")) {
-      return { ok: true, status: 200, json: async () => ({ batches: storedBatches, rawChunks: {}, uniqueChunkCount: 0, storedBytes: 0 }) };
+      return { ok: true, status: 200, json: async () => ({ batches: JSON.parse(JSON.stringify(storedBatches)), rawChunks: {}, uniqueChunkCount: 0, storedBytes: 0 }) };
     }
     throw new Error("Unexpected Activity Lab test request: " + value);
   };
