@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Group Finder Pro — Chrome Helper",
-  "version": "0.5.19",
-  "description": "Find public Facebook Groups and temporarily capture visible feed screenshots and activity evidence. Does not join groups or post.",
+  "version": "0.5.20",
+  "description": "Find public Facebook Groups and capture visible Facebook post evidence and transfer screenshot fixtures to the website for one-post recognition tests. Does not join groups or post.",
   "permissions": [
     "activeTab",
     "tabs",
