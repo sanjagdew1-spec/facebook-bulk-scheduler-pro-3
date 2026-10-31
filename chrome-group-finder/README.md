@@ -4,7 +4,7 @@ A Chrome extension that reads public Group search results and captures each veri
 
 ## Install in Chrome (Windows)
 
-1. Open this branch folder on GitHub: https://github.com/sanjagdew1-spec/facebook-bulk-scheduler-pro-3/tree/prototype/chrome-group-finder-automation/chrome-group-finder
+1. Open this branch folder on GitHub: https://github.com/sanjagdew1-spec/facebook-bulk-scheduler-pro-3/tree/prototype/group-main-post-v2-extension/chrome-group-finder
 2. Download the repository branch as a ZIP using **Code → Download ZIP**, then extract it.
 3. Open the extracted repository folder and then open `chrome-group-finder`.
 4. In Chrome, open `chrome://extensions` and turn on **Developer mode**.
@@ -17,10 +17,10 @@ A Chrome extension that reads public Group search results and captures each veri
 ## One-post Activity Lab workflow
 
 1. Install or reload this extension in Chrome.
-2. Open the Group Finder Pro Activity Lab page: https://top-facebook-group-finder-preview.onrender.com/activity-lab.html
+2. Open the Group Finder Pro Activity Lab page: https://group-finder-pro-main-post-v2-preview.onrender.com/activity-lab.html
 3. Click **Run one-post extension + website test**. This sends a deterministic fixture based on the supplied Facebook screenshot through the extension bridge and the website parser; it does not open Facebook.
 4. Confirm the report shows Fateh, the caption, 10h, 1 photo, Like 20, Comments 62, Shares 1, and Like/Haha reactions. No comment text should appear.
-5. A later real Facebook scan captures only the first Main Post whose header, caption, time, media and first Like/Comment/Share row can be verified. It sends structured fields, not the full page HTML, and stops after one verified post.
+5. A real Facebook scan captures every verified Main Post encountered in the feed, once per post. It does not require a “View more comments” control; posts with zero comments are eligible too. It sends structured fields, not full-page HTML, and stops at the 7-day boundary, page end, stalled scrolling, or the 60-step safety cap.
 
 The built-in fixture verifies the extension-to-website message contract and website processing. It is not a live Facebook DOM/OCR test; the real feed extraction still needs one final live confirmation after the fixture and code checks pass.
 
