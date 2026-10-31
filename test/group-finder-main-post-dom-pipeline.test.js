@@ -24,7 +24,7 @@ function makeRect(top, width, height) {
 function makeFacebookPostDom() {
   return `<!doctype html><html><head><title>I grew up in New York | Facebook</title></head><body>
     <main>
-      <div role="article" id="main-post">
+      <div role="article" id="main-post" data-rect="100,550,850">
         <header>
           <a href="/fateh" data-rect="140,220,28">Fateh</a>
           <abbr title="October 30, 2026 at 3:30 PM" data-rect="178,60,18">10h</abbr>
