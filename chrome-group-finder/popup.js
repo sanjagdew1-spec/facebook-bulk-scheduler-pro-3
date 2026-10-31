@@ -28,21 +28,16 @@ $("export").addEventListener("click",async()=>{
  a.href=url;a.download="group-finder-results.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 refresh();setInterval(refresh,1200);
-async function enableVisualCaptureForActiveGroup(){
+$("captureOne").addEventListener("click",async()=>{
  try{
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-  if(!tab?.id)return;
-  if(!/^https:\/\/www\.facebook\.com\/groups\//i.test(tab.url||"")){
-   $("status").textContent="To enable visual screenshots, open the Facebook Group tab created by View Activity, then click this extension icon on that Group tab. Scanning and scrolling no longer wait for screenshot permission.";
+  if(!tab?.id||!/^https:\/\/www\.facebook\.com\/groups\//i.test(tab.url||"")){
+   $("status").textContent="Open the selected Facebook Group tab first, then click Capture One Post.";
    return;
   }
-  const screenshotDataUrl=await chrome.tabs.captureVisibleTab(tab.windowId,{format:"jpeg",quality:42});
-  const result=await send({type:"ENABLE_VISUAL_CAPTURE",tabId:tab.id,screenshotDataUrl});
-  $("status").textContent=result?.ok
-   ?"Visual screenshots enabled for this Facebook Group. Keep the Group tab active while Activity Lab scans."
-   :(result?.error||"Could not enable visual screenshots for this tab.");
+  await chrome.tabs.sendMessage(tab.id,{type:"CAPTURE_ONE_POST"});
+  $("status").textContent="10-second countdown started on the Facebook Group tab. Keep that tab open and finish positioning the post.";
  }catch(error){
-  $("status").textContent="Visual screenshot permission was not available: "+String(error);
+  $("status").textContent="The Group tab is not ready yet. Refresh the Facebook Group tab once, then try again. "+String(error);
  }
-}
-enableVisualCaptureForActiveGroup();
+});
