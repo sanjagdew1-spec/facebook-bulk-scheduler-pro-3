@@ -1,0 +1,19 @@
+name: Test Group Finder Activity Lab
+on:
+  push:
+    branches:
+      - prototype/group-main-post-v2-web
+    paths:
+      - "group-finder/activity-lab.html"
+      - "test/group-finder-activity-lab-contract.test.js"
+      - ".github/workflows/test-group-finder-activity-lab.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run Activity Lab contract tests
+        run: node --test test/group-finder-activity-lab-contract.test.js
