@@ -38,10 +38,10 @@ const double=`<!doctype html><title>Group | Facebook</title><body>
 test("detects one visible Main Post and reports its dimensions only",async()=>{
  const result=await detect(single);
  assert.equal(result.ok,true);assert.equal(result.found,true);assert.equal(result.count,1);
- assert.equal(result.label,"SINGLE POST");assert.deepEqual(result.posts,[{number:1,width:540,height:760}]);
+ assert.equal(result.label,"SINGLE POST");assert.deepEqual(JSON.parse(JSON.stringify(result.posts)),[{number:1,width:540,height:760}]);
 });
 test("detects two visible Main Posts and caps the result at DOUBLE POST",async()=>{
  const result=await detect(double);
  assert.equal(result.ok,true);assert.equal(result.found,true);assert.equal(result.count,2);
- assert.equal(result.label,"DOUBLE POST");assert.deepEqual(result.posts,[{number:1,width:540,height:500},{number:2,width:540,height:430}]);
+ assert.equal(result.label,"DOUBLE POST");assert.deepEqual(JSON.parse(JSON.stringify(result.posts)),[{number:1,width:540,height:500},{number:2,width:540,height:430}]);
 });
