@@ -44,7 +44,7 @@ async function deleteActivitySession(keepalive=false){
  const id=activitySessionId;activitySessionId=null;activityExpiresAt=0;
  if(activityExpiryTimer){clearTimeout(activityExpiryTimer);activityExpiryTimer=null;}
  if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
- activityUploadQueue=Promise.resolve();activityBatchCount=0;activityRawBytes=0;activityRawHtmlChars=0;activityRawChunks=0;activityRawHtmlChars=0;activityRawChunks=0;
+ activityUploadQueue=Promise.resolve();activityBatchCount=0;activityRawBytes=0;activityRawHtmlChars=0;activityRawChunks=0;
  if(!id)return;
  try{await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id),{method:'DELETE',keepalive,headers:{'Content-Type':'application/json'}})}catch{}
 }
