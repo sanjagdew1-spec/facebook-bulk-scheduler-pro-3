@@ -76,3 +76,11 @@ test("selected post candidates are on-screen and ranked toward viewport center",
   assert.match(content, /el\.getBoundingClientRect\(\)\.bottom>0&&el\.getBoundingClientRect\(\)\.top<innerHeight/);
   assert.match(content, /const viewportCenter=innerHeight\/2/);
 });
+
+test("manual one-post completion reports safe DOM discovery diagnostics", () => {
+  assert.match(content, /roleArticleNodes,visibleRoleArticleNodes,topLevelRoleArticles/);
+  assert.match(content, /mainContentCandidates,headerTimestampCandidates,mainActionRowCandidates/);
+  assert.match(content, /scanDiagnostics:report\.scanDiagnostics/);
+  assert.match(content, /onePostMode:true/);
+  assert.match(content, /captureMode:"main-post-records-v1"/);
+});
