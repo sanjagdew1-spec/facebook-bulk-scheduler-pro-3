@@ -40,12 +40,12 @@ function renderActivityReport(report,job){
 }
 const ACTIVITY_API='https://group-finder-search-api.onrender.com';
 let activityDataLimitReached=false;
-let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityRawHtmlChars=0,activityRawChunks=0,activityRawReferences=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null,activityNoDataTimer=null,activityExpiresAt=0;
+let activitySessionId=null,activityBatchCount=0,activityRawBytes=0,activityRawHtmlChars=0,activityRawChunks=0,activityRawReferences=0,activityStructuredPosts=0,activityUploadQueue=Promise.resolve(),activityExpiryTimer=null,activityNoDataTimer=null,activityExpiresAt=0;
 async function deleteActivitySession(keepalive=false){
  const id=activitySessionId;activitySessionId=null;activityExpiresAt=0;
  if(activityExpiryTimer){clearTimeout(activityExpiryTimer);activityExpiryTimer=null;}
  if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
- activityUploadQueue=Promise.resolve();activityBatchCount=0;activityRawBytes=0;activityRawHtmlChars=0;activityRawChunks=0;activityRawReferences=0;activityRawReferences=0;
+ activityUploadQueue=Promise.resolve();activityBatchCount=0;activityRawBytes=0;activityRawHtmlChars=0;activityRawChunks=0;activityRawReferences=0;activityStructuredPosts=0;
  if(!id)return;
  try{await fetch(ACTIVITY_API+'/api/activity/sessions/'+encodeURIComponent(id),{method:'DELETE',keepalive,headers:{'Content-Type':'application/json'}})}catch{}
 }
@@ -78,7 +78,7 @@ function waitForActivityBridge(timeoutMs=10000){
  });
 }
 function activateActivitySession(sessionId){
- activitySessionId=sessionId;activityDataLimitReached=false;activityBatchCount=0;activityRawBytes=0;activityUploadQueue=Promise.resolve();activityExpiresAt=Date.now()+300000;
+ activitySessionId=sessionId;activityDataLimitReached=false;activityBatchCount=0;activityRawBytes=0;activityStructuredPosts=0;activityUploadQueue=Promise.resolve();activityExpiresAt=Date.now()+300000;
  $('activityRows').innerHTML='';$('activityScreenshots').innerHTML='<div class="activity-section-title">Visual Facebook Screenshots</div><div class="hint">Scan started. Scrolling and data collection run automatically. Click the Group Finder Pro extension icon on the Facebook Group tab if you also want visual screenshots.</div>';
  if(activityNoDataTimer)clearTimeout(activityNoDataTimer);
  activityNoDataTimer=setTimeout(()=>{
@@ -116,9 +116,10 @@ function receiveRawActivityBatch(payload){
   activityBatchCount++;
   if(data.duplicate)activityRawReferences++;
   else{activityRawBytes+=new Blob([JSON.stringify(payload)]).size;activityRawHtmlChars+=String(payload.rawHtmlChunk||'').length;if(payload.rawHtmlChunk!=null)activityRawChunks++;}
+  if(Array.isArray(payload.posts))activityStructuredPosts+=payload.posts.length;
   if(activityNoDataTimer){clearTimeout(activityNoDataTimer);activityNoDataTimer=null;}
   $('activityStatus').textContent='RECEIVING';
-  $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' scroll-chunk records; '+activityRawChunks.toLocaleString()+' unique HTML chunks + '+activityRawReferences.toLocaleString()+' reused chunk references ('+activityRawBytes.toLocaleString()+' new-chunk upload bytes). Server expiry: maximum 5 minutes.';
+  $('activitySummary').textContent='Activity Lab received '+activityBatchCount+' data batches; '+activityStructuredPosts.toLocaleString()+' structured Main Post records · '+activityRawChunks.toLocaleString()+' HTML chunks · '+activityRawBytes.toLocaleString()+' uploaded bytes. Comment text is not collected.';
  });
  return activityUploadQueue;
 }
