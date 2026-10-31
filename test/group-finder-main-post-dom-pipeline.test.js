@@ -51,8 +51,8 @@ function makeFacebookPostDom() {
   </body></html>`;
 }
 
-async function runActualContentScriptAgainstDom() {
-  const dom = new JSDOM(makeFacebookPostDom(), {
+async function runActualContentScriptAgainstDom(html = makeFacebookPostDom()) {
+  const dom = new JSDOM(html, {
     url: "https://www.facebook.com/groups/403062662125374/",
     runScripts: "outside-only"
   });
@@ -119,6 +119,28 @@ test("real content.js DOM extraction reads the reference post, not a hardcoded s
   const serialized = JSON.stringify(batch.payload);
   assert.equal(serialized.includes("Commenter Private Name"), false);
   assert.equal(serialized.includes("Private comment text"), false);
+});
+
+test("the actual extractor safely falls back to a single-post FeedUnit wrapper when the post is outside role=article", async () => {
+  const feedUnitHtml = makeFacebookPostDom().replace(
+    '<div role="article" id="main-post" data-rect="100,550,850">',
+    '<div data-pagelet="FeedUnit_0" id="main-post" data-rect="100,550,850">'
+  );
+  const { batch, complete, details } = await runActualContentScriptAgainstDom(feedUnitHtml);
+  assert.ok(batch, "FeedUnit fallback must produce a structured batch from the actual extractor");
+  const post = batch.payload.posts[0];
+  assert.equal(post.author, expected.author);
+  assert.equal(post.preview, expected.preview);
+  assert.equal(post.likes, expected.likes);
+  assert.equal(post.comments, expected.comments);
+  assert.equal(post.shares, expected.shares);
+  assert.equal(post.photoCount, 1);
+  assert.equal(post.commentTextCaptured, false);
+  assert.equal(details.scanDiagnostics.feedUnitNodes, 1);
+  assert.equal(details.scanDiagnostics.visibleFeedUnitNodes, 1);
+  assert.equal(details.scanDiagnostics.feedUnitCandidates, 1);
+  assert.equal(complete.payload.postsFound, 1);
+  assert.equal(JSON.stringify(batch.payload).includes("Commenter Private Name"), false);
 });
 
 test("the extension-to-website bridge forwards the structured batch using the Activity Lab event name", () => {
