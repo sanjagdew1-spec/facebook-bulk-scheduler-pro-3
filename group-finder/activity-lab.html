@@ -428,7 +428,7 @@ window.addEventListener('message',async event=>{
   if(!image)return false;
   const readImage=()=>{
    const src=image.currentSrc||image.src||'';
-   if(!src||!/^data:image\\//i.test(src))return;
+   if(!src||!src.toLowerCase().startsWith('data:image/'))return;
    const details=panel.querySelector('div');
    const panelText=(details?.textContent||'').trim();
    const parts=panelText.split(' · ');
