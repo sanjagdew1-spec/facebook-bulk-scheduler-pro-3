@@ -1,0 +1,8 @@
+{
+  "name": "group-finder-pro-dom-tests",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}
