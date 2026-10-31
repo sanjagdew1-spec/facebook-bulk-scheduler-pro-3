@@ -1,0 +1,20 @@
+name: Build Group Finder Pro Chrome Extension ZIP
+on:
+  push:
+    branches:
+      - prototype/chrome-group-finder-automation
+    paths:
+      - "chrome-group-finder/**"
+      - ".github/workflows/build-group-finder-extension.yml"
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package extension folder
+        run: cd chrome-group-finder && zip -r ../group-finder-pro-chrome-extension.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: group-finder-pro-chrome-extension
+          path: group-finder-pro-chrome-extension.zip
+          if-no-files-found: error
