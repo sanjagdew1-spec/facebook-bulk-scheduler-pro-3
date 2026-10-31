@@ -109,7 +109,7 @@ test("real content.js DOM extraction reads the reference post, not a hardcoded s
   assert.equal(batch.payload.captureMode, "main-post-records-v1");
   assert.equal(batch.payload.posts.length, 1);
   const post = batch.payload.posts[0];
-  for (const [key, value] of Object.entries(expected)) assert.deepEqual(post[key], value, key);
+  for (const [key, value] of Object.entries(expected)) assert.deepEqual(post[key], value, key + " · extraction=" + JSON.stringify(post.extractionDiagnostics));
   assert.equal(post.mainPostVerified, true);
   assert.equal(post.commentTextCaptured, false);
   assert.equal(complete.payload.postsFound, 1);
