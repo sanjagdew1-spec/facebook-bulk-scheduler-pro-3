@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
 import { encryptToken, decryptToken, isTokenEncryptionConfigured } from './token-crypto.js';
+import { registerPhase6WorkerBridge } from './phase6-worker-bridge.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -117,6 +118,8 @@ for (const migration of [
   'ALTER TABLE jobs ADD COLUMN is_ai_content INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE jobs ADD COLUMN customer_id TEXT',
   'ALTER TABLE jobs ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE jobs ADD COLUMN worker_claim_id TEXT',
+  'ALTER TABLE jobs ADD COLUMN worker_claimed_at TEXT',
   'ALTER TABLE pages ADD COLUMN customer_id TEXT'
 ]) {
   try { db.exec(migration); }
@@ -308,6 +311,7 @@ async function getPhase5Access(email) {
   if (!data || !data.access) throw new Error('Plan access service returned an invalid response.');
   return data.access;
 }
+registerPhase6WorkerBridge(app, { db, getPhase5Access, decryptToken, now });
 async function requirePlanAccess(req, res, next) {
   try {
     const email = req.customerAccount?.email_normalized || db.prepare('SELECT email_normalized FROM customer_accounts WHERE id=?').get(req.session.customerAccount.id)?.email_normalized;
@@ -887,7 +891,12 @@ async function runScheduledPass() {
   catch (err) { console.error('Scheduler loop failed:', err); }
   finally { schedulerPassRunning = false; }
 }
-cron.schedule(schedulerExpression, () => { void runScheduledPass(); });
+if (process.env.PHASE6_WORKER_MODE !== 'external') {
+  cron.schedule(schedulerExpression, () => { void runScheduledPass(); });
+  console.log('[scheduler-mode] Phase 3 local scheduler is active.');
+} else {
+  console.log('[scheduler-mode] Phase 3 local publishing is paused; Phase 6 claims jobs through the secure bridge.');
+}
 
 app.get('/', (_req, res) => res.type('text').send('Facebook Bulk Scheduler Pro 3 backend is running.'));
 app.listen(PORT, () => console.log(`Facebook Bulk Scheduler Pro 3 listening on ${PORT}`));
