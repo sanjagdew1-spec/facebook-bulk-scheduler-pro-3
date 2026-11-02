@@ -770,7 +770,8 @@ function describeMetaError(data, httpStatus) {
   return parts.join(' | ').slice(0, 1400);
 }
 
-const MAX_PAGE_WORKERS = Math.max(1, Math.min(10, Number.parseInt(process.env.PUBLISH_MAX_PAGE_WORKERS || '10', 10) || 10));
+// Worker capacity is per customer: each customer can use up to ten Page workers independently.
+const MAX_PAGE_WORKERS_PER_CUSTOMER = Math.max(1, Math.min(10, Number.parseInt(process.env.PUBLISH_MAX_PAGE_WORKERS_PER_CUSTOMER || '10', 10) || 10));
 const MAX_DUE_JOBS_PER_PASS = 5000;
 const MAX_JOBS_PER_PAGE_WORKER = 10;
 let publishQueueTail = Promise.resolve();
@@ -971,8 +972,8 @@ async function publishDueJobs(jobIds = null) {
     const claimedJobs = [];
     // Check Phase 5 access with bounded fan-out, then reserve each customer's quotas transactionally.
     const customerEntries = [...byCustomer.entries()];
-    for (let offset = 0; offset < customerEntries.length; offset += MAX_PAGE_WORKERS) {
-      const batch = customerEntries.slice(offset, offset + MAX_PAGE_WORKERS);
+    for (let offset = 0; offset < customerEntries.length; offset += MAX_PAGE_WORKERS_PER_CUSTOMER) {
+      const batch = customerEntries.slice(offset, offset + MAX_PAGE_WORKERS_PER_CUSTOMER);
       const prepared = await Promise.all(batch.map(async ([customerId, customerJobs]) => {
         const orderedJobs = [...customerJobs].sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at));
         return prepareCustomerJobsForPublishing(customerId, orderedJobs);
@@ -980,18 +981,29 @@ async function publishDueJobs(jobIds = null) {
       for (const accepted of prepared) claimedJobs.push(...accepted);
     }
 
+    // Separate pools per customer: no customer's Page worker or queue is shared with another customer.
     const pageGroups = groupJobsByPage(claimedJobs, MAX_JOBS_PER_PAGE_WORKER);
-    const workerResult = await runPageWorkers(pageGroups, async group => {
-      // One Page worker processes its own posts in order, loading image BLOBs one at a time.
-      for (const item of group.jobs) await publishClaimedJob(item.id);
-    }, MAX_PAGE_WORKERS);
+    const pageGroupsByCustomer = new Map();
+    for (const group of pageGroups) {
+      const customerKey = String(group.customerId || '');
+      if (!pageGroupsByCustomer.has(customerKey)) pageGroupsByCustomer.set(customerKey, []);
+      pageGroupsByCustomer.get(customerKey).push(group);
+    }
+    const customerWorkerResults = await Promise.all([...pageGroupsByCustomer.entries()].map(async ([customerId, customerGroups]) => {
+      const result = await runPageWorkers(customerGroups, async group => {
+        // One Page worker processes this customer's posts for this Page in order.
+        for (const item of group.jobs) await publishClaimedJob(item.id);
+      }, MAX_PAGE_WORKERS_PER_CUSTOMER);
+      return { customerId, ...result };
+    }));
 
     console.info('[publish-page-workers]', JSON.stringify({
       dueJobs: due.length,
       candidateJobs: candidates.length,
       claimedJobs: claimedJobs.length,
-      pageWorkers: workerResult.pageGroups,
-      activeWorkerLimit: workerResult.activeWorkerLimit,
+      customersWithWorkers: customerWorkerResults.length,
+      customerWorkerPools: customerWorkerResults.map(({ customerId, pageGroups, activeWorkerLimit }) => ({ customerId, pageGroups, activeWorkerLimit })),
+      maxWorkersPerCustomer: MAX_PAGE_WORKERS_PER_CUSTOMER,
       jobsPerPageWorker: MAX_JOBS_PER_PAGE_WORKER
     }));
   } finally {
