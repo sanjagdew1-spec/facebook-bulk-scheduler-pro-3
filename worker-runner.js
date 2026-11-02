@@ -212,9 +212,10 @@ async function processPass() {
 }
 
 const server = http.createServer((req, res) => {
-  if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
-    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    res.end(JSON.stringify({
+  // Keep the public worker URL and health URL useful even if a proxy adds a
+  // trailing slash or query string. This service exposes status only.
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    const status = JSON.stringify({
       ok: true,
       service: 'Facebook Bulk Scheduler Pro 3 Phase 6 Worker',
       mode: 'remote-single-database',
@@ -224,11 +225,13 @@ const server = http.createServer((req, res) => {
       lastPollAt,
       lastSuccessAt,
       lastError
-    }));
+    });
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(req.method === 'HEAD' ? undefined : status);
     return;
   }
-  res.writeHead(404, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ error: 'Not found' }));
+  res.writeHead(405, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify({ error: 'Method not allowed' }));
 });
 
 server.listen(PORT, '0.0.0.0', () => {
