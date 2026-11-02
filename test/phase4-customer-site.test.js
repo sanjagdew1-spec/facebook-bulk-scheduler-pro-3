@@ -36,3 +36,14 @@ test('Phase 4 landing page is responsive and does not expose owner/admin navigat
 test('customer/API server does not serve the future Phase 5 owner UI route', () => {
   assert.doesNotMatch(server, /app\.get\(['"]\/owner-admin['"]/);
 });
+
+
+test('Phase 4 restores the locked Advanced Mode workspaces and respects Phase 5 plan entitlements', async () => {
+  const scheduler = await readFile(new URL('../scheduler.html', import.meta.url), 'utf8');
+  assert.match(scheduler, /id="advancedModeToggle"/, 'Bulk Photos Advanced Mode switch must exist');
+  assert.match(scheduler, /id="bulkPagesAdvancedModeToggle"/, 'Bulk Pages Advanced Mode switch must exist');
+  assert.match(scheduler, /feature-access\?planKey=/, 'customer plan must be checked against Phase 5 feature access');
+  assert.match(scheduler, /developerAccess=allowed&&access\.role==='developer'/, 'developer access must retain Advanced Mode');
+  assert.match(scheduler, /card\.hidden=!enabled/, 'Advanced Mode controls must respect the assigned plan entitlement');
+  assert.match(scheduler, /const DEFAULT_API='https:\/\/facebook-bulk-scheduler-pro-3-p3-api\.onrender\.com'/, 'Phase 4 must remain connected to the original Phase 3 API');
+});
