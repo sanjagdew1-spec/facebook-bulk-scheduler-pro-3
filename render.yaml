@@ -1,11 +1,12 @@
 services:
-  - type: worker
+  - type: web
     name: facebook-bulk-scheduler-pro-3-p6-worker
     runtime: docker
     region: singapore
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    healthCheckPath: /health
     autoDeployTrigger: commit
     maxShutdownDelaySeconds: 300
     envVars:
