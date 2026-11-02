@@ -863,7 +863,7 @@ async function prepareCustomerJobsForPublishing(customerId, jobs) {
       if (dayKey !== null) dailyRemaining.set(dayKey, dailyRemaining.get(dayKey) - 1);
     }
   });
-  reserve();
+  reserve.immediate();
   return accepted;
 }
 
