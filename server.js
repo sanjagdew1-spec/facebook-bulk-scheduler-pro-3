@@ -944,61 +944,6 @@ async function publishClaimedJob(jobId) {
   }
 }
 
-let publishQueueTail = Promise.resolve();
-async function publishDueJobs(jobIds = null) {
-  // Keep cron and Publish Now passes mutually exclusive within this process.
-  // SQLite status claims and allowance reservations also protect overlapping service instances.
-  const previousPass = publishQueueTail;
-  let releasePass;
-  publishQueueTail = new Promise(resolve => { releasePass = resolve; });
-  await previousPass;
-  try {
-    const due = Array.isArray(jobIds) && jobIds.length
-      ? db.prepare("SELECT id,customer_id,user_id,page_id,scheduled_at,created_at FROM jobs WHERE id IN (" + jobIds.map(() => '?').join(',') + ") AND status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT " + MAX_DUE_JOBS_PER_PASS).all(...jobIds, now())
-      : db.prepare("SELECT id,customer_id,user_id,page_id,scheduled_at,created_at FROM jobs WHERE status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT " + MAX_DUE_JOBS_PER_PASS).all(now());
-    if (!due.length) return;
-
-    // Give each Page its own small queue. Only ten jobs per Page are claimed in one pass.
-    const candidateGroups = groupJobsByPage(due, MAX_JOBS_PER_PAGE_WORKER);
-    const candidates = candidateGroups.flatMap(group => group.jobs);
-    const byCustomer = new Map();
-    for (const job of candidates) {
-      const key = String(job.customer_id || '');
-      if (!byCustomer.has(key)) byCustomer.set(key, []);
-      byCustomer.get(key).push(job);
-    }
-
-    const claimedJobs = [];
-    // Check the Phase 5 plan service with bounded fan-out, then reserve quotas transactionally.
-    const customerEntries = [...byCustomer.entries()];
-    for (let offset = 0; offset < customerEntries.length; offset += MAX_PAGE_WORKERS) {
-      const batch = customerEntries.slice(offset, offset + MAX_PAGE_WORKERS);
-      const prepared = await Promise.all(batch.map(async ([customerId, customerJobs]) => ({
-        customerId,
-        customerJobs: customerJobs.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)),
-        result: await prepareCustomerJobsForPublishing(customerId, customerJobs.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)))
-      })));
-      for (const item of prepared) claimedJobs.push(...item.result);
-    }
-
-    const pageGroups = groupJobsByPage(claimedJobs, MAX_JOBS_PER_PAGE_WORKER);
-    const workerResult = await runPageWorkers(pageGroups, async group => {
-      // One Page worker processes its own posts in order, loading image BLOBs one at a time.
-      for (const item of group.jobs) await publishClaimedJob(item.id);
-    }, MAX_PAGE_WORKERS);
-
-    console.info('[publish-page-workers]', JSON.stringify({
-      dueJobs: due.length,
-      candidateJobs: candidates.length,
-      claimedJobs: claimedJobs.length,
-      pageWorkers: workerResult.pageGroups,
-      activeWorkerLimit: workerResult.activeWorkerLimit,
-      jobsPerPageWorker: MAX_JOBS_PER_PAGE_WORKER
-    }));
-  } finally {
-    releasePass();
-  }
-}
 const schedulerExpression = process.env.NODE_ENV === 'test' && process.env.TEST_SCHEDULER_CRON
   ? process.env.TEST_SCHEDULER_CRON
   : '*/15 * * * * *';
