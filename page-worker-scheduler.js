@@ -4,9 +4,11 @@ export function groupJobsByPage(jobs, maxJobsPerWorker = DEFAULT_PAGE_WORKER_JOB
   const limit = Math.max(1, Math.floor(Number(maxJobsPerWorker) || DEFAULT_PAGE_WORKER_JOB_LIMIT));
   const groups = new Map();
   for (const job of jobs || []) {
+    const customerId = String(job.customer_id || '');
     const pageId = String(job.page_id || '');
-    const key = pageId;
-    if (!groups.has(key)) groups.set(key, { key, pageId, jobs: [] });
+    // A Page ID may appear under multiple customer accounts; keep their queues isolated.
+    const key = `${customerId}::${pageId}`;
+    if (!groups.has(key)) groups.set(key, { key, customerId, pageId, jobs: [] });
     const group = groups.get(key);
     if (group.jobs.length < limit) group.jobs.push(job);
   }
