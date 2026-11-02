@@ -58,6 +58,8 @@ export function registerPhase6WorkerBridge(app, { db, getPhase5Access, decryptTo
       const due = db.prepare("SELECT j.id,j.user_id,j.page_id,j.scheduled_at,j.created_at,COALESCE(j.customer_id,(SELECT cfc.customer_id FROM customer_facebook_connections cfc WHERE cfc.facebook_user_id=j.user_id LIMIT 1)) AS customer_id FROM jobs j WHERE j.status='scheduled' AND j.scheduled_at<=? ORDER BY j.scheduled_at ASC,j.created_at ASC LIMIT ?")
         .all(now(), limit);
 
+      const orphanedJobs = due.filter(job => !job.customer_id);
+      markFailed(db, orphanedJobs, 'Customer account link is missing; scheduled post was not published.', now());
       const pageGroups = groupByCustomerPage(due), byCustomer = new Map();
       for (const group of pageGroups) {
         if (!byCustomer.has(group.customerId)) byCustomer.set(group.customerId, []);
