@@ -145,7 +145,7 @@ function startChromeBridgeSearch(payload){
 }
 
 function fmt(n){return Number(n).toLocaleString('en-US')}
-function keywords(){const base=[...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))],cities=[...selectedCities];if(base.length&&cities.length)return base.flatMap(k=>cities.map(city=>k+', '+city));if(base.length)return base;if(cities.length)return cities;return includeCountry.checked?['']:[]}
+function keywords(){const base=[...new Set(topic.value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean))],cities=[...selectedCities],cityText=cities.join(', ');if(base.length&&cityText)return base.map(k=>k+', '+cityText);if(base.length)return base;if(cityText)return [cityText];return includeCountry.checked?['']:[]}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function saved(){try{return JSON.parse(localStorage.getItem('groupFinderSaved')||'[]')}catch{return []}}
 function saveAll(rows){localStorage.setItem('groupFinderSaved',JSON.stringify(rows));renderSaved()}
