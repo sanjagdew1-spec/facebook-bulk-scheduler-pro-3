@@ -351,7 +351,8 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
     method: 'POST', headers: { ...headers, cookie: aliceCookie },
     body: JSON.stringify({ pageIds: ['page-alice'], message: 'Automated isolation test', images: [{ imageData: 'data:image/jpeg;base64,/9j/2Q==', imageMimeType: 'image/jpeg' }] })
   });
-  assert.equal(publishResponse.status, 201);
+  const publishResponseBody = await publishResponse.clone().text();
+  assert.equal(publishResponse.status, 201, 'publish-now failed: ' + publishResponseBody);
   const published = await publishResponse.json();
   assert.equal(published.jobs.length, 1);
   assert.equal(published.jobs[0].status, 'published');
