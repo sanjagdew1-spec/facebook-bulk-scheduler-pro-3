@@ -6,15 +6,15 @@ function job(id, customer_id, user_id, page_id) {
   return { id, customer_id, user_id, page_id };
 }
 
-test('creates a separate worker queue for every customer/page pair', () => {
+test('creates one worker queue per Facebook Page, including shared customer connections', () => {
   const groups = groupJobsByPage([
     job('a1', 'customer-a', 'fb-a', 'page-1'),
     job('a2', 'customer-a', 'fb-a', 'page-1'),
     job('b1', 'customer-b', 'fb-b', 'page-1'),
     job('a3', 'customer-a', 'fb-a', 'page-2')
   ]);
-  assert.equal(groups.length, 3);
-  assert.deepEqual(groups.map(group => group.jobs.map(item => item.id)), [['a1', 'a2'], ['b1'], ['a3']]);
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.map(group => group.jobs.map(item => item.id)), [['a1', 'a2', 'b1'], ['a3']]);
 });
 
 test('a page worker receives no more than ten posts in one batch', () => {
