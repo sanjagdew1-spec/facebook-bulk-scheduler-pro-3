@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
 import { encryptToken, decryptToken, isTokenEncryptionConfigured } from './token-crypto.js';
-import { registerPhase6WorkerBridge } from './phase6-worker-bridge.js';
+import { registerPhase6WorkerBridge, isPhase6WorkerHealthy } from './phase6-worker-bridge.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -887,16 +887,19 @@ let schedulerPassRunning = false;
 async function runScheduledPass() {
   if (schedulerPassRunning) return;
   schedulerPassRunning = true;
-  try { await publishDueJobs(); }
+  try {
+    // Phase 6 is the primary parallel publisher while its heartbeat is fresh.
+    // If it sleeps or goes offline, Phase 3 safely falls back to its original scheduler.
+    if (process.env.PHASE6_WORKER_MODE === 'external' && isPhase6WorkerHealthy()) return;
+    await publishDueJobs();
+  }
   catch (err) { console.error('Scheduler loop failed:', err); }
   finally { schedulerPassRunning = false; }
 }
-if (process.env.PHASE6_WORKER_MODE !== 'external') {
-  cron.schedule(schedulerExpression, () => { void runScheduledPass(); });
-  console.log('[scheduler-mode] Phase 3 local scheduler is active.');
-} else {
-  console.log('[scheduler-mode] Phase 3 local publishing is paused; Phase 6 claims jobs through the secure bridge.');
-}
+cron.schedule(schedulerExpression, () => { void runScheduledPass(); });
+console.log(process.env.PHASE6_WORKER_MODE === 'external'
+  ? '[scheduler-mode] Phase 6 is primary; Phase 3 local scheduler is the heartbeat-based fallback.'
+  : '[scheduler-mode] Phase 3 local scheduler is active.');
 
 app.get('/', (_req, res) => res.type('text').send('Facebook Bulk Scheduler Pro 3 backend is running.'));
 app.listen(PORT, () => console.log(`Facebook Bulk Scheduler Pro 3 listening on ${PORT}`));
