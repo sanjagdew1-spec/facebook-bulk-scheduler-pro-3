@@ -1,29 +1,10 @@
-import html, json, os, re, time, uuid, threading, hashlib, urllib.parse, urllib.request, urllib.error
+import html, json, os, re, time, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from xml.etree import ElementTree as ET
 
 PORT = int(os.environ.get("PORT", "10000"))
-ACTIVITY_TTL_SECONDS = 300
-ACTIVITY_MAX_SESSION_BYTES = 32 * 1024 * 1024
-ACTIVITY_MAX_TOTAL_BYTES = 64 * 1024 * 1024
-ACTIVITY_SESSIONS = {}
-ACTIVITY_LOCK = threading.RLock()
-
-def cleanup_activity_sessions():
-    now = time.time()
-    with ACTIVITY_LOCK:
-        expired = [sid for sid, item in ACTIVITY_SESSIONS.items() if now >= item["expiresAt"]]
-        for sid in expired:
-            ACTIVITY_SESSIONS.pop(sid, None)
-
-def activity_cleanup_loop():
-    while True:
-        time.sleep(1)
-        cleanup_activity_sessions()
-
-threading.Thread(target=activity_cleanup_loop, daemon=True, name="activity-session-cleanup").start()
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
@@ -316,77 +297,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path.rstrip("/")
         if path in ("", "/health"):
             return self._send(200, {"ok": True, "service": "group-finder-search-api", "sources": ["Mojeek public web index", "Brave Search public web index", "Google public web index", "Bing public web index", "DuckDuckGo public web index", "Yahoo public web index"], "limitations": "Indexed public search results only; membership/activity metrics are shown only when explicitly present in source snippets."})
-        match = re.fullmatch(r"/api/activity/sessions/([a-f0-9-]{36})", path)
-        if match:
-            sid = match.group(1)
-            cleanup_activity_sessions()
-            with ACTIVITY_LOCK:
-                item = ACTIVITY_SESSIONS.get(sid)
-                if not item:
-                    return self._send(404, {"ok": False, "error": "Temporary activity session expired or not found."})
-                chunks = item.setdefault("chunks", {})
-                item.setdefault("batchHashes", set())
-                return self._send(200, {"ok": True, "sessionId": sid, "createdAt": item["createdAt"], "expiresAt": item["expiresAt"], "batchCount": len(item["batches"]), "uniqueChunkCount": len(chunks), "storedBytes": item["bytes"], "batches": item["batches"], "rawChunks": chunks})
         return self._send(404, {"error":"Not found"})
-    def do_DELETE(self):
-        path = urllib.parse.urlparse(self.path).path.rstrip("/")
-        match = re.fullmatch(r"/api/activity/sessions/([a-f0-9-]{36})", path)
-        if not match:
-            return self._send(404, {"error":"Not found"})
-        sid = match.group(1)
-        with ACTIVITY_LOCK:
-            existed = ACTIVITY_SESSIONS.pop(sid, None) is not None
-        return self._send(200, {"ok": True, "deleted": existed})
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path.rstrip("/")
-        if path == "/api/activity/sessions":
-            sid = str(uuid.uuid4())
-            now = time.time()
-            with ACTIVITY_LOCK:
-                ACTIVITY_SESSIONS[sid] = {"createdAt": now, "expiresAt": now + ACTIVITY_TTL_SECONDS, "bytes": 0, "batches": [], "chunks": {}, "batchHashes": set()}
-            return self._send(201, {"ok": True, "sessionId": sid, "ttlSeconds": ACTIVITY_TTL_SECONDS, "expiresAt": now + ACTIVITY_TTL_SECONDS})
-        batch_match = re.fullmatch(r"/api/activity/sessions/([a-f0-9-]{36})/batches", path)
-        if batch_match:
-            sid = batch_match.group(1)
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0 or length > 1_200_000:
-                    return self._send(413, {"ok": False, "error": "Activity batch must be between 1 byte and 1.2 MB."})
-                raw_body = self.rfile.read(length)
-                payload = json.loads(raw_body or b"{}")
-                chunk = payload.get("rawHtmlChunk")
-                is_raw_chunk = isinstance(chunk, str)
-                dedupe_source = chunk if is_raw_chunk else raw_body.decode("utf-8", "replace")
-                digest = hashlib.sha256(dedupe_source.encode("utf-8") if isinstance(dedupe_source, str) else dedupe_source).hexdigest()
-                identity = (str(payload.get("scrollStep", "")), str(payload.get("rawHtmlChunkIndex", "")), digest) if is_raw_chunk else ("payload", digest)
-                with ACTIVITY_LOCK:
-                    item = ACTIVITY_SESSIONS.get(sid)
-                    if not item or time.time() >= item["expiresAt"]:
-                        ACTIVITY_SESSIONS.pop(sid, None)
-                        return self._send(410, {"ok": False, "error": "Temporary activity session expired."})
-                    item.setdefault("chunks", {})
-                    item.setdefault("batchHashes", set())
-                    if identity in item["batchHashes"]:
-                        return self._send(200, {"ok": True, "accepted": False, "duplicate": True, "batchCount": len(item["batches"]), "storedBytes": item["bytes"], "expiresAt": item["expiresAt"]})
-                    is_new_chunk = is_raw_chunk and digest not in item["chunks"]
-                    additional_bytes = len(chunk.encode("utf-8")) if is_new_chunk else (length if not is_raw_chunk else 0)
-                    total_bytes = sum(session["bytes"] for session in ACTIVITY_SESSIONS.values())
-                    if item["bytes"] + additional_bytes > ACTIVITY_MAX_SESSION_BYTES:
-                        return self._send(413, {"ok": False, "limitReached": True, "error": "This scan reached its 32 MiB unique temporary data limit. Repeated HTML chunks are stored once; scroll references do not consume the raw-data budget."})
-                    if total_bytes + additional_bytes > ACTIVITY_MAX_TOTAL_BYTES:
-                        return self._send(413, {"ok": False, "limitReached": True, "error": "The Activity Lab unique temporary data budget is full (64 MiB across active scans). Further new raw data is no longer accepted."})
-                    stored_payload = dict(payload)
-                    if is_raw_chunk:
-                        if is_new_chunk:
-                            item["chunks"][digest] = chunk
-                        stored_payload.pop("rawHtmlChunk", None)
-                        stored_payload["rawHtmlChunkHash"] = digest
-                    item["batches"].append(stored_payload)
-                    item["batchHashes"].add(identity)
-                    item["bytes"] += additional_bytes
-                return self._send(202, {"ok": True, "accepted": True, "duplicate": not is_new_chunk if is_raw_chunk else False, "batchCount": len(item["batches"]), "uniqueChunkCount": len(item["chunks"]), "storedBytes": item["bytes"], "expiresAt": item["expiresAt"]})
-            except Exception:
-                return self._send(400, {"ok": False, "error": "Invalid activity batch JSON."})
         if path != "/api/search":
             return self._send(404, {"error":"Not found"})
         try:
