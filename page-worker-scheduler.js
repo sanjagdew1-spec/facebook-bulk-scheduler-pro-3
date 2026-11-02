@@ -7,8 +7,8 @@ export function groupJobsByPage(jobs, maxJobsPerWorker = DEFAULT_PAGE_WORKER_JOB
     const customerId = String(job.customer_id || '');
     const userId = String(job.user_id || '');
     const pageId = String(job.page_id || '');
-    const key = [customerId, userId, pageId].join('\u0000');
-    if (!groups.has(key)) groups.set(key, { key, customerId, userId, pageId, jobs: [] });
+    const key = pageId;
+    if (!groups.has(key)) groups.set(key, { key, pageId, jobs: [] });
     const group = groups.get(key);
     if (group.jobs.length < limit) group.jobs.push(job);
   }
