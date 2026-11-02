@@ -1001,8 +1001,8 @@ async function publishDueJobs(jobIds = null) {
 
 const schedulerExpression = process.env.NODE_ENV === 'test' && process.env.TEST_SCHEDULER_CRON
   ? process.env.TEST_SCHEDULER_CRON
-  : '*/15 * * * * *';
-// Run a bounded page-worker pass every 15 seconds; each Page gets its own queue of up to 10 due posts.
+  : '*/5 * * * * *';
+// Check every 5 seconds; each Page gets its own queue of up to 10 due posts.
 let schedulerPassRunning = false;
 async function runScheduledPass() {
   if (schedulerPassRunning) return;
