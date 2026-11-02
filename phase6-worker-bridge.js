@@ -63,6 +63,8 @@ export function registerPhase6WorkerBridge(app, { db, getPhase5Access, decryptTo
       const pageGroups = groupByCustomerPage(due), byCustomer = new Map();
       for (const group of pageGroups) {
         if (!byCustomer.has(group.customerId)) byCustomer.set(group.customerId, []);
+        // Only claim the first ten due posts for each customer/Page pair. Remaining
+        // posts stay scheduled for the next pass, preserving sequential Page order.
         byCustomer.get(group.customerId).push(...group.jobs);
       }
 
