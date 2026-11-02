@@ -141,9 +141,9 @@ async function publishToFacebook(job) {
 }
 
 async function processOneJob(job) {
+  let postId;
   try {
-    const postId = await publishToFacebook(job);
-    await complete(job, 'published', { postId });
+    postId = await publishToFacebook(job);
   } catch (error) {
     const retryCode = safePublishTransportRetryCode(error);
     const retryCount = Number(job.retry_count || 0);
@@ -160,11 +160,21 @@ async function processOneJob(job) {
     }
 
     await complete(job, 'failed', { error: message });
+    return;
+  }
+
+  // Publishing succeeded. If the completion acknowledgement is lost, never retry
+  // the Facebook publish: that could create a duplicate post.
+  try {
+    await complete(job, 'published', { postId });
+  } catch (error) {
+    console.error('[phase6-worker] Facebook publish succeeded but Phase 3 acknowledgement failed; leaving the job claimed to avoid duplicate publishing:', String(error?.message || error));
   }
 }
 
 async function processPass() {
   lastPollAt = new Date().toISOString();
+  await phase3Request('/internal/phase6/heartbeat', {});
   const data = await phase3Request('/internal/phase6/claim', { limit: 500 });
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   if (!jobs.length) {
@@ -238,6 +248,12 @@ async function runLoop() {
   }
 }
 
+const heartbeatTimer = setInterval(() => {
+  if (!stopping) phase3Request('/internal/phase6/heartbeat', {}).catch(error => {
+    lastError = String(error?.message || error).slice(0, 500);
+  });
+}, 10000);
+
 const loopPromise = runLoop();
 
 async function shutdown(signal) {
@@ -245,6 +261,7 @@ async function shutdown(signal) {
   stopping = true;
   console.log('[phase6-worker] ' + signal + ' received; stopping new claims and draining active work.');
   await loopPromise;
+  clearInterval(heartbeatTimer);
   await new Promise(resolve => server.close(resolve));
   console.log('[phase6-worker] Shutdown complete.');
   process.exit(0);
