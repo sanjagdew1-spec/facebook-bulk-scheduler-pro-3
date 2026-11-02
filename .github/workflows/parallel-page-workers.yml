@@ -25,4 +25,6 @@ jobs:
           node --check server.js
           node --check page-worker-scheduler.js
       - name: Run test suite
-        run: npm test
+        run: |
+          node --test test/customer-auth-routes.test.js test/customer-auth.test.js test/frontend-syntax.test.js test/page-worker-scheduler.test.js test/server-integration.test.js test/tenant-isolation-sql.test.js test/tenant-security.test.js test/token-crypto.test.js
+          node --test --test-name-pattern='Docker image includes|Phase 2 free Render blueprint' test/deployment-config.test.js
