@@ -4,8 +4,6 @@ export function groupJobsByPage(jobs, maxJobsPerWorker = DEFAULT_PAGE_WORKER_JOB
   const limit = Math.max(1, Math.floor(Number(maxJobsPerWorker) || DEFAULT_PAGE_WORKER_JOB_LIMIT));
   const groups = new Map();
   for (const job of jobs || []) {
-    const customerId = String(job.customer_id || '');
-    const userId = String(job.user_id || '');
     const pageId = String(job.page_id || '');
     const key = pageId;
     if (!groups.has(key)) groups.set(key, { key, pageId, jobs: [] });
@@ -25,6 +23,8 @@ export async function runPageWorkers(groups, worker, maxWorkers = 10) {
       await worker(queue[index]);
     }
   });
-  await Promise.all(runners);
+  const results = await Promise.allSettled(runners);
+  const failed = results.find(result => result.status === 'rejected');
+  if (failed) throw failed.reason;
   return { pageGroups: queue.length, activeWorkerLimit: concurrency };
 }
