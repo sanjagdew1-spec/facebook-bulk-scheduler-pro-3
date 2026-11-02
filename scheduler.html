@@ -942,10 +942,18 @@ if(new URLSearchParams(window.location.search).get('view')==='bulk-photos')showV
       pair.appendChild(timer);
     }
     if (view && toggle) {
+      const onlySelected = document.getElementById('onlySelectedPages');
+      const allPages = document.getElementById('allGroupsSelector');
+      if (allPages) allPages.textContent = 'All Pages Selected';
       const syncMode = () => {
         view.classList.toggle('advanced-mode-off', !toggle.checked);
         view.classList.toggle('advanced-mode-on', toggle.checked);
         toggle.setAttribute('aria-expanded', String(toggle.checked));
+        if (onlySelected) {
+          onlySelected.hidden = !toggle.checked;
+          onlySelected.style.display = toggle.checked ? 'block' : 'none';
+          onlySelected.setAttribute('aria-hidden', String(!toggle.checked));
+        }
       };
       toggle.addEventListener('change', syncMode);
       syncMode();
