@@ -47,3 +47,15 @@ test('Phase 4 restores the locked Advanced Mode workspaces and respects Phase 5 
   assert.match(scheduler, /card\.hidden=!enabled/, 'Advanced Mode controls must respect the assigned plan entitlement');
   assert.match(scheduler, /const DEFAULT_API='https:\/\/facebook-bulk-scheduler-pro-3-p3-api\.onrender\.com'/, 'Phase 4 must remain connected to the original Phase 3 API');
 });
+
+
+test('Bulk Pages Only Selected Pages copies Post One selection across active slots only in Advanced Mode', async () => {
+  const scheduler = await readFile(new URL('../scheduler.html', import.meta.url), 'utf8');
+  assert.match(scheduler, /id="allGroupsSelector"[^>]*>All Pages Selected</, 'all-pages action must use the corrected label');
+  assert.match(scheduler, /id="onlySelectedPages"[^>]*>Only Selected Pages</, 'Only Selected Pages action must exist');
+  assert.match(scheduler, /#view-bulk-pages\.advanced-mode-on \.only-selected-pages\{display:block\}/, 'Only Selected Pages must appear only in Advanced Mode');
+  assert.match(scheduler, /view\.classList\.toggle\('advanced-mode-on', toggle\.checked\)/, 'Bulk Pages must track Advanced Mode visibility');
+  assert.match(scheduler, /const selectedIds=\(firstSlot\?\.pageIds\|\|\[\]\)\.map\(id=>String\(id\)\)/, 'the first Post Slot must be the source selection');
+  assert.match(scheduler, /for\(let i=1;i<active;i\+\+\)/, 'the selection must be copied to every other active Post Slot');
+  assert.match(scheduler, /onlySelectedPages'\)\.addEventListener\('click',applyOnlySelectedPagesToAllSlots\)/, 'the new button must be connected to its action');
+});
