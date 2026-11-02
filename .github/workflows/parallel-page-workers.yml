@@ -1,0 +1,28 @@
+name: Parallel Page Worker checks
+
+on:
+  push:
+    branches:
+      - "feature/parallel-page-workers-2026-11-02"
+  pull_request:
+    branches:
+      - "phase-4/owner-admin-control-panel"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm install
+      - name: Check JavaScript syntax
+        run: |
+          node --check server.js
+          node --check page-worker-scheduler.js
+      - name: Run test suite
+        run: npm test
