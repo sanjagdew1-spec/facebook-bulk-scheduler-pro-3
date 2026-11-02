@@ -9,6 +9,7 @@ const PORT = Number(process.env.PORT || 3000);
 const POLL_INTERVAL_MS = Math.max(2000, Number(process.env.PHASE6_POLL_INTERVAL_MS || 5000));
 const MAX_WORKERS_PER_CUSTOMER = Math.max(1, Math.min(10, Number.parseInt(process.env.PUBLISH_MAX_PAGE_WORKERS_PER_CUSTOMER || '10', 10) || 10));
 const MAX_JOBS_PER_PAGE = 10;
+const WORKER_ENABLED = String(process.env.PHASE6_ENABLED || 'false').toLowerCase() === 'true';
 
 if (!PHASE3_API_URL || !WORKER_SECRET) {
   throw new Error('Phase 6 requires PHASE3_API_URL and PHASE6_WORKER_SECRET. No local database is configured or opened.');
@@ -173,6 +174,7 @@ async function processOneJob(job) {
 }
 
 async function processPass() {
+  if (!WORKER_ENABLED) return;
   lastPollAt = new Date().toISOString();
   await phase3Request('/internal/phase6/heartbeat', {});
   const data = await phase3Request('/internal/phase6/claim', { limit: 500 });
@@ -216,6 +218,7 @@ const server = http.createServer((req, res) => {
       ok: true,
       service: 'Facebook Bulk Scheduler Pro 3 Phase 6 Worker',
       mode: 'remote-single-database',
+      enabled: WORKER_ENABLED,
       activePass,
       stopping,
       lastPollAt,
@@ -229,7 +232,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('[phase6-worker] Ready; Phase 3 remains the only database owner.');
+  console.log('[phase6-worker] Ready; Phase 3 remains the only database owner. Worker enabled: ' + WORKER_ENABLED);
 });
 
 async function runLoop() {
@@ -249,7 +252,7 @@ async function runLoop() {
 }
 
 const heartbeatTimer = setInterval(() => {
-  if (!stopping) phase3Request('/internal/phase6/heartbeat', {}).catch(error => {
+  if (WORKER_ENABLED && !stopping) phase3Request('/internal/phase6/heartbeat', {}).catch(error => {
     lastError = String(error?.message || error).slice(0, 500);
   });
 }, 10000);
