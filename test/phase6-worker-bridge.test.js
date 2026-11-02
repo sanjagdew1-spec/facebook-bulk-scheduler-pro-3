@@ -56,7 +56,7 @@ test('Phase 6 claim reads the existing Phase 3 SQLite records and completes the 
   process.env.PHASE6_WORKER_SECRET = 'test-secret';
   process.env.PHASE6_WORKER_MODE = 'external';
   const db = new Database(':memory:');
-  db.exec(\`
+  db.exec(`
     CREATE TABLE customer_accounts (id TEXT PRIMARY KEY,status TEXT,email_normalized TEXT);
     CREATE TABLE customer_facebook_connections (id TEXT,customer_id TEXT,facebook_user_id TEXT);
     CREATE TABLE customer_pages (customer_id TEXT,facebook_user_id TEXT,page_id TEXT,access_token TEXT);
@@ -67,7 +67,7 @@ test('Phase 6 claim reads the existing Phase 3 SQLite records and completes the 
       is_ai_content INTEGER DEFAULT 0,worker_claim_id TEXT,worker_claimed_at TEXT
     );
     CREATE TABLE job_images (job_id TEXT,position INTEGER,image_data BLOB,image_mime_type TEXT);
-  \`);
+  `);
   const timestamp = new Date().toISOString();
   db.prepare('INSERT INTO customer_accounts(id,status,email_normalized) VALUES(?,?,?)').run('customer-1','active','test@example.com');
   db.prepare('INSERT INTO customer_pages(customer_id,facebook_user_id,page_id,access_token) VALUES(?,?,?,?)')
