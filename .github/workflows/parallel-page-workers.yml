@@ -1,0 +1,30 @@
+name: Parallel Page Worker checks
+
+on:
+  push:
+    branches:
+      - "feature/parallel-page-workers-2026-11-02"
+  pull_request:
+    branches:
+      - "phase-3/ui-workflow"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm install
+      - name: Check JavaScript syntax
+        run: |
+          node --check server.js
+          node --check page-worker-scheduler.js
+      - name: Run test suite
+        run: |
+          node --test test/customer-auth-routes.test.js test/customer-auth.test.js test/frontend-syntax.test.js test/page-worker-scheduler.test.js test/server-integration.test.js test/tenant-isolation-sql.test.js test/tenant-security.test.js test/token-crypto.test.js
+          node --test --test-name-pattern='Docker image includes|Phase 2 free Render blueprint' test/deployment-config.test.js

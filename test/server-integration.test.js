@@ -230,6 +230,10 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(body));
     };
+    if (req.method === 'POST' && url.pathname === '/phase5/internal/access-check') {
+      for await (const _chunk of req) {}
+      return send(200, { access: { allowed: true, unlimited: true, role: 'developer' } });
+    }
     const tokenToUser = token => token === 'user-token-alice' ? 'alice' : token === 'user-token-bob' ? 'bob' : null;
     if (url.pathname === '/v26.0/oauth/access_token') {
       const code = url.searchParams.get('code');
@@ -280,6 +284,8 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
       SESSION_SECRET: crypto.randomBytes(48).toString('hex'),
       TOKEN_ENCRYPTION_KEY: crypto.randomBytes(32).toString('hex'),
       META_GRAPH_BASE_URL: 'http://127.0.0.1:' + graphPort + '/v26.0',
+      PHASE5_API_URL: 'http://127.0.0.1:' + graphPort + '/phase5',
+      PHASE5_ACCESS_SYNC_SECRET: 'test-phase5-access-secret',
       TEST_SCHEDULER_CRON: '* * * * * *',
       NODE_ENV: 'test'
     }
@@ -345,7 +351,8 @@ test('fake Meta OAuth, Page lookup, publishing, and customer isolation work end 
     method: 'POST', headers: { ...headers, cookie: aliceCookie },
     body: JSON.stringify({ pageIds: ['page-alice'], message: 'Automated isolation test', images: [{ imageData: 'data:image/jpeg;base64,/9j/2Q==', imageMimeType: 'image/jpeg' }] })
   });
-  assert.equal(publishResponse.status, 201);
+  const publishResponseBody = await publishResponse.clone().text();
+  assert.equal(publishResponse.status, 201, 'publish-now failed: ' + publishResponseBody);
   const published = await publishResponse.json();
   assert.equal(published.jobs.length, 1);
   assert.equal(published.jobs[0].status, 'published');
