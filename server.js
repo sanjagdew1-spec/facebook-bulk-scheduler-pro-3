@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
 import { encryptToken, decryptToken, isTokenEncryptionConfigured } from './token-crypto.js';
+import { groupJobsByPage, runPageWorkers } from './page-worker-scheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -769,107 +770,231 @@ function describeMetaError(data, httpStatus) {
   return parts.join(' | ').slice(0, 1400);
 }
 
+const MAX_PAGE_WORKERS = Math.max(1, Math.min(10, Number.parseInt(process.env.PUBLISH_MAX_PAGE_WORKERS || '10', 10) || 10));
+const MAX_DUE_JOBS_PER_PASS = 5000;
+const MAX_JOBS_PER_PAGE_WORKER = 10;
+let publishQueueTail = Promise.resolve();
+
+function markScheduledJobsFailed(jobIds, message) {
+  if (!jobIds.length) return;
+  const placeholders = jobIds.map(() => '?').join(',');
+  db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id IN (" + placeholders + ") AND status='scheduled'")
+    .run(String(message).slice(0, 1500), now(), ...jobIds);
+}
+
+async function prepareCustomerJobsForPublishing(customerId, jobs) {
+  const ids = jobs.map(job => job.id);
+  const customer = db.prepare('SELECT status,email_normalized FROM customer_accounts WHERE id=?').get(customerId);
+  if (!customer || customer.status !== 'active') {
+    markScheduledJobsFailed(ids, 'Customer account is inactive; scheduled post was not published.');
+    return [];
+  }
+
+  let access;
+  try {
+    access = await getPhase5Access(customer.email_normalized);
+  } catch {
+    const message = 'Plan access service is temporarily unavailable; this scheduled post will retry.';
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare("UPDATE jobs SET error=?,updated_at=? WHERE id IN (" + placeholders + ") AND status='scheduled'")
+      .run(message, now(), ...ids);
+    return [];
+  }
+  if (!access?.allowed) {
+    markScheduledJobsFailed(ids, access?.message || 'No active plan is assigned to this account.');
+    return [];
+  }
+
+  const limited = !access.unlimited && access.role !== 'developer';
+  const planStart = access.startsAt ? new Date(access.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
+  const totalLimitValue = access.limits?.totalPosts;
+  const dailyLimitValue = access.limits?.postsPerDay;
+  const totalLimit = totalLimitValue == null ? NaN : Number(totalLimitValue);
+  const dailyLimit = dailyLimitValue == null ? NaN : Number(dailyLimitValue);
+  const accepted = [];
+
+  // Reserve plan allowance in one SQLite transaction before page workers start.
+  // "publishing" is counted as reserved, so parallel Pages cannot overspend one customer's plan.
+  const reserve = db.transaction(() => {
+    let totalRemaining = Infinity;
+    if (limited && Number.isFinite(totalLimit)) {
+      const used = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN ('published','publishing')")
+        .get(customerId, planStart).count;
+      totalRemaining = Math.max(0, totalLimit - used);
+    }
+    const dailyRemaining = new Map();
+
+    for (const job of jobs) {
+      if (!access.unlimited && access.endsAt && Date.parse(job.scheduled_at) > Date.parse(access.endsAt)) {
+        db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='scheduled'")
+          .run('Scheduled time is beyond the active plan expiry; post was not published.', now(), job.id);
+        continue;
+      }
+      if (limited && totalRemaining <= 0) {
+        db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='scheduled'")
+          .run('Total post allowance reached; this scheduled post was not published.', now(), job.id);
+        continue;
+      }
+
+      let dayKey = null;
+      if (limited && Number.isFinite(dailyLimit)) {
+        const dayStart = new Date(job.scheduled_at);
+        dayStart.setUTCHours(0, 0, 0, 0);
+        const startIso = dayStart.toISOString();
+        const endIso = new Date(dayStart.getTime() + 86400000).toISOString();
+        dayKey = startIso;
+        if (!dailyRemaining.has(dayKey)) {
+          const used = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN ('published','publishing')")
+            .get(customerId, startIso, endIso).count;
+          dailyRemaining.set(dayKey, Math.max(0, dailyLimit - used));
+        }
+        if (dailyRemaining.get(dayKey) <= 0) {
+          db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='scheduled'")
+            .run('Daily post allowance reached; this scheduled post was not published.', now(), job.id);
+          continue;
+        }
+      }
+
+      const claimed = db.prepare("UPDATE jobs SET status='publishing',error=NULL,updated_at=? WHERE id=? AND status='scheduled'")
+        .run(now(), job.id);
+      if (!claimed.changes) continue;
+      accepted.push(job);
+      if (limited && Number.isFinite(totalLimit)) totalRemaining--;
+      if (dayKey !== null) dailyRemaining.set(dayKey, dailyRemaining.get(dayKey) - 1);
+    }
+  });
+  reserve();
+  return accepted;
+}
+
+async function publishClaimedJob(jobId) {
+  const job = db.prepare("SELECT * FROM jobs WHERE id=? AND status='publishing'").get(jobId);
+  if (!job) return;
+  try {
+    const customer = db.prepare('SELECT status FROM customer_accounts WHERE id=?').get(job.customer_id);
+    if (!customer || customer.status !== 'active') throw new Error('Customer account is inactive; scheduled post was not published.');
+    const encryptedPage = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?')
+      .get(job.customer_id, job.user_id, job.page_id);
+    if (!encryptedPage?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
+    const page = { access_token: decryptToken(encryptedPage.access_token) };
+    let response;
+    const storedPhotos = db.prepare('SELECT image_data,image_mime_type FROM job_images WHERE job_id=? ORDER BY position').all(job.id);
+    const photos = storedPhotos.length ? storedPhotos : (job.image_data && job.image_data.length ? [{ image_data: job.image_data, image_mime_type: job.image_mime_type || 'image/jpeg' }] : []);
+    if (photos.length > 1) {
+      const mediaIds = [];
+      for (let i = 0; i < photos.length; i++) {
+        const photo = photos[i];
+        const body = new FormData();
+        body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
+        body.set('published', 'false');
+        body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
+        body.set('created_with_ai', job.is_ai_content ? 'true' : 'false');
+        body.set('edited_with_ai', 'false');
+        body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
+        body.set('access_token', page.access_token);
+        const uploadResponse = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
+        const uploadData = await uploadResponse.json().catch(() => ({}));
+        if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(describeMetaError(uploadData, uploadResponse.status));
+        mediaIds.push(String(uploadData.id));
+      }
+      const feedBody = new URLSearchParams({ message: job.message || '', access_token: page.access_token, is_gen_ai: job.is_ai_content ? 'true' : 'false', created_with_ai: job.is_ai_content ? 'true' : 'false', edited_with_ai: 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE' });
+      mediaIds.forEach((mediaId, index) => feedBody.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
+      response = await fetch(graph(job.page_id + '/feed'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: feedBody });
+    } else if (photos.length === 1) {
+      const photo = photos[0];
+      const body = new FormData();
+      body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
+      body.set('caption', job.message || '');
+      body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
+      body.set('created_with_ai', job.is_ai_content ? 'true' : 'false');
+      body.set('edited_with_ai', 'false');
+      body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
+      body.set('access_token', page.access_token);
+      response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
+    } else {
+      const body = new URLSearchParams({ url: job.image_url, caption: job.message, is_gen_ai: job.is_ai_content ? 'true' : 'false', created_with_ai: job.is_ai_content ? 'true' : 'false', edited_with_ai: 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE', access_token: page.access_token });
+      response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) throw new Error(describeMetaError(data, response.status));
+    db.prepare("UPDATE jobs SET status='published',post_id=?,error=NULL,updated_at=? WHERE id=? AND status='publishing'")
+      .run(String(data.post_id || data.id || ''), now(), job.id);
+  } catch (error) {
+    const retryCode = safePublishTransportRetryCode(error);
+    const retryCount = Number(job.retry_count || 0);
+    if (retryCode && retryCount < 3) {
+      const retryAt = new Date(Date.now() + 15000 * (retryCount + 1)).toISOString();
+      const retryMessage = 'Temporary Facebook connection failure (' + retryCode + '); automatic retry ' + (retryCount + 1) + '/3 scheduled.';
+      db.prepare("UPDATE jobs SET status='scheduled',scheduled_at=?,retry_count=retry_count+1,error=?,updated_at=? WHERE id=? AND status='publishing'")
+        .run(retryAt, retryMessage, now(), job.id);
+      console.warn('Publish retry scheduled', job.id, retryCode, retryCount + 1);
+      return;
+    }
+    const causeCode = error?.cause?.code || error?.cause?.cause?.code || null;
+    const message = (String(error.message || error) + (causeCode && !retryCode ? ' (network code ' + causeCode + ')' : '')).slice(0, 1500);
+    if (error?.code === 'ACCESS_SERVICE_UNAVAILABLE') {
+      db.prepare("UPDATE jobs SET status='scheduled',error=?,updated_at=? WHERE id=? AND status='publishing'")
+        .run(message, now(), job.id);
+      console.warn('Scheduled publish deferred', job.id, message);
+      return;
+    }
+    db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='publishing'")
+      .run(message, now(), job.id);
+    console.error('Scheduled publish failed', job.id, message);
+  }
+}
+
 let publishQueueTail = Promise.resolve();
 async function publishDueJobs(jobIds = null) {
-  // Serialize cron and Publish Now work so concurrent customers cannot race for the same
-  // queue slice. Publish Now supplies its own IDs and isn't delayed by unrelated jobs.
+  // Keep cron and Publish Now passes mutually exclusive within this process.
+  // SQLite status claims and allowance reservations also protect overlapping service instances.
   const previousPass = publishQueueTail;
   let releasePass;
   publishQueueTail = new Promise(resolve => { releasePass = resolve; });
   await previousPass;
   try {
     const due = Array.isArray(jobIds) && jobIds.length
-      ? db.prepare("SELECT * FROM jobs WHERE id IN (" + jobIds.map(() => '?').join(',') + ") AND status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT 10").all(...jobIds, now())
-      : db.prepare("SELECT * FROM jobs WHERE status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT 10").all(now());
-  for (const job of due) {
-    const claimed = db.prepare("UPDATE jobs SET status='publishing',updated_at=? WHERE id=? AND status='scheduled'").run(now(), job.id);
-    if (!claimed.changes) continue;
-    try {
-      const customer = db.prepare('SELECT status,email_normalized FROM customer_accounts WHERE id=?').get(job.customer_id);
-      if (!customer || customer.status !== 'active') throw new Error('Customer account is inactive; scheduled post was not published.');
-      let currentAccess;
-      try { currentAccess = await getPhase5Access(customer.email_normalized); } catch { const retryError = new Error('Plan access service is temporarily unavailable; this scheduled post will retry.'); retryError.code = 'ACCESS_SERVICE_UNAVAILABLE'; throw retryError; }
-      if (!currentAccess.allowed) throw new Error('Plan access has expired or was removed; this scheduled post was not published.');
-      if (!currentAccess.unlimited && currentAccess.endsAt && Date.parse(job.scheduled_at) > Date.parse(currentAccess.endsAt)) throw new Error('Scheduled time is beyond the active plan expiry; post was not published.');
-      if (!currentAccess.unlimited && currentAccess.role !== 'developer') {
-        const planStart = currentAccess.startsAt ? new Date(currentAccess.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
-        const totalLimit = Number(currentAccess.limits?.totalPosts), dailyLimit = Number(currentAccess.limits?.postsPerDay);
-        if (Number.isFinite(totalLimit)) {
-          const totalPublished = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status='published'").get(job.customer_id, planStart).count;
-          if (totalPublished >= totalLimit) throw new Error('Total post allowance reached; this scheduled post was not published.');
-        }
-        if (Number.isFinite(dailyLimit)) {
-          const dayStart = new Date(job.scheduled_at); dayStart.setUTCHours(0,0,0,0);
-          const dayEnd = new Date(dayStart.getTime()+86400000).toISOString();
-          const dailyPublished = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status='published'").get(job.customer_id, dayStart.toISOString(), dayEnd).count;
-          if (dailyPublished >= dailyLimit) throw new Error('Daily post allowance reached; this scheduled post was not published.');
-        }
-      }
-      const encryptedPage = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(job.customer_id, job.user_id, job.page_id);
-      if (!encryptedPage?.access_token) throw new Error('Page token missing. Reconnect Facebook and refresh Pages.');
-      const page = { access_token: decryptToken(encryptedPage.access_token) };
-      let response;
-      const storedPhotos = db.prepare('SELECT image_data,image_mime_type FROM job_images WHERE job_id=? ORDER BY position').all(job.id);
-      const photos = storedPhotos.length ? storedPhotos : (job.image_data && job.image_data.length ? [{ image_data: job.image_data, image_mime_type: job.image_mime_type || 'image/jpeg' }] : []);
-      if (photos.length > 1) {
-        const mediaIds = [];
-        for (let i = 0; i < photos.length; i++) {
-          const photo = photos[i];
-          const body = new FormData();
-          body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
-          body.set('published', 'false');
-          body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
-          body.set('created_with_ai', job.is_ai_content ? 'true' : 'false');
-          body.set('edited_with_ai', 'false');
-          body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
-          body.set('access_token', page.access_token);
-          const uploadResponse = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
-          const uploadData = await uploadResponse.json().catch(() => ({}));
-          if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(describeMetaError(uploadData, uploadResponse.status));
-          mediaIds.push(String(uploadData.id));
-        }
-        const feedBody = new URLSearchParams({ message: job.message || '', access_token: page.access_token, is_gen_ai: job.is_ai_content ? 'true' : 'false', created_with_ai: job.is_ai_content ? 'true' : 'false', edited_with_ai: 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE' });
-        mediaIds.forEach((mediaId,index) => feedBody.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
-        response = await fetch(graph(job.page_id + '/feed'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: feedBody });
-      } else if (photos.length === 1) {
-        const photo = photos[0];
-        const body = new FormData();
-        body.set('source', new Blob([photo.image_data], { type: photo.image_mime_type || 'image/jpeg' }), photo.image_mime_type === 'image/png' ? 'upload.png' : 'upload.jpg');
-        body.set('caption', job.message || '');
-        body.set('is_gen_ai', job.is_ai_content ? 'true' : 'false');
-        body.set('created_with_ai', job.is_ai_content ? 'true' : 'false');
-        body.set('edited_with_ai', 'false');
-        body.set('provenance_type', job.is_ai_content ? 'EXPLICIT' : 'NONE');
-        body.set('access_token', page.access_token);
-        response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', body });
-      } else {
-        const body = new URLSearchParams({ url: job.image_url, caption: job.message, is_gen_ai: job.is_ai_content ? 'true' : 'false', created_with_ai: job.is_ai_content ? 'true' : 'false', edited_with_ai: 'false', provenance_type: job.is_ai_content ? 'EXPLICIT' : 'NONE', access_token: page.access_token });
-        response = await fetch(graph(job.page_id + '/photos'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
-      }
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.error) throw new Error(describeMetaError(data, response.status));
-      db.prepare("UPDATE jobs SET status='published',post_id=?,error=NULL,updated_at=? WHERE id=?").run(String(data.post_id || data.id || ''), now(), job.id);
-    } catch (e) {
-      const retryCode = safePublishTransportRetryCode(e);
-      const retryCount = Number(job.retry_count || 0);
-      if (retryCode && retryCount < 3) {
-        const retryAt = new Date(Date.now() + 15000 * (retryCount + 1)).toISOString();
-        const retryMessage = 'Temporary Facebook connection failure (' + retryCode + '); automatic retry ' + (retryCount + 1) + '/3 scheduled.';
-        db.prepare("UPDATE jobs SET status='scheduled',scheduled_at=?,retry_count=retry_count+1,error=?,updated_at=? WHERE id=?").run(retryAt, retryMessage, now(), job.id);
-        console.warn('Publish retry scheduled', job.id, retryCode, retryCount + 1);
-        continue;
-      }
-      const causeCode = e?.cause?.code || e?.cause?.cause?.code || null;
-      const message = (String(e.message || e) + (causeCode && !retryCode ? ' (network code ' + causeCode + ')' : '')).slice(0, 1500);
-      if (e?.code === 'ACCESS_SERVICE_UNAVAILABLE') {
-        db.prepare("UPDATE jobs SET status='scheduled',error=?,updated_at=? WHERE id=?").run(message, now(), job.id);
-        console.warn('Scheduled publish deferred', job.id, message);
-        continue;
-      }
-      db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=?").run(message, now(), job.id);
-      console.error('Scheduled publish failed', job.id, message);
+      ? db.prepare("SELECT id,customer_id,user_id,page_id,scheduled_at,created_at FROM jobs WHERE id IN (" + jobIds.map(() => '?').join(',') + ") AND status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT " + MAX_DUE_JOBS_PER_PASS).all(...jobIds, now())
+      : db.prepare("SELECT id,customer_id,user_id,page_id,scheduled_at,created_at FROM jobs WHERE status='scheduled' AND scheduled_at<=? ORDER BY scheduled_at LIMIT " + MAX_DUE_JOBS_PER_PASS).all(now());
+    if (!due.length) return;
+
+    // Give each Page its own small queue. Only ten jobs per Page are claimed in one pass.
+    const candidateGroups = groupJobsByPage(due, MAX_JOBS_PER_PAGE_WORKER);
+    const candidates = candidateGroups.flatMap(group => group.jobs);
+    const byCustomer = new Map();
+    for (const job of candidates) {
+      const key = String(job.customer_id || '');
+      if (!byCustomer.has(key)) byCustomer.set(key, []);
+      byCustomer.get(key).push(job);
     }
-  }
+
+    const claimedJobs = [];
+    // Check the Phase 5 plan service with bounded fan-out, then reserve quotas transactionally.
+    const customerEntries = [...byCustomer.entries()];
+    for (let offset = 0; offset < customerEntries.length; offset += MAX_PAGE_WORKERS) {
+      const batch = customerEntries.slice(offset, offset + MAX_PAGE_WORKERS);
+      const prepared = await Promise.all(batch.map(async ([customerId, customerJobs]) => ({
+        customerId,
+        customerJobs: customerJobs.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)),
+        result: await prepareCustomerJobsForPublishing(customerId, customerJobs.sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at)))
+      })));
+      for (const item of prepared) claimedJobs.push(...item.result);
+    }
+
+    const pageGroups = groupJobsByPage(claimedJobs, MAX_JOBS_PER_PAGE_WORKER);
+    const workerResult = await runPageWorkers(pageGroups, async group => {
+      // One Page worker processes its own posts in order, loading image BLOBs one at a time.
+      for (const item of group.jobs) await publishClaimedJob(item.id);
+    }, MAX_PAGE_WORKERS);
+
+    console.info('[publish-page-workers]', JSON.stringify({
+      dueJobs: due.length,
+      candidateJobs: candidates.length,
+      claimedJobs: claimedJobs.length,
+      pageWorkers: workerResult.pageGroups,
+      activeWorkerLimit: workerResult.activeWorkerLimit,
+      jobsPerPageWorker: MAX_JOBS_PER_PAGE_WORKER
+    }));
   } finally {
     releasePass();
   }
@@ -877,8 +1002,7 @@ async function publishDueJobs(jobIds = null) {
 const schedulerExpression = process.env.NODE_ENV === 'test' && process.env.TEST_SCHEDULER_CRON
   ? process.env.TEST_SCHEDULER_CRON
   : '*/15 * * * * *';
-// Run a bounded queue pass every 15 seconds, but never overlap scheduler passes.
-// Each pass still processes at most 10 jobs sequentially to protect the 512 MiB instance.
+// Run a bounded page-worker pass every 15 seconds; each Page gets its own queue of up to 10 due posts.
 let schedulerPassRunning = false;
 async function runScheduledPass() {
   if (schedulerPassRunning) return;
