@@ -6,7 +6,7 @@ on:
       - "feature/parallel-page-workers-2026-11-02"
   pull_request:
     branches:
-      - "phase-4/owner-admin-control-panel"
+      - "phase-3/ui-workflow"
 
 jobs:
   test:
