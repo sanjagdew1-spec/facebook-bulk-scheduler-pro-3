@@ -3,6 +3,11 @@ import crypto from 'node:crypto';
 const PAGE_JOB_LIMIT = 10;
 const MAX_CLAIM_LIMIT = 1000;
 const MAX_RESPONSE_IMAGE_BYTES = 30 * 1024 * 1024;
+let lastWorkerHeartbeatAt = 0;
+
+export function isPhase6WorkerHealthy() {
+  return lastWorkerHeartbeatAt > 0 && Date.now() - lastWorkerHeartbeatAt < 30000;
+}
 
 function authorized(req, secret) {
   const supplied = String(req.headers['x-phase6-worker-secret'] || '');
@@ -34,9 +39,18 @@ function markFailed(db, jobs, message, timestamp) {
 export function registerPhase6WorkerBridge(app, { db, getPhase5Access, decryptToken, now }) {
   const secret = String(process.env.PHASE6_WORKER_SECRET || '').trim();
 
+  app.post('/internal/phase6/heartbeat', (req, res) => {
+    if (!authorized(req, secret)) return res.status(401).json({ error: 'Phase 6 worker is not authorized.' });
+    if (process.env.PHASE6_WORKER_MODE !== 'external') return res.status(409).json({ error: 'External Phase 6 worker mode is not enabled.' });
+    lastWorkerHeartbeatAt = Date.now();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, timestamp: new Date(lastWorkerHeartbeatAt).toISOString() });
+  });
+
   app.post('/internal/phase6/claim', async (req, res) => {
     if (!authorized(req, secret)) return res.status(401).json({ error: 'Phase 6 worker is not authorized.' });
     if (process.env.PHASE6_WORKER_MODE !== 'external') return res.status(409).json({ error: 'External Phase 6 worker mode is not enabled.' });
+    lastWorkerHeartbeatAt = Date.now();
 
     try {
       const requestedLimit = Number(req.body?.limit || 500);
