@@ -290,7 +290,7 @@
   <div class="actions"><button class="btn" id="applyAllTimer" type="button">Apply All Timer Settings</button></div>
 </div></div>
 <div id="bulkImageSlots"></div>
-<div class="card"><div class="actions"><button class="btn" id="bulkPublishNow" type="button">Publish Now</button><button class="btn secondary" id="bulkScheduleAll" type="button">Schedule all selected photos</button></div><div class="actions"><button class="btn" id="bulkScheduleDirectFacebook" type="button">Direct Schedule Facebook</button></div><div class="actions"><button class="btn secondary" id="bulkPagesAiAll" type="button" aria-pressed="false">AI: Select All</button><button class="btn ghost" id="clearBulkImages" type="button">Clear batch</button></div><p class="footer-note">For 2–10 photos, publishing immediately is disabled intentionally: the photos are scheduled as separate posts. Page access, future-time checks, and Facebook limits still apply.</p></div>
+<div class="card"><div class="actions"><button class="btn" id="bulkPublishNow" type="button">Publish Now</button><button class="btn secondary" id="bulkScheduleAll" type="button">Schedule all selected photos</button></div><div class="actions"><button class="btn" id="bulkScheduleDirectFacebook" type="button">Direct Schedule Facebook</button></div><div id="directScheduleResults" class="notice blue" hidden aria-live="polite"></div><div class="actions"><button class="btn secondary" id="bulkPagesAiAll" type="button" aria-pressed="false">AI: Select All</button><button class="btn ghost" id="clearBulkImages" type="button">Clear batch</button></div><p class="footer-note">For 2–10 photos, publishing immediately is disabled intentionally: the photos are scheduled as separate posts. Page access, future-time checks, and Facebook limits still apply.</p></div>
 </section>
 
 <section class="view" id="view-bulk-photos">
@@ -652,9 +652,13 @@ async function submitBulkDirectFacebook(){
   // Validate and prepare only slots that still have pending Page targets.
   const slotTasks=bulkImageSlots.map((slot,slotIndex)=>({slot,slotIndex})).filter(({slot})=>Array.isArray(slot.pageIds)&&slot.pageIds.length>0);
   if(!slotTasks.length)throw Error('Select at least one pending Page across your photo posts before scheduling.');
+  const connectedPageIds=new Set(pages.map(page=>String(page.id)));
   for(const {slot,slotIndex} of slotTasks){
    if(!slot.files.length)throw Error('Choose at least one image for Photo '+(slotIndex+1)+'.');
+   const uniqueSelectedIds=new Set(slot.pageIds.map(String));
+   if(uniqueSelectedIds.size!==slot.pageIds.length)throw Error('Photo '+(slotIndex+1)+' contains a duplicate Page selection. Refresh the Page list before scheduling.');
    for(const id of slot.pageIds){
+    if(!connectedPageIds.has(String(id)))throw Error('Photo '+(slotIndex+1)+' contains a Page that is not in the current connected Page list. Refresh Pages and select it again.');
     const value=slot.pageTimes[id]||slot.time,d=new Date(value);
     if(!value||Number.isNaN(d.getTime())||d.getTime()<Date.now()+10*60*1000)
      throw Error('Facebook requires each scheduled time to be at least 10 minutes ahead. Check '+(pages.find(p=>String(p.id)===String(id))?.name||'the selected Page')+' on Photo '+(slotIndex+1)+'.');
@@ -698,7 +702,19 @@ async function submitBulkDirectFacebook(){
   confirmedCount=Number(data.scheduledCount||0);
   await api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(()=>{});
   console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,chunkTargetBytes,prepareMs,uploadAndCommitMs:Date.now()-commitStartedAt,totalMs:Date.now()-startedAt}));
-  const confirmedTargets=Array.isArray(data.results)?data.results.filter(item=>item&&item.status==='scheduled'&&item.clientPostId&&item.pageId):[];
+  const allResults=Array.isArray(data.results)?data.results:[];
+  const resultPanel=$('directScheduleResults');
+  if(resultPanel){
+   const rows=allResults.map(item=>{
+    const status=item.status==='scheduled'?'Facebook Scheduled':item.status==='unknown'?'Needs Facebook check':'Not scheduled';
+    const tone=item.status==='scheduled'?'success':item.status==='unknown'?'warning':'error';
+    const pageName=item.pageName||pages.find(page=>String(page.id)===String(item.pageId))?.name||item.pageId||'Unknown Page';
+    return '<li><b>Post '+safe(String(item.postIndex||'?'))+'</b> · '+safe(pageName)+' · <span class="tag">'+safe(status)+'</span>'+(item.error?'<small>'+safe(item.error)+'</small>':'')+'</li>';
+   }).join('');
+   resultPanel.hidden=false;
+   resultPanel.innerHTML='<b>Direct Schedule Facebook · '+allResults.filter(item=>item.status==='scheduled').length+'/'+totalTargetCount+' confirmed</b><ul>'+rows+'</ul>';
+  }
+  const confirmedTargets=allResults.filter(item=>item&&item.status==='scheduled'&&item.clientPostId&&item.pageId);
   const confirmedByPost=new Map();
   for(const item of confirmedTargets){const key=String(item.clientPostId);if(!confirmedByPost.has(key))confirmedByPost.set(key,new Set());confirmedByPost.get(key).add(String(item.pageId));}
   let clearedTargets=0,completedSlots=0;
@@ -711,10 +727,12 @@ async function submitBulkDirectFacebook(){
    if(slot.pageIds.length===0){slot.files=[];slot.caption='';slot.pageCaptions={};slot.pageTimes={};slot.manualPageTimes={};slot.time='';slot.isAiContent=false;slot.phase7ClientPostId=null;completedSlots++;}
   }
   renderBulkImageSlots();
-  if(confirmedCount>0){const history=await api('/api/jobs');jobs=history.jobs||[];renderStats();renderHistory();await refreshPostUsage();}
+  if(confirmedCount>0)await refreshPostUsage();
   if(!data.ok||confirmedCount!==totalTargetCount){
    const pending=totalTargetCount-confirmedCount;
-   toast('Facebook ने '+confirmedCount+'/'+totalTargetCount+' Page posts confirm किए। '+clearedTargets+' सफल Page selections हटाए; '+pending+' pending हैं। बाकी composer data सुरक्षित रखा है।');
+   const failed=allResults.filter(item=>item.status==='failed').length;
+   const unknown=allResults.filter(item=>item.status==='unknown').length;
+   toast('Facebook ने '+confirmedCount+'/'+totalTargetCount+' Page posts confirm किए। '+clearedTargets+' सफल Page selections हटाए; '+failed+' failed और '+unknown+' को Facebook पर जाँचना बाकी है। '+pending+' targets pending हैं।');
    return;
   }
   clearBulkPagesComposer();toast('Facebook confirmed '+confirmedCount+' scheduled Page post(s). Successful post data cleared automatically.');
