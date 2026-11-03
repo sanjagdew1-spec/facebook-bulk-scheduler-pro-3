@@ -36,6 +36,7 @@ export function registerMetaDirectScheduleRoute(app, {
       message TEXT NOT NULL DEFAULT '',
       scheduled_at TEXT NOT NULL,
       meta_post_id TEXT NOT NULL,
+      content_fingerprint TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'scheduled',
       is_ai_content INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -128,8 +129,10 @@ export function registerMetaDirectScheduleRoute(app, {
       const facebookUserId = req.session.fbUser.id;
       for (const item of prepared) {
         for (const target of item.targets) {
-          const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
+          const fingerprint = crypto.createHash('sha256').update(item.message).update(target.pageId).update(target.scheduledAt).update(Buffer.concat(item.photos.map(photo => photo.buffer))).digest('hex');
+          const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status,content_fingerprint FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
           if (existing) {
+            if (existing.content_fingerprint !== fingerprint) throw new Error('A post in this batch was already scheduled with different content. Do not retry the changed post; create a new slot instead.');
             results.push({ pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
             continue;
           }
@@ -172,10 +175,10 @@ export function registerMetaDirectScheduleRoute(app, {
 
           const rowId = crypto.randomUUID();
           db.prepare(`INSERT INTO meta_scheduled_posts
-            (id,request_id,client_post_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,status,is_ai_content,created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,'scheduled',?,?)`)
+            (id,request_id,client_post_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,content_fingerprint,status,is_ai_content,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,'scheduled',?,?)`)
             .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, page.name || 'Facebook Page',
-              item.message, target.scheduledAt, String(created.id), item.isAiContent ? 1 : 0, now());
+              item.message, target.scheduledAt, String(created.id), fingerprint, item.isAiContent ? 1 : 0, now());
           results.push({
             pageId: target.pageId, pageName: page.name || 'Facebook Page',
             scheduledAt: target.scheduledAt, metaPostId: String(created.id), status: 'scheduled'
