@@ -229,6 +229,7 @@ export function registerMetaDirectScheduleRoute(app, {
         let currentOperation = 'task_prepare';
         let fingerprint = null;
         let feedAcceptanceUnknown = false;
+        let confirmedMetaPostId = null;
         logMetaDiagnostic('info', 'page_post_started', taskContext);
         try {
         fingerprint = crypto.createHash('sha256').update(item.message).update(target.pageId).update(target.scheduledAt).update(Buffer.concat(item.photos.map(photo => photo.buffer))).digest('hex');
@@ -300,7 +301,8 @@ export function registerMetaDirectScheduleRoute(app, {
           logMetaDiagnostic('error', 'operation_rejected', { ...taskContext, operation: currentOperation, durationMs: Date.now() - feedStartedAt, httpStatus: createResponse.status, metaErrorCode: created?.error?.code ?? null, metaErrorSubcode: created?.error?.error_subcode ?? null, metaErrorType: created?.error?.type ?? null, error: diagnosticError(error) });
           throw error;
         }
-        logMetaDiagnostic('info', 'operation_succeeded', { ...taskContext, operation: currentOperation, durationMs: Date.now() - feedStartedAt, httpStatus: createResponse.status, metaPostId: String(created.id) });
+        confirmedMetaPostId = String(created.id);
+        logMetaDiagnostic('info', 'operation_succeeded', { ...taskContext, operation: currentOperation, durationMs: Date.now() - feedStartedAt, httpStatus: createResponse.status, metaPostId: confirmedMetaPostId });
 
         const rowId = crypto.randomUUID();
         db.prepare(`INSERT INTO meta_scheduled_posts
@@ -317,21 +319,23 @@ export function registerMetaDirectScheduleRoute(app, {
           const pageRecord = db.prepare('SELECT name FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?')
             .get(customerId, facebookUserId, target.pageId);
           const pageName = pageRecord?.name || 'Facebook Page';
-          const status = feedAcceptanceUnknown ? 'unknown' : 'failed';
-          if (feedAcceptanceUnknown && fingerprint) {
+          const acceptanceUnknown = feedAcceptanceUnknown || Boolean(confirmedMetaPostId);
+          const status = acceptanceUnknown ? 'unknown' : 'failed';
+          if (acceptanceUnknown && fingerprint) {
             const rowId = crypto.randomUUID();
             db.prepare(`INSERT OR IGNORE INTO meta_scheduled_posts
               (id,request_id,client_post_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,content_fingerprint,status,is_ai_content,created_at)
               VALUES(?,?,?,?,?,?,?,?,?,?,?,'unknown',?,?)`)
               .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, pageName,
-                item.message, target.scheduledAt, '', fingerprint, item.isAiContent ? 1 : 0, now());
+                item.message, target.scheduledAt, confirmedMetaPostId || '', fingerprint, item.isAiContent ? 1 : 0, now());
           }
           const failure = {
             clientPostId: item.clientPostId, postIndex: item.postIndex, pageId: target.pageId,
             pageName, scheduledAt: target.scheduledAt, status,
             operation: currentOperation,
-            error: feedAcceptanceUnknown
-              ? 'Facebook may have accepted this schedule request, but the confirmation was lost. Check Facebook before retrying.'
+            metaPostId: confirmedMetaPostId || undefined,
+            error: acceptanceUnknown
+              ? 'Facebook may have accepted this schedule request, but local confirmation was interrupted. Check Facebook before retrying.'
               : String(error?.message || error).slice(0, 500)
           };
           results.push(failure);
