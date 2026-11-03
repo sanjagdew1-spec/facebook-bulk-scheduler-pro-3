@@ -672,7 +672,7 @@ async function submitBulkDirectFacebook(){
    return {clientPostId:slot.phase7ClientPostId,message:withBulkAiDisclosure(slot.caption,slot.isAiContent),images,pageSchedules,isAiContent:Boolean(slot.isAiContent)};
   });
   totalTargetCount=prepared.reduce((n,p)=>n+p.pageSchedules.length,0);
-  if(totalTargetCount>20)throw Error('For the first verification run, Direct Schedule Facebook is temporarily limited to 20 total Page-post tasks. Your selection creates '+totalTargetCount+'.');
+  if(totalTargetCount>100)throw Error('Direct Schedule Facebook supports up to 100 total Page-post tasks per batch. Your selection creates '+totalTargetCount+'.');
   // Keep each upload request below Express's existing 50 MB JSON limit.
   // All chunks are staged first; Facebook scheduling begins only after the full batch is uploaded.
   const targetChunkBytes=36*1024*1024,hardRequestBytes=44*1024*1024;
