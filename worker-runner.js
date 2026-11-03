@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { groupJobsByPage, runPageWorkers } from './page-worker-scheduler.js';
+import { groupJobsByPage, runPageWorkers, waitUntilScheduled } from './page-worker-scheduler.js';
 
 const PHASE3_API_URL = String(process.env.PHASE3_API_URL || '').replace(/\/$/, '');
 const WORKER_SECRET = String(process.env.PHASE6_WORKER_SECRET || '').trim();
@@ -144,6 +144,15 @@ async function publishToFacebook(job) {
 async function processOneJob(job) {
   let postId;
   try {
+    // Claim and prepare the post before its target time, but never call Meta early.
+    await waitUntilScheduled(job.scheduled_at);
+    const publishStartedAt = Date.now();
+    console.info('[phase6-publish-start]', JSON.stringify({
+      jobId: job.id,
+      scheduledAt: job.scheduled_at,
+      startedAt: new Date(publishStartedAt).toISOString(),
+      lateByMs: Number.isFinite(Date.parse(job.scheduled_at)) ? Math.max(0, publishStartedAt - Date.parse(job.scheduled_at)) : null
+    }));
     postId = await publishToFacebook(job);
   } catch (error) {
     const retryCode = safePublishTransportRetryCode(error);
