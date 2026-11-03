@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 function metaError(data, status) {
   const error = data?.error || {};
@@ -10,6 +13,9 @@ function metaError(data, status) {
 }
 
 const META_DIRECT_WORKER_COUNT = 10;
+const META_STAGE_CHUNK_LIMIT = 45 * 1024 * 1024;
+const META_STAGE_BATCH_LIMIT = 350 * 1024 * 1024;
+const META_STAGE_ROOT = path.join(os.tmpdir(), 'facebook-bulk-scheduler-meta-staging');
 
 function diagnosticError(error) {
   const cause = error?.cause;
@@ -85,9 +91,20 @@ export function registerMetaDirectScheduleRoute(app, {
     );
     CREATE INDEX IF NOT EXISTS meta_scheduled_customer_time_idx
       ON meta_scheduled_posts(customer_id, scheduled_at, status);
+    CREATE TABLE IF NOT EXISTS meta_schedule_upload_batches (
+      request_id TEXT PRIMARY KEY, customer_id TEXT NOT NULL, facebook_user_id TEXT NOT NULL,
+      expected_chunks INTEGER NOT NULL, expected_posts INTEGER NOT NULL,
+      received_chunks INTEGER NOT NULL DEFAULT 0, received_posts INTEGER NOT NULL DEFAULT 0,
+      target_count INTEGER NOT NULL DEFAULT 0, total_bytes INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS meta_schedule_upload_chunks (
+      request_id TEXT NOT NULL, chunk_index INTEGER NOT NULL, payload_hash TEXT NOT NULL,
+      posts_count INTEGER NOT NULL, target_count INTEGER NOT NULL, payload_bytes INTEGER NOT NULL,
+      PRIMARY KEY(request_id, chunk_index)
+    );
   `);
 
-  app.post('/api/meta-schedule', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
+  const directScheduleHandler = async (req, res) => {
     const { posts, requestId } = req.body || {};
     if (!Array.isArray(posts) || posts.length < 1 || posts.length > 100) {
       return res.status(400).json({ error: 'A direct Facebook schedule batch must contain 1 to 100 photo posts.' });
@@ -288,5 +305,186 @@ export function registerMetaDirectScheduleRoute(app, {
       if (results.length) return res.status(207).json({ ok: false, partial: true, error: String(error?.message || error), requestedCount: targetCount, scheduledCount: results.length, results });
       return res.status(400).json({ error: String(error?.message || error) });
     }
+  };
+  app.post('/api/meta-schedule', requireTrustedOrigin, requireAuth, requirePlanAccess, directScheduleHandler);
+
+  const stageDirectory = (customerId, requestId) => path.join(META_STAGE_ROOT,
+    crypto.createHash('sha256').update(String(customerId)).digest('hex'), requestId);
+  async function clearStage(customerId, requestId) {
+    await rm(stageDirectory(customerId, requestId), { recursive: true, force: true }).catch(() => {});
+    db.prepare('DELETE FROM meta_schedule_upload_chunks WHERE request_id=?').run(requestId);
+    db.prepare('DELETE FROM meta_schedule_upload_batches WHERE request_id=? AND customer_id=?').run(requestId, customerId);
+  }
+  async function clearExpiredStages() {
+    const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    const rows = db.prepare('SELECT request_id,customer_id FROM meta_schedule_upload_batches WHERE created_at<?').all(cutoff);
+    for (const row of rows) await clearStage(row.customer_id, row.request_id);
+  }
+
+  app.post('/api/meta-schedule/chunk', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
+    const { requestId, chunkIndex, totalChunks, totalPosts, posts } = req.body || {};
+    const customerId = req.session.customerAccount.id, facebookUserId = req.session.fbUser.id;
+    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)
+      || !Number.isInteger(chunkIndex) || !Number.isInteger(totalChunks) || totalChunks < 1 || totalChunks > 100
+      || chunkIndex < 0 || chunkIndex >= totalChunks || !Number.isInteger(totalPosts) || totalPosts < 1 || totalPosts > 100
+      || !Array.isArray(posts) || !posts.length || posts.length > totalPosts) {
+      return res.status(400).json({ error: 'Invalid direct-scheduling upload chunk.' });
+    }
+    const payload = JSON.stringify(posts), payloadBytes = Buffer.byteLength(payload, 'utf8');
+    if (payloadBytes > META_STAGE_CHUNK_LIMIT) return res.status(413).json({ error: 'Upload chunk is too large. Please retry the batch.' });
+    const payloadHash = crypto.createHash('sha256').update(payload).digest('hex');
+    let chunkTargets = 0;
+    try {
+      await clearExpiredStages();
+      for (let i = 0; i < posts.length; i++) {
+        const item = posts[i] || {};
+        if (typeof item.clientPostId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(item.clientPostId)) throw new Error('Post ' + (i + 1) + ' is missing its unique post ID.');
+        const images = Array.isArray(item.images) ? item.images : [];
+        if (!images.length || images.length > 10) throw new Error('Post ' + (i + 1) + ' must contain 1 to 10 photos.');
+        let postBytes = 0;
+        for (const photo of images) {
+          const match = typeof photo?.imageData === 'string' ? photo.imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/) : null;
+          if (!match) throw new Error('Post ' + (i + 1) + ' contains an invalid JPG/PNG image.');
+          const bytes = Buffer.byteLength(match[2], 'base64');
+          if (!bytes || bytes > 6 * 1024 * 1024) throw new Error('Each image must be 6 MB or smaller.');
+          if (photo.imageMimeType && photo.imageMimeType !== match[1]) throw new Error('Image type mismatch in post ' + (i + 1) + '.');
+          postBytes += bytes;
+        }
+        if (postBytes > 30 * 1024 * 1024) throw new Error('Photos in post ' + (i + 1) + ' must total 30 MB or less.');
+        const targets = Array.isArray(item.pageSchedules) ? item.pageSchedules : [];
+        if (!targets.length) throw new Error('Select at least one Page and schedule time for post ' + (i + 1) + '.');
+        const seen = new Set();
+        for (const target of targets) {
+          const pageId = String(target?.pageId ?? ''), date = new Date(target?.scheduledAt);
+          if (!pageId || seen.has(pageId)) throw new Error('Post ' + (i + 1) + ' contains a missing or duplicate Page.');
+          seen.add(pageId);
+          if (!target?.scheduledAt || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 10 * 60 * 1000) throw new Error('Every Facebook schedule time must be at least 10 minutes in the future.');
+          chunkTargets++;
+        }
+      }
+      const batch = db.prepare('SELECT * FROM meta_schedule_upload_batches WHERE request_id=?').get(requestId);
+      if (batch && (batch.customer_id !== customerId || batch.facebook_user_id !== facebookUserId || batch.expected_chunks !== totalChunks || batch.expected_posts !== totalPosts)) {
+        return res.status(409).json({ error: 'This upload batch ID is already in use.' });
+      }
+      if (!batch) db.prepare('INSERT INTO meta_schedule_upload_batches (request_id,customer_id,facebook_user_id,expected_chunks,expected_posts,created_at) VALUES(?,?,?,?,?,?)')
+        .run(requestId, customerId, facebookUserId, totalChunks, totalPosts, now());
+      const oldChunk = db.prepare('SELECT payload_hash FROM meta_schedule_upload_chunks WHERE request_id=? AND chunk_index=?').get(requestId, chunkIndex);
+      if (oldChunk) {
+        if (oldChunk.payload_hash !== payloadHash) return res.status(409).json({ error: 'This upload chunk was already received with different content.' });
+        return res.status(200).json({ ok: true, received: true, reused: true, chunkIndex });
+      }
+      const current = db.prepare('SELECT total_bytes,target_count FROM meta_schedule_upload_batches WHERE request_id=?').get(requestId);
+      if (current.total_bytes + payloadBytes > META_STAGE_BATCH_LIMIT) return res.status(413).json({ error: 'This batch exceeds the safe temporary upload limit.' });
+      if (current.target_count + chunkTargets > 100) return res.status(400).json({ error: 'A direct Facebook schedule batch cannot exceed 100 Page posts.' });
+      const dir = stageDirectory(customerId, requestId);
+      await mkdir(dir, { recursive: true });
+      const finalPath = path.join(dir, 'chunk-' + String(chunkIndex).padStart(3, '0') + '.json');
+      await writeFile(finalPath + '.tmp', payload, 'utf8');
+      await rename(finalPath + '.tmp', finalPath);
+      try {
+        db.transaction(() => {
+          db.prepare('INSERT INTO meta_schedule_upload_chunks (request_id,chunk_index,payload_hash,posts_count,target_count,payload_bytes) VALUES(?,?,?,?,?,?)')
+            .run(requestId, chunkIndex, payloadHash, posts.length, chunkTargets, payloadBytes);
+          db.prepare('UPDATE meta_schedule_upload_batches SET received_chunks=received_chunks+1,received_posts=received_posts+?,target_count=target_count+?,total_bytes=total_bytes+? WHERE request_id=?')
+            .run(posts.length, chunkTargets, payloadBytes, requestId);
+        })();
+      } catch (error) { await rm(finalPath, { force: true }).catch(() => {}); throw error; }
+      return res.status(200).json({ ok: true, received: true, chunkIndex });
+    } catch (error) { return res.status(400).json({ error: String(error?.message || error) }); }
   });
+
+  app.post('/api/meta-schedule/abort', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
+    const requestId = req.body?.requestId, customerId = req.session.customerAccount.id;
+    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) return res.status(400).json({ error: 'A valid upload batch ID is required.' });
+    const row = db.prepare('SELECT request_id FROM meta_schedule_upload_batches WHERE request_id=? AND customer_id=?').get(requestId, customerId);
+    if (row) await clearStage(customerId, requestId);
+    return res.status(200).json({ ok: true });
+  });
+
+  app.post('/api/meta-schedule/commit', requireTrustedOrigin, requireAuth, requirePlanAccess, async (req, res) => {
+    const requestId = req.body?.requestId, customerId = req.session.customerAccount.id, facebookUserId = req.session.fbUser.id;
+    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) return res.status(400).json({ error: 'A valid upload batch ID is required.' });
+    const batch = db.prepare('SELECT * FROM meta_schedule_upload_batches WHERE request_id=? AND customer_id=? AND facebook_user_id=?').get(requestId, customerId, facebookUserId);
+    if (!batch) return res.status(404).json({ error: 'The staged batch was not found. Please start Direct Schedule Facebook again.' });
+    if (batch.received_chunks !== batch.expected_chunks || batch.received_posts !== batch.expected_posts) return res.status(409).json({ error: 'All photo chunks must finish uploading before scheduling starts.' });
+    const chunks = db.prepare('SELECT chunk_index,posts_count FROM meta_schedule_upload_chunks WHERE request_id=? ORDER BY chunk_index').all(requestId);
+    if (chunks.length !== batch.expected_chunks) return res.status(409).json({ error: 'One or more photo chunks are missing. No posts were scheduled.' });
+    const dir = stageDirectory(customerId, requestId), allPageIds = [], scheduledDates = [], duplicateKeys = new Set();
+    let totalTargets = 0;
+    try {
+      // Validate every chunk before the first Meta request, so upload/validation errors cannot leave a partial batch.
+      for (const chunk of chunks) {
+        const file = path.join(dir, 'chunk-' + String(chunk.chunk_index).padStart(3, '0') + '.json');
+        const posts = JSON.parse(await readFile(file, 'utf8'));
+        if (!Array.isArray(posts) || posts.length !== chunk.posts_count) return res.status(409).json({ error: 'A photo chunk is incomplete. No posts were scheduled.' });
+        for (const item of posts) {
+          const images = Array.isArray(item.images) ? item.images : [];
+          if (!images.length || images.length > 10) return res.status(400).json({ error: 'A staged post has an invalid photo count. No posts were scheduled.' });
+          let postBytes = 0;
+          for (const photo of images) {
+            const match = typeof photo?.imageData === 'string' ? photo.imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/) : null;
+            if (!match) return res.status(400).json({ error: 'A staged photo is invalid. No posts were scheduled.' });
+            const bytes = Buffer.byteLength(match[2], 'base64');
+            if (!bytes || bytes > 6 * 1024 * 1024) return res.status(400).json({ error: 'A staged photo exceeds 6 MB. No posts were scheduled.' });
+            postBytes += bytes;
+          }
+          if (postBytes > 30 * 1024 * 1024) return res.status(400).json({ error: 'Photos in one post exceed 30 MB. No posts were scheduled.' });
+          for (const target of item.pageSchedules || []) {
+            const pageId = String(target.pageId || ''), date = new Date(target.scheduledAt);
+            const key = String(item.clientPostId) + ':' + pageId;
+            if (!pageId || duplicateKeys.has(key) || Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 10 * 60 * 1000) return res.status(400).json({ error: 'The staged batch has a duplicate Page or invalid schedule time. No posts were scheduled.' });
+            duplicateKeys.add(key); allPageIds.push(pageId); scheduledDates.push(date); totalTargets++;
+          }
+        }
+      }
+      if (totalTargets !== batch.target_count || totalTargets > 100) return res.status(409).json({ error: 'The staged batch totals do not match. No posts were scheduled.' });
+      // Confirm every selected Page still has a usable token before scheduling any chunk.
+      for (const pageId of new Set(allPageIds)) {
+        const page = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(customerId, facebookUserId, pageId);
+        if (!page?.access_token || !decryptToken(page.access_token)) return res.status(400).json({ error: 'A selected Page is no longer connected. No posts were scheduled.' });
+      }
+      if (!enforcePlanLimits(req, res, { batchCount: totalTargets, targetCount: totalTargets, pageIds: allPageIds, scheduledDates })) return;
+      const access = req.planAccess || {};
+      if (!access.unlimited && access.role !== 'developer') {
+        const limits = access.limits || {}, planStart = access.startsAt ? new Date(access.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
+        const totalLimit = Number(limits.totalPosts);
+        if (Number.isFinite(totalLimit)) {
+          const oldJobs = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN ('scheduled','publishing','published')").get(customerId, planStart).count;
+          const metaJobs = db.prepare("SELECT COUNT(*) AS count FROM meta_scheduled_posts WHERE customer_id=? AND created_at>=? AND status='scheduled'").get(customerId, planStart).count;
+          if (oldJobs + metaJobs + totalTargets > totalLimit) return res.status(400).json({ error: 'Your ' + (access.planName || 'plan') + ' post limit would be exceeded. No posts were scheduled.' });
+        }
+        const dailyLimit = Number(limits.postsPerDay);
+        if (Number.isFinite(dailyLimit)) {
+          const byDay = scheduledDates.reduce((acc, date) => { const d = new Date(date); d.setUTCHours(0,0,0,0); const key=d.toISOString(); acc[key]=(acc[key]||0)+1; return acc; }, {});
+          for (const [dayStart,count] of Object.entries(byDay)) {
+            const dayEnd = new Date(Date.parse(dayStart)+86400000).toISOString();
+            const oldJobs = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN ('scheduled','publishing','published')").get(customerId,dayStart,dayEnd).count;
+            const metaJobs = db.prepare("SELECT COUNT(*) AS count FROM meta_scheduled_posts WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status='scheduled'").get(customerId,dayStart,dayEnd).count;
+            if (oldJobs + metaJobs + count > dailyLimit) return res.status(400).json({ error: 'Your daily post limit would be exceeded for ' + dayStart.slice(0,10) + '. No posts were scheduled.' });
+          }
+        }
+      }
+      const results = []; let failure = null;
+      for (const chunk of chunks) {
+        const file = path.join(dir, 'chunk-' + String(chunk.chunk_index).padStart(3, '0') + '.json');
+        const posts = JSON.parse(await readFile(file, 'utf8'));
+        const chunkRes = { statusCode:200, body:null, status(code){this.statusCode=code;return this;}, setHeader(){}, json(value){this.body=value;return this;} };
+        await directScheduleHandler({ ...req, body:{ requestId:requestId+'_chunk_'+chunk.chunk_index, posts } }, chunkRes);
+        if (Array.isArray(chunkRes.body?.results)) results.push(...chunkRes.body.results);
+        if (chunkRes.statusCode !== 201 || !chunkRes.body?.ok) { failure = chunkRes.body?.error || 'Facebook did not confirm every post.'; break; }
+      }
+      await clearStage(customerId, requestId);
+      if (failure) {
+        res.setHeader('Cache-Control','no-store');
+        if (results.length) return res.status(207).json({ ok:false, partial:true, error:failure, requestedCount:totalTargets, scheduledCount:results.length, results });
+        return res.status(400).json({ error:failure, requestedCount:totalTargets, scheduledCount:0, results:[] });
+      }
+      res.setHeader('Cache-Control','no-store');
+      return res.status(201).json({ ok:true, mode:'meta-direct', requestedCount:totalTargets, scheduledCount:results.length, results });
+    } catch (error) {
+      logMetaDiagnostic('error','staged_batch_commit_failed',{requestId,error:diagnosticError(error)});
+      return res.status(500).json({ error:'The staged batch could not be completed: '+String(error?.message||error) });
+    }
+  });
+
 }
