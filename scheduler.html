@@ -648,10 +648,12 @@ async function submitBulkDirectFacebook(){
  const startedAt=Date.now();let confirmedCount=0,totalTargetCount=0,batchId=null,commitStarted=false;
  try{
   if(button)button.disabled=true;if(publishButton)publishButton.disabled=true;if(oldScheduleButton)oldScheduleButton.disabled=true;
-  const slotTasks=bulkImageSlots.map((slot,slotIndex)=>({slot,slotIndex}));
+  // A slot with no selected Pages is already complete or intentionally skipped.
+  // Validate and prepare only slots that still have pending Page targets.
+  const slotTasks=bulkImageSlots.map((slot,slotIndex)=>({slot,slotIndex})).filter(({slot})=>Array.isArray(slot.pageIds)&&slot.pageIds.length>0);
+  if(!slotTasks.length)throw Error('Select at least one pending Page across your photo posts before scheduling.');
   for(const {slot,slotIndex} of slotTasks){
    if(!slot.files.length)throw Error('Choose at least one image for Photo '+(slotIndex+1)+'.');
-   if(!slot.pageIds.length)throw Error('Select at least one Page for Photo '+(slotIndex+1)+'.');
    for(const id of slot.pageIds){
     const value=slot.pageTimes[id]||slot.time,d=new Date(value);
     if(!value||Number.isNaN(d.getTime())||d.getTime()<Date.now()+10*60*1000)
