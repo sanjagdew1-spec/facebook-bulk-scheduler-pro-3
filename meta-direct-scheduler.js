@@ -13,7 +13,7 @@ function metaError(data, status) {
 }
 
 const META_DIRECT_WORKER_COUNT = 5;
-const META_DIRECT_BATCH_LIMIT = 20;
+const META_DIRECT_BATCH_LIMIT = 100;
 const META_STAGE_CHUNK_LIMIT = 45 * 1024 * 1024;
 const META_STAGE_BATCH_LIMIT = 350 * 1024 * 1024;
 const META_STAGE_ROOT = path.join(os.tmpdir(), 'facebook-bulk-scheduler-meta-staging');
@@ -135,7 +135,7 @@ export function registerMetaDirectScheduleRoute(app, {
   const directScheduleHandler = async (req, res) => {
     const { posts, requestId } = req.body || {};
     if (!Array.isArray(posts) || posts.length < 1 || posts.length > META_DIRECT_BATCH_LIMIT) {
-      return res.status(400).json({ error: 'A direct Facebook test batch is temporarily limited to 20 photo posts.' });
+      return res.status(400).json({ error: 'A direct Facebook batch supports up to 100 photo posts.' });
     }
     if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) {
       return res.status(400).json({ error: 'A valid batch request ID is required.' });
@@ -176,7 +176,7 @@ export function registerMetaDirectScheduleRoute(app, {
         prepared.push({ clientPostId: item.clientPostId, postIndex: index + 1, message: String(item.message || ''), photos, targets: normalizedTargets, isAiContent: Boolean(item.isAiContent) });
       }
 
-      if (targetCount > META_DIRECT_BATCH_LIMIT) throw new Error('The first Direct Facebook verification batch is temporarily limited to 20 total Page-post tasks.');
+      if (targetCount > META_DIRECT_BATCH_LIMIT) throw new Error('Direct Facebook batches support up to 100 total Page-post tasks.');
       const declaredBatchCount = posts.length;
       if (!enforcePlanLimits(req, res, {
         batchCount: targetCount,
@@ -449,7 +449,7 @@ export function registerMetaDirectScheduleRoute(app, {
       }
       const current = db.prepare('SELECT total_bytes,target_count FROM meta_schedule_upload_batches WHERE request_id=?').get(requestId);
       if (current.total_bytes + payloadBytes > META_STAGE_BATCH_LIMIT) return res.status(413).json({ error: 'This batch exceeds the safe temporary upload limit.' });
-      if (current.target_count + chunkTargets > META_DIRECT_BATCH_LIMIT) return res.status(400).json({ error: 'The first Direct Facebook verification batch is temporarily limited to 20 total Page-post tasks.' });
+      if (current.target_count + chunkTargets > META_DIRECT_BATCH_LIMIT) return res.status(400).json({ error: 'Direct Facebook batches support up to 100 total Page-post tasks.' });
       const dir = stageDirectory(customerId, requestId);
       await mkdir(dir, { recursive: true });
       const finalPath = path.join(dir, 'chunk-' + String(chunkIndex).padStart(3, '0') + '.json');
@@ -511,7 +511,7 @@ export function registerMetaDirectScheduleRoute(app, {
           }
         }
       }
-      if (totalTargets !== batch.target_count || totalTargets > META_DIRECT_BATCH_LIMIT) return res.status(409).json({ error: 'The staged batch totals do not match the temporary 20 Page-post test limit. No posts were scheduled.' });
+      if (totalTargets !== batch.target_count || totalTargets > META_DIRECT_BATCH_LIMIT) return res.status(409).json({ error: 'The staged batch totals do not match the 100 Page-post batch limit. No posts were scheduled.' });
       // Confirm every selected Page still has a usable token before scheduling any chunk.
       for (const pageId of new Set(allPageIds)) {
         const page = db.prepare('SELECT access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?').get(customerId, facebookUserId, pageId);
