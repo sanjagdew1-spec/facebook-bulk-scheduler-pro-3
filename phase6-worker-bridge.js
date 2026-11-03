@@ -3,6 +3,11 @@ import crypto from 'node:crypto';
 const PAGE_JOB_LIMIT = 10;
 const MAX_CLAIM_LIMIT = 1000;
 const MAX_RESPONSE_IMAGE_BYTES = 30 * 1024 * 1024;
+export const PHASE6_PREPARE_LEAD_MS = 15000;
+export function phase6ClaimCutoff(nowValue) {
+  const base = Date.parse(nowValue);
+  return new Date((Number.isFinite(base) ? base : Date.now()) + PHASE6_PREPARE_LEAD_MS).toISOString();
+}
 let lastWorkerHeartbeatAt = 0;
 
 export function isPhase6WorkerHealthy() {
@@ -55,8 +60,12 @@ export function registerPhase6WorkerBridge(app, { db, getPhase5Access, decryptTo
     try {
       const requestedLimit = Number(req.body?.limit || 500);
       const limit = Math.max(1, Math.min(MAX_CLAIM_LIMIT, Math.floor(Number.isFinite(requestedLimit) ? requestedLimit : 500)));
+      const claimNow = now();
+      // Claim posts 15 seconds before their target so tokens/images can be prepared early.
+      // Phase 6 waits until scheduled_at before sending the publish request to Meta.
+      const claimCutoff = phase6ClaimCutoff(claimNow);
       const due = db.prepare("SELECT j.id,j.user_id,j.page_id,j.scheduled_at,j.created_at,COALESCE(j.customer_id,(SELECT cfc.customer_id FROM customer_facebook_connections cfc WHERE cfc.facebook_user_id=j.user_id LIMIT 1)) AS customer_id FROM jobs j WHERE j.status='scheduled' AND j.scheduled_at<=? ORDER BY j.scheduled_at ASC,j.created_at ASC LIMIT ?")
-        .all(now(), limit);
+        .all(claimCutoff, limit);
 
       const orphanedJobs = due.filter(job => !job.customer_id);
       markFailed(db, orphanedJobs, 'Customer account link is missing; scheduled post was not published.', now());
@@ -166,7 +175,7 @@ export function registerPhase6WorkerBridge(app, { db, getPhase5Access, decryptTo
         try { pageAccessToken = encryptedPage?.access_token ? decryptToken(encryptedPage.access_token) : ''; } catch {}
         jobs.push({
           id: job.id, customer_id: item.customerId, user_id: job.user_id, page_id: job.page_id,
-          page_name: job.page_name, message: job.message || '', image_url: job.image_url || '',
+          page_name: job.page_name, scheduled_at: job.scheduled_at, message: job.message || '', image_url: job.image_url || '',
           is_ai_content: Number(job.is_ai_content || 0), retry_count: Number(job.retry_count || 0),
           claimId: item.claimId, pageAccessToken,
           photos: photos.map(photo => ({ mimeType: photo.image_mime_type || 'image/jpeg', dataBase64: Buffer.from(photo.image_data).toString('base64') }))
