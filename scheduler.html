@@ -290,7 +290,7 @@
   <div class="actions"><button class="btn" id="applyAllTimer" type="button">Apply All Timer Settings</button></div>
 </div></div>
 <div id="bulkImageSlots"></div>
-<div class="card"><div class="actions"><button class="btn" id="bulkPublishNow" type="button">Publish Now</button><button class="btn secondary" id="bulkScheduleAll" type="button">Schedule all selected photos</button><button class="btn secondary" id="bulkPagesAiAll" type="button" aria-pressed="false">AI: Select All</button><button class="btn ghost" id="clearBulkImages" type="button">Clear batch</button></div><p class="footer-note">For 2–10 photos, publishing immediately is disabled intentionally: the photos are scheduled as separate posts. Page access, future-time checks, and Facebook limits still apply.</p></div>
+<div class="card"><div class="actions"><button class="btn" id="bulkPublishNow" type="button">Publish Now</button><button class="btn secondary" id="bulkScheduleAll" type="button">Schedule all selected photos</button><button class="btn" id="bulkScheduleDirectFacebook" type="button">Schedule directly on Facebook</button><button class="btn secondary" id="bulkPagesAiAll" type="button" aria-pressed="false">AI: Select All</button><button class="btn ghost" id="clearBulkImages" type="button">Clear batch</button></div><p class="footer-note">For 2–10 photos, publishing immediately is disabled intentionally: the photos are scheduled as separate posts. Page access, future-time checks, and Facebook limits still apply.</p></div>
 </section>
 
 <section class="view" id="view-bulk-photos">
@@ -640,6 +640,42 @@ async function mapWithConcurrency(items,limit,mapper){const results=new Array(it
 async function submitBulkSchedule(){const publishButton=$('bulkPublishNow'),scheduleButton=$('bulkScheduleAll');if(scheduleButton?.disabled)return;const startedAt=Date.now();try{if(publishButton)publishButton.disabled=true;if(scheduleButton)scheduleButton.disabled=true;const slotTasks=bulkImageSlots.map((slot,slotIndex)=>({slot,slotIndex}));for(const {slot,slotIndex} of slotTasks){if(!slot.files.length)throw Error('Choose at least one image for Photo '+(slotIndex+1)+'.');if(!slot.pageIds.length)throw Error('Select at least one Page for Photo '+(slotIndex+1)+'.');for(const id of slot.pageIds){const value=slot.pageTimes[id]||slot.time;const d=new Date(value);if(!value||Number.isNaN(d.getTime())||d.getTime()<Date.now()+60000)throw Error('Set a future schedule time at least 1 minute ahead for '+(pages.find(p=>String(p.id)===String(id))?.name||'a selected Page')+' on Photo '+(slotIndex+1)+'.')}}const prepareStartedAt=Date.now();const slotResults=await mapWithConcurrency(slotTasks,5,async({slot,slotIndex})=>{const images=[];for(const file of slot.files)images.push(await fileToData(file));const pagePosts=[];for(const id of slot.pageIds){const value=slot.pageTimes[id]||slot.time;const scheduledAt=new Date(value).toISOString();pagePosts.push({message:withBulkAiDisclosure(slot.caption,slot.isAiContent),imageGroupKey:String(slotIndex),pageSchedules:[{pageId:id,scheduledAt}],scheduledAt,isAiContent:Boolean(slot.isAiContent)})}return {slotIndex,images,pagePosts}});const imageGroups={},prepared=[];for(const result of slotResults){imageGroups[String(result.slotIndex)]=result.images;prepared.push(...result.pagePosts)}const prepareMs=Date.now()-prepareStartedAt;const requestStartedAt=Date.now();const data=await api('/api/bulk-photos',{method:'POST',body:JSON.stringify({posts:prepared,imageGroups,mode:'schedule'})});const requestMs=Date.now()-requestStartedAt;console.info('[bulk-schedule-speed]',JSON.stringify({jobs:prepared.length,photoSlots:slotTasks.length,prepareMs,requestMs,totalMs:Date.now()-startedAt,schedulingWorkers:5,workerUnit:'complete-photo-slot'}));const returned=data.jobs||[];jobs=[...returned,...jobs];renderStats();renderHistory();if(data.createdCount===prepared.reduce((sum,p)=>sum+p.pageSchedules.length,0)&&returned.length===data.createdCount){clearBulkPagesComposer();await refreshPostUsage();toast('Server accepted '+returned.length+' scheduled photo/Page job(s). Bulk Pages form and schedule timings cleared.')}else{toast('Batch response was partial. Review History and retry any missing photo/Page jobs; form kept for safety.')}}catch(e){toast(e.message)}finally{if(publishButton)publishButton.disabled=false;if(scheduleButton)scheduleButton.disabled=false}}
 $('bulkPagesAiAll').addEventListener('click',()=>{const makeAi=!(bulkImageSlots.length>0&&bulkImageSlots.every(slot=>slot.isAiContent));bulkImageSlots=bulkImageSlots.map(slot=>({...slot,isAiContent:makeAi}));renderBulkImageSlots();});$('bulkPublishNow').addEventListener('click',submitBulkNow);
 $('bulkScheduleAll').addEventListener('click',submitBulkSchedule);
+$('bulkScheduleDirectFacebook').addEventListener('click',submitBulkDirectFacebook);
+
+async function submitBulkDirectFacebook(){
+ const button=$('bulkScheduleDirectFacebook'),publishButton=$('bulkPublishNow'),oldScheduleButton=$('bulkScheduleAll');
+ if(button?.disabled)return;
+ const startedAt=Date.now();
+ try{
+  if(button)button.disabled=true;if(publishButton)publishButton.disabled=true;if(oldScheduleButton)oldScheduleButton.disabled=true;
+  const slotTasks=bulkImageSlots.map((slot,slotIndex)=>({slot,slotIndex}));
+  for(const {slot,slotIndex} of slotTasks){
+   if(!slot.files.length)throw Error('Choose at least one image for Photo '+(slotIndex+1)+'.');
+   if(!slot.pageIds.length)throw Error('Select at least one Page for Photo '+(slotIndex+1)+'.');
+   for(const id of slot.pageIds){
+    const value=slot.pageTimes[id]||slot.time,d=new Date(value);
+    if(!value||Number.isNaN(d.getTime())||d.getTime()<Date.now()+10*60*1000)
+     throw Error('Facebook requires each scheduled time to be at least 10 minutes ahead. Check '+(pages.find(p=>String(p.id)===String(id))?.name||'the selected Page')+' on Photo '+(slotIndex+1)+'.');
+   }
+  }
+  const prepareStartedAt=Date.now();
+  const prepared=await mapWithConcurrency(slotTasks,5,async({slot,slotIndex})=>{
+   const images=[];for(const file of slot.files)images.push(await fileToData(file));
+   const pageSchedules=slot.pageIds.map(id=>({pageId:String(id),scheduledAt:new Date(slot.pageTimes[id]||slot.time).toISOString()}));
+   slot.phase7ClientPostId=slot.phase7ClientPostId||crypto.randomUUID();return {clientPostId:slot.phase7ClientPostId,message:withBulkAiDisclosure(slot.caption,slot.isAiContent),images,pageSchedules,isAiContent:Boolean(slot.isAiContent)};
+  });
+  const prepareMs=Date.now()-prepareStartedAt,requestStartedAt=Date.now();
+  const data=await api('/api/meta-schedule',{method:'POST',body:JSON.stringify({requestId:crypto.randomUUID(),posts:prepared})});
+  const requestMs=Date.now()-requestStartedAt;
+  console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:prepared.reduce((n,p)=>n+p.pageSchedules.length,0),prepareMs,requestMs,totalMs:Date.now()-startedAt}));
+  if(!data.ok||data.scheduledCount!==prepared.reduce((n,p)=>n+p.pageSchedules.length,0))
+   throw Error('Some posts were not confirmed by Facebook. '+(data.error||'Check the results and retry only the missing posts.'));
+  clearBulkPagesComposer();const history=await api('/api/jobs');jobs=history.jobs||[];renderStats();renderHistory();await refreshPostUsage();
+  toast('Facebook confirmed '+data.scheduledCount+' scheduled Page post(s). Meta will publish them at their selected times.');
+ }catch(error){toast(error.message)}
+ finally{if(button)button.disabled=false;if(publishButton)publishButton.disabled=false;if(oldScheduleButton)oldScheduleButton.disabled=false}
+}
+
 renderBulkImageSlots();renderGlobalTimerControls();
 let advancedSelectedPageIds=['__demo__'],advancedPageData={'__demo__':{postCount:1,posts:[newAdvancedPost()]}},advancedDropSelected=new Set(),advancedDropAll=true,advancedCaptionTarget=0,advancedPageSlots=[],advancedTimerApplied=false,advancedActiveSlotIndex=0;
 function newAdvancedPost(){return {images:[],manualImages:[],caption:'',time:'',isAiContent:false,imageCount:1};}
