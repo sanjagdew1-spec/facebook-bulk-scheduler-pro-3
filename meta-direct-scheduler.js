@@ -11,16 +11,36 @@ function metaError(data, status) {
 
 const META_DIRECT_WORKER_COUNT = 10;
 
+function diagnosticError(error) {
+  const cause = error?.cause;
+  return {
+    name: error?.name || 'Error',
+    message: String(error?.message || error || 'Unknown error').slice(0, 500),
+    code: error?.code || cause?.code || null,
+    causeName: cause?.name || null,
+    causeCode: cause?.code || null,
+    causeMessage: cause?.message ? String(cause.message).slice(0, 300) : null
+  };
+}
+
+function logMetaDiagnostic(level, event, details) {
+  const payload = { event, at: new Date().toISOString(), ...details };
+  const line = JSON.stringify(payload);
+  if (level === 'error') console.error('[meta-direct-diagnostic]', line);
+  else if (level === 'warn') console.warn('[meta-direct-diagnostic]', line);
+  else console.info('[meta-direct-diagnostic]', line);
+}
+
 async function mapWithConcurrency(items, limit, mapper) {
   let nextIndex = 0;
   let firstError = null;
   const workerCount = Math.min(limit, items.length);
-  const workers = Array.from({ length: workerCount }, async () => {
+  const workers = Array.from({ length: workerCount }, async (_, workerIndex) => {
     while (!firstError) {
       const index = nextIndex++;
       if (index >= items.length) return;
       try {
-        await mapper(items[index], index);
+        await mapper(items[index], index, workerIndex + 1);
       } catch (error) {
         if (!firstError) firstError = error;
       }
@@ -108,7 +128,7 @@ export function registerMetaDirectScheduleRoute(app, {
           scheduledDates.push(date);
           targetCount++;
         }
-        prepared.push({ clientPostId: item.clientPostId, message: String(item.message || ''), photos, targets: normalizedTargets, isAiContent: Boolean(item.isAiContent) });
+        prepared.push({ clientPostId: item.clientPostId, postIndex: index + 1, message: String(item.message || ''), photos, targets: normalizedTargets, isAiContent: Boolean(item.isAiContent) });
       }
 
       if (targetCount > 100) throw new Error('A direct Facebook schedule batch cannot exceed 100 Page posts.');
@@ -158,12 +178,18 @@ export function registerMetaDirectScheduleRoute(app, {
       }
 
       const processingStartedAt = Date.now();
-      await mapWithConcurrency(tasks, META_DIRECT_WORKER_COUNT, async ({ item, target }) => {
+      logMetaDiagnostic('info', 'batch_started', { requestId, postCount: prepared.length, pagePostJobs: tasks.length, workerCount: META_DIRECT_WORKER_COUNT });
+      await mapWithConcurrency(tasks, META_DIRECT_WORKER_COUNT, async ({ item, target }, taskIndex, workerId) => {
+        const taskStartedAt = Date.now();
+        const taskContext = { requestId, taskIndex: taskIndex + 1, workerId, postIndex: item.postIndex, clientPostId: item.clientPostId, pageId: target.pageId, scheduledAt: target.scheduledAt };
+        let currentOperation = 'task_prepare';
+        logMetaDiagnostic('info', 'page_post_started', taskContext);
         const fingerprint = crypto.createHash('sha256').update(item.message).update(target.pageId).update(target.scheduledAt).update(Buffer.concat(item.photos.map(photo => photo.buffer))).digest('hex');
         const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status,content_fingerprint FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
         if (existing) {
           if (existing.content_fingerprint !== fingerprint) throw new Error('A post in this batch was already scheduled with different content. Do not retry the changed post; create a new slot instead.');
           results.push({ pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
+          logMetaDiagnostic('info', 'page_post_reused', { ...taskContext, metaPostId: existing.meta_post_id, durationMs: Date.now() - taskStartedAt });
           return;
         }
         const page = db.prepare('SELECT name,access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?')
@@ -176,18 +202,36 @@ export function registerMetaDirectScheduleRoute(app, {
         // caption and schedule time stay together. Photo uploads remain sequential
         // inside that task; up to ten independent Page-post tasks run concurrently.
         const mediaIds = [];
-        for (const photo of item.photos) {
+        for (let photoIndex = 0; photoIndex < item.photos.length; photoIndex++) {
+          const photo = item.photos[photoIndex];
+          currentOperation = 'photo_upload';
+          const operationStartedAt = Date.now();
+          logMetaDiagnostic('info', 'operation_started', { ...taskContext, operation: currentOperation, photoIndex: photoIndex + 1, photoCount: item.photos.length });
           const form = new FormData();
           form.set('source', new Blob([photo.buffer], { type: photo.mime }), photo.mime === 'image/png' ? 'upload.png' : 'upload.jpg');
           form.set('published', 'false');
           form.set('temporary', 'true');
           form.set('access_token', pageToken);
-          const uploadResponse = await fetch(graph(target.pageId + '/photos'), { method: 'POST', body: form });
+          let uploadResponse;
+          try {
+            uploadResponse = await fetch(graph(target.pageId + '/photos'), { method: 'POST', body: form });
+          } catch (error) {
+            logMetaDiagnostic('error', 'operation_failed', { ...taskContext, operation: currentOperation, photoIndex: photoIndex + 1, durationMs: Date.now() - operationStartedAt, error: diagnosticError(error) });
+            throw error;
+          }
           const uploadData = await uploadResponse.json().catch(() => ({}));
-          if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(metaError(uploadData, uploadResponse.status));
+          if (!uploadResponse.ok || uploadData.error || !uploadData.id) {
+            const error = new Error(metaError(uploadData, uploadResponse.status));
+            logMetaDiagnostic('error', 'operation_rejected', { ...taskContext, operation: currentOperation, photoIndex: photoIndex + 1, durationMs: Date.now() - operationStartedAt, httpStatus: uploadResponse.status, metaErrorCode: uploadData?.error?.code ?? null, metaErrorSubcode: uploadData?.error?.error_subcode ?? null, metaErrorType: uploadData?.error?.type ?? null, error: diagnosticError(error) });
+            throw error;
+          }
           mediaIds.push(String(uploadData.id));
+          logMetaDiagnostic('info', 'operation_succeeded', { ...taskContext, operation: currentOperation, photoIndex: photoIndex + 1, durationMs: Date.now() - operationStartedAt, httpStatus: uploadResponse.status, mediaId: String(uploadData.id) });
         }
 
+        currentOperation = 'feed_create';
+        const feedStartedAt = Date.now();
+        logMetaDiagnostic('info', 'operation_started', { ...taskContext, operation: currentOperation, photoCount: mediaIds.length });
         const feed = new URLSearchParams({
           message: item.message,
           published: 'false',
@@ -196,13 +240,24 @@ export function registerMetaDirectScheduleRoute(app, {
           access_token: pageToken
         });
         mediaIds.forEach((mediaId, index) => feed.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
-        const createResponse = await fetch(graph(target.pageId + '/feed'), {
-          method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
-          body: feed
-        });
+        let createResponse;
+        try {
+          createResponse = await fetch(graph(target.pageId + '/feed'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: feed
+          });
+        } catch (error) {
+          logMetaDiagnostic('error', 'operation_failed', { ...taskContext, operation: currentOperation, durationMs: Date.now() - feedStartedAt, mediaCount: mediaIds.length, error: diagnosticError(error), outcome: 'facebook_acceptance_unknown' });
+          throw error;
+        }
         const created = await createResponse.json().catch(() => ({}));
-        if (!createResponse.ok || created.error || !created.id) throw new Error(metaError(created, createResponse.status));
+        if (!createResponse.ok || created.error || !created.id) {
+          const error = new Error(metaError(created, createResponse.status));
+          logMetaDiagnostic('error', 'operation_rejected', { ...taskContext, operation: currentOperation, durationMs: Date.now() - feedStartedAt, httpStatus: createResponse.status, metaErrorCode: created?.error?.code ?? null, metaErrorSubcode: created?.error?.error_subcode ?? null, metaErrorType: created?.error?.type ?? null, error: diagnosticError(error) });
+          throw error;
+        }
+        logMetaDiagnostic('info', 'operation_succeeded', { ...taskContext, operation: currentOperation, durationMs: Date.now() - feedStartedAt, httpStatus: createResponse.status, metaPostId: String(created.id) });
 
         const rowId = crypto.randomUUID();
         db.prepare(`INSERT INTO meta_scheduled_posts
@@ -214,6 +269,7 @@ export function registerMetaDirectScheduleRoute(app, {
           pageId: target.pageId, pageName: page.name || 'Facebook Page',
           scheduledAt: target.scheduledAt, metaPostId: String(created.id), status: 'scheduled'
         });
+        logMetaDiagnostic('info', 'page_post_scheduled', { ...taskContext, pageName: page.name || 'Facebook Page', metaPostId: String(created.id), durationMs: Date.now() - taskStartedAt });
       });
       console.info('[meta-direct-schedule-speed]', JSON.stringify({
         pagePostJobs: tasks.length,
@@ -222,9 +278,11 @@ export function registerMetaDirectScheduleRoute(app, {
         processingMs: Date.now() - processingStartedAt,
         workerModel: 'shared-balanced-page-post-queue'
       }));
+      logMetaDiagnostic('info', 'batch_succeeded', { requestId, pagePostJobs: tasks.length, confirmedPagePostJobs: results.length, processingMs: Date.now() - processingStartedAt });
       res.setHeader('Cache-Control', 'no-store');
       return res.status(201).json({ ok: true, mode: 'meta-direct', requestedCount: targetCount, scheduledCount: results.length, results });
     } catch (error) {
+      logMetaDiagnostic('error', 'batch_failed', { requestId, requestedPagePostJobs: targetCount, confirmedPagePostJobs: results.length, error: diagnosticError(error) });
       console.error('[meta-direct-schedule]', String(error?.message || error));
       res.setHeader('Cache-Control', 'no-store');
       if (results.length) return res.status(207).json({ ok: false, partial: true, error: String(error?.message || error), requestedCount: targetCount, scheduledCount: results.length, results });
