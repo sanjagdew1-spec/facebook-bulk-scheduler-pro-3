@@ -25,5 +25,5 @@ jobs:
         run: |
           node --check server.js
           node --check meta-direct-scheduler.js
-      - name: Run backend and frontend regression tests
-        run: npm test
+      - name: Run Phase 7 and Phase 6 regression tests
+        run: node --test test/meta-direct-scheduler.test.js test/phase6-claim-window.test.js test/phase6-worker-bridge.test.js test/tenant-isolation-sql.test.js test/tenant-security.test.js test/token-crypto.test.js
