@@ -91,7 +91,7 @@ export function registerMetaDirectScheduleRoute(app, {
 
       const declaredBatchCount = posts.length;
       if (!enforcePlanLimits(req, res, {
-        batchCount: declaredBatchCount,
+        batchCount: targetCount,
         targetCount,
         pageIds: allPageIds,
         scheduledDates
