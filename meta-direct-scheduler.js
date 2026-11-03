@@ -90,6 +90,7 @@ export function registerMetaDirectScheduleRoute(app, {
         prepared.push({ clientPostId: item.clientPostId, message: String(item.message || ''), photos, targets: normalizedTargets, isAiContent: Boolean(item.isAiContent) });
       }
 
+      if (targetCount > 100) throw new Error('A direct Facebook schedule batch cannot exceed 100 Page posts.');
       const declaredBatchCount = posts.length;
       if (!enforcePlanLimits(req, res, {
         batchCount: targetCount,
