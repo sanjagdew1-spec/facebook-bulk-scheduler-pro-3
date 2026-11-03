@@ -12,7 +12,7 @@ function metaError(data, status) {
   return parts.join(' | ');
 }
 
-const META_DIRECT_WORKER_COUNT = 10;
+const META_DIRECT_WORKER_COUNT = 5;
 const META_STAGE_CHUNK_LIMIT = 45 * 1024 * 1024;
 const META_STAGE_BATCH_LIMIT = 350 * 1024 * 1024;
 const META_STAGE_ROOT = path.join(os.tmpdir(), 'facebook-bulk-scheduler-meta-staging');
@@ -54,6 +54,33 @@ async function mapWithConcurrency(items, limit, mapper) {
   });
   await Promise.all(workers);
   if (firstError) throw firstError;
+}
+
+function retryablePhotoUploadError(error) {
+  const cause = error?.cause || {};
+  const code = String(cause.code || cause.cause?.code || error?.code || '');
+  return ['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EAI_AGAIN','UND_ERR_CONNECT_TIMEOUT'].includes(code);
+}
+
+async function uploadTemporaryPhoto(url, photo, pageToken, taskContext, photoIndex) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const form = new FormData();
+    form.set('source', new Blob([photo.buffer], { type: photo.mime }), photo.mime === 'image/png' ? 'upload.png' : 'upload.jpg');
+    form.set('published', 'false');
+    form.set('temporary', 'true');
+    form.set('access_token', pageToken);
+    try {
+      return await fetch(url, { method: 'POST', body: form });
+    } catch (error) {
+      if (!retryablePhotoUploadError(error) || attempt === 3) throw error;
+      logMetaDiagnostic('warn', 'photo_upload_retry', {
+        ...taskContext, photoIndex, attempt, nextAttempt: attempt + 1,
+        error: diagnosticError(error)
+      });
+      await new Promise(resolve => setTimeout(resolve, 750 * attempt));
+    }
+  }
+  throw new Error('Temporary photo upload failed after safe retries.');
 }
 
 function parsePhoto(photo, postIndex) {
@@ -200,12 +227,15 @@ export function registerMetaDirectScheduleRoute(app, {
         const taskStartedAt = Date.now();
         const taskContext = { requestId, taskIndex: taskIndex + 1, workerId, postIndex: item.postIndex, clientPostId: item.clientPostId, pageId: target.pageId, scheduledAt: target.scheduledAt };
         let currentOperation = 'task_prepare';
+        let fingerprint = null;
+        let feedAcceptanceUnknown = false;
         logMetaDiagnostic('info', 'page_post_started', taskContext);
-        const fingerprint = crypto.createHash('sha256').update(item.message).update(target.pageId).update(target.scheduledAt).update(Buffer.concat(item.photos.map(photo => photo.buffer))).digest('hex');
+        try {
+        fingerprint = crypto.createHash('sha256').update(item.message).update(target.pageId).update(target.scheduledAt).update(Buffer.concat(item.photos.map(photo => photo.buffer))).digest('hex');
         const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status,content_fingerprint FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
         if (existing) {
           if (existing.content_fingerprint !== fingerprint) throw new Error('A post in this batch was already scheduled with different content. Do not retry the changed post; create a new slot instead.');
-          results.push({ clientPostId: item.clientPostId, pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
+          results.push({ clientPostId: item.clientPostId, postIndex: item.postIndex, pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
           logMetaDiagnostic('info', 'page_post_reused', { ...taskContext, metaPostId: existing.meta_post_id, durationMs: Date.now() - taskStartedAt });
           return;
         }
@@ -224,14 +254,9 @@ export function registerMetaDirectScheduleRoute(app, {
           currentOperation = 'photo_upload';
           const operationStartedAt = Date.now();
           logMetaDiagnostic('info', 'operation_started', { ...taskContext, operation: currentOperation, photoIndex: photoIndex + 1, photoCount: item.photos.length });
-          const form = new FormData();
-          form.set('source', new Blob([photo.buffer], { type: photo.mime }), photo.mime === 'image/png' ? 'upload.png' : 'upload.jpg');
-          form.set('published', 'false');
-          form.set('temporary', 'true');
-          form.set('access_token', pageToken);
           let uploadResponse;
           try {
-            uploadResponse = await fetch(graph(target.pageId + '/photos'), { method: 'POST', body: form });
+            uploadResponse = await uploadTemporaryPhoto(graph(target.pageId + '/photos'), photo, pageToken, taskContext, photoIndex + 1);
           } catch (error) {
             logMetaDiagnostic('error', 'operation_failed', { ...taskContext, operation: currentOperation, photoIndex: photoIndex + 1, durationMs: Date.now() - operationStartedAt, error: diagnosticError(error) });
             throw error;
@@ -265,6 +290,7 @@ export function registerMetaDirectScheduleRoute(app, {
             body: feed
           });
         } catch (error) {
+          feedAcceptanceUnknown = true;
           logMetaDiagnostic('error', 'operation_failed', { ...taskContext, operation: currentOperation, durationMs: Date.now() - feedStartedAt, mediaCount: mediaIds.length, error: diagnosticError(error), outcome: 'facebook_acceptance_unknown' });
           throw error;
         }
@@ -283,10 +309,37 @@ export function registerMetaDirectScheduleRoute(app, {
           .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, page.name || 'Facebook Page',
             item.message, target.scheduledAt, String(created.id), fingerprint, item.isAiContent ? 1 : 0, now());
         results.push({
-          clientPostId: item.clientPostId, pageId: target.pageId, pageName: page.name || 'Facebook Page',
+          clientPostId: item.clientPostId, postIndex: item.postIndex, pageId: target.pageId, pageName: page.name || 'Facebook Page',
           scheduledAt: target.scheduledAt, metaPostId: String(created.id), status: 'scheduled'
         });
         logMetaDiagnostic('info', 'page_post_scheduled', { ...taskContext, pageName: page.name || 'Facebook Page', metaPostId: String(created.id), durationMs: Date.now() - taskStartedAt });
+        } catch (error) {
+          const pageRecord = db.prepare('SELECT name FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?')
+            .get(customerId, facebookUserId, target.pageId);
+          const pageName = pageRecord?.name || 'Facebook Page';
+          const status = feedAcceptanceUnknown ? 'unknown' : 'failed';
+          if (feedAcceptanceUnknown && fingerprint) {
+            const rowId = crypto.randomUUID();
+            db.prepare(`INSERT OR IGNORE INTO meta_scheduled_posts
+              (id,request_id,client_post_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,content_fingerprint,status,is_ai_content,created_at)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?,'unknown',?,?)`)
+              .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, pageName,
+                item.message, target.scheduledAt, '', fingerprint, item.isAiContent ? 1 : 0, now());
+          }
+          const failure = {
+            clientPostId: item.clientPostId, postIndex: item.postIndex, pageId: target.pageId,
+            pageName, scheduledAt: target.scheduledAt, status,
+            operation: currentOperation,
+            error: feedAcceptanceUnknown
+              ? 'Facebook may have accepted this schedule request, but the confirmation was lost. Check Facebook before retrying.'
+              : String(error?.message || error).slice(0, 500)
+          };
+          results.push(failure);
+          logMetaDiagnostic(status === 'unknown' ? 'warn' : 'error', 'page_post_failed', {
+            ...taskContext, pageName, operation: currentOperation, status,
+            durationMs: Date.now() - taskStartedAt, error: diagnosticError(error)
+          });
+        }
       });
       console.info('[meta-direct-schedule-speed]', JSON.stringify({
         pagePostJobs: tasks.length,
@@ -295,9 +348,20 @@ export function registerMetaDirectScheduleRoute(app, {
         processingMs: Date.now() - processingStartedAt,
         workerModel: 'shared-balanced-page-post-queue'
       }));
-      logMetaDiagnostic('info', 'batch_succeeded', { requestId, pagePostJobs: tasks.length, confirmedPagePostJobs: results.length, processingMs: Date.now() - processingStartedAt });
+      const scheduledCount = results.filter(result => result.status === 'scheduled').length;
+      const issueCount = results.length - scheduledCount;
+      logMetaDiagnostic(issueCount ? 'warn' : 'info', issueCount ? 'batch_partial' : 'batch_succeeded', {
+        requestId, pagePostJobs: tasks.length, confirmedPagePostJobs: scheduledCount,
+        failedOrUnknownPagePostJobs: issueCount, processingMs: Date.now() - processingStartedAt
+      });
+      results.sort((a, b) => (a.postIndex || 0) - (b.postIndex || 0) || tasks.findIndex(t => t.item.clientPostId === a.clientPostId && t.target.pageId === a.pageId) - tasks.findIndex(t => t.item.clientPostId === b.clientPostId && t.target.pageId === b.pageId));
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(201).json({ ok: true, mode: 'meta-direct', requestedCount: targetCount, scheduledCount: results.length, results });
+      if (issueCount) return res.status(207).json({
+        ok: false, partial: true, mode: 'meta-direct', requestedCount: targetCount,
+        scheduledCount, failedCount: results.filter(result => result.status === 'failed').length,
+        unknownCount: results.filter(result => result.status === 'unknown').length, results
+      });
+      return res.status(201).json({ ok: true, mode: 'meta-direct', requestedCount: targetCount, scheduledCount, results });
     } catch (error) {
       logMetaDiagnostic('error', 'batch_failed', { requestId, requestedPagePostJobs: targetCount, confirmedPagePostJobs: results.length, error: diagnosticError(error) });
       console.error('[meta-direct-schedule]', String(error?.message || error));
@@ -471,7 +535,12 @@ export function registerMetaDirectScheduleRoute(app, {
         const chunkRes = { statusCode:200, body:null, status(code){this.statusCode=code;return this;}, setHeader(){}, json(value){this.body=value;return this;} };
         await directScheduleHandler({ ...req, body:{ requestId:requestId+'_chunk_'+chunk.chunk_index, posts } }, chunkRes);
         if (Array.isArray(chunkRes.body?.results)) results.push(...chunkRes.body.results);
-        if (chunkRes.statusCode !== 201 || !chunkRes.body?.ok) { failure = chunkRes.body?.error || 'Facebook did not confirm every post.'; break; }
+        if (chunkRes.statusCode !== 201 || !chunkRes.body?.ok) {
+          failure = chunkRes.body?.error || 'Facebook did not confirm every post.';
+          // A 207 contains a complete per-Page result set for this chunk. Continue
+          // with later staged chunks instead of abandoning their Page-post tasks.
+          if (chunkRes.statusCode !== 207 || !Array.isArray(chunkRes.body?.results)) break;
+        }
       }
       await clearStage(customerId, requestId);
       if (failure) {
