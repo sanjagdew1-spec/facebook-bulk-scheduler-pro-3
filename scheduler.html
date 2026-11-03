@@ -728,7 +728,9 @@ async function submitBulkDirectFacebook(){
   }
   renderBulkImageSlots();
   if(confirmedCount>0)await refreshPostUsage();
-  const everyTargetConfirmed=allResults.length===totalTargetCount&&allResults.every(item=>item&&item.status==='scheduled'&&item.clientPostId&&item.pageId);
+  // The commit endpoint's scheduledCount is the authoritative total of Facebook-confirmed Page-posts.
+  // Do not block a full composer reset on optional per-result mapping fields; those are only needed for partial batches.
+  const everyTargetConfirmed=totalTargetCount>0&&confirmedCount===totalTargetCount;
   if(!everyTargetConfirmed){
    const pending=totalTargetCount-confirmedCount;
    const failed=allResults.filter(item=>item.status==='failed').length;
