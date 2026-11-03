@@ -125,3 +125,81 @@ test('Phase 7 rejects a schedule less than ten minutes in the future before cont
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /at least 10 minutes/);
 });
+
+
+test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum of ten concurrent workers', async () => {
+  const routes = new Map();
+  const inserted = [];
+  const db = {
+    exec() {},
+    prepare(sql) {
+      return {
+        get(...args) {
+          if (sql.includes('FROM meta_scheduled_posts')) return null;
+          if (sql.includes('FROM customer_pages')) return { name: 'Page ' + args[2], access_token: 'encrypted-page-token' };
+          throw new Error('Unexpected query: ' + sql);
+        },
+        run(...args) { inserted.push({ sql, args }); return { changes: 1 }; }
+      };
+    }
+  };
+  const app = { post(path, ...handlers) { routes.set(path, handlers); } };
+  registerMetaDirectScheduleRoute(app, {
+    db,
+    requireTrustedOrigin(_req, _res, next) { next(); },
+    requireAuth(_req, _res, next) { next(); },
+    requirePlanAccess(_req, _res, next) { next(); },
+    enforcePlanLimits() { return true; },
+    decryptToken() { return 'existing-page-token'; },
+    graph(path) { return 'https://graph.test/v26.0/' + path; },
+    now() { return new Date().toISOString(); }
+  });
+
+  const originalFetch = globalThis.fetch;
+  let activeRequests = 0;
+  let maxActiveRequests = 0;
+  let requestId = 0;
+  globalThis.fetch = async (url) => {
+    activeRequests++;
+    maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+    const current = ++requestId;
+    await new Promise(resolve => setTimeout(resolve, 3));
+    activeRequests--;
+    if (String(url).endsWith('/photos')) {
+      return { ok: true, status: 200, async json() { return { id: 'photo-' + current }; } };
+    }
+    if (String(url).endsWith('/feed')) {
+      return { ok: true, status: 200, async json() { return { id: 'scheduled-' + current }; } };
+    }
+    throw new Error('Unexpected Meta request: ' + url);
+  };
+
+  try {
+    const posts = Array.from({ length: 10 }, (_, slot) => ({
+      clientPostId: 'page-post-slot-' + String(slot).padStart(4, '0'),
+      message: 'Post ' + slot,
+      images: [{ imageData: 'data:image/jpeg;base64,aGVsbG8=', imageMimeType: 'image/jpeg' }],
+      pageSchedules: Array.from({ length: 7 }, (_, page) => ({
+        pageId: 'page-' + (page + 1),
+        scheduledAt: new Date(Date.now() + 20 * 60 * 1000 + slot * 60_000).toISOString()
+      }))
+    }));
+    const req = {
+      body: { requestId: 'batch-test-0070', posts },
+      session: { customerAccount: { id: 'customer-1' }, fbUser: { id: 'facebook-user-1' } },
+      planAccess: { unlimited: true, role: 'developer' }
+    };
+    const res = makeResponse();
+    await routes.get('/api/meta-schedule').at(-1)(req, res);
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.requestedCount, 70);
+    assert.equal(res.body.scheduledCount, 70);
+    assert.equal(inserted.length, 70);
+    assert.equal(maxActiveRequests, 10);
+    assert.ok(res.body.results.every(result => result.status === 'scheduled'));
+    assert.equal(new Set(res.body.results.map(result => result.pageId + ':' + result.scheduledAt)).size, 70);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
