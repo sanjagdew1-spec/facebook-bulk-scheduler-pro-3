@@ -727,18 +727,20 @@ async function submitBulkDirectFacebook(){
    if(slot.pageIds.length===0){slot.files=[];slot.caption='';slot.pageCaptions={};slot.pageTimes={};slot.manualPageTimes={};slot.time='';slot.isAiContent=false;slot.phase7ClientPostId=null;completedSlots++;}
   }
   renderBulkImageSlots();
-  if(confirmedCount>0)await refreshPostUsage();
-  // The commit endpoint's scheduledCount is the authoritative total of Facebook-confirmed Page-posts.
-  // Do not block a full composer reset on optional per-result mapping fields; those are only needed for partial batches.
+  // The commit endpoint's scheduledCount is authoritative. Composer cleanup must happen
+  // before any optional usage refresh, so a refresh/API error can never leave scheduled data behind.
   const everyTargetConfirmed=totalTargetCount>0&&confirmedCount===totalTargetCount;
   if(!everyTargetConfirmed){
+   if(confirmedCount>0)await refreshPostUsage().catch(error=>console.warn('[direct-schedule] usage refresh failed after confirmed posts',error));
    const pending=totalTargetCount-confirmedCount;
    const failed=allResults.filter(item=>item.status==='failed').length;
    const unknown=allResults.filter(item=>item.status==='unknown').length;
    toast('Facebook ने '+confirmedCount+'/'+totalTargetCount+' Page posts confirm किए। '+clearedTargets+' सफल Page selections हटाए; '+failed+' failed और '+unknown+' को Facebook पर जाँचना बाकी है। '+pending+' targets pending हैं।');
    return;
   }
-  clearBulkPagesComposer();toast('Facebook confirmed '+confirmedCount+' scheduled Page post(s). Successful post data cleared automatically.');
+  clearBulkPagesComposer();
+  toast('Facebook confirmed '+confirmedCount+' scheduled Page post(s). Bulk Pages photos, captions, Page selections and individual times cleared.');
+  if(confirmedCount>0)await refreshPostUsage().catch(error=>console.warn('[direct-schedule] usage refresh failed after composer reset',error));
  }catch(error){
   if(batchId&&!commitStarted)await api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(()=>{});
   toast(error.message);
