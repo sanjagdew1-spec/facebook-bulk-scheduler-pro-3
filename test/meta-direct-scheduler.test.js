@@ -128,7 +128,7 @@ test('Phase 7 rejects a schedule less than ten minutes in the future before cont
 });
 
 
-test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum of ten concurrent workers', async () => {
+test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum of five concurrent workers', async () => {
   const routes = new Map();
   const inserted = [];
   const db = {
@@ -197,7 +197,7 @@ test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum
     assert.equal(res.body.requestedCount, 70);
     assert.equal(res.body.scheduledCount, 70);
     assert.equal(inserted.length, 70);
-    assert.equal(maxActiveRequests, 10);
+    assert.equal(maxActiveRequests, 5);
     assert.ok(res.body.results.every(result => result.status === 'scheduled'));
     assert.equal(new Set(res.body.results.map(result => result.pageId + ':' + result.scheduledAt)).size, 70);
   } finally {
@@ -251,6 +251,136 @@ test('chunked direct scheduling stages uploads first and refuses commit until ev
     await routes.get('/api/meta-schedule/abort').at(-1)({ ...baseReq, body: { requestId: 'stage-batch-0001' } }, abortRes);
     assert.equal(abortRes.statusCode, 200);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM meta_schedule_upload_batches').get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    db.close();
+  }
+});
+
+
+test('Direct Facebook scheduling continues all Page-post tasks after an individual Page upload fails', async () => {
+  const routes = new Map();
+  const inserted = [];
+  const db = {
+    exec() {},
+    prepare(sql) {
+      return {
+        get(...args) {
+          if (sql.includes('FROM meta_scheduled_posts')) return null;
+          if (sql.includes('FROM customer_pages')) return { name: 'Page ' + args[2], access_token: 'encrypted-page-token' };
+          throw new Error('Unexpected query: ' + sql);
+        },
+        run(...args) { inserted.push({ sql, args }); return { changes: 1 }; }
+      };
+    }
+  };
+  const app = { post(path, ...handlers) { routes.set(path, handlers); } };
+  registerMetaDirectScheduleRoute(app, {
+    db,
+    requireTrustedOrigin(_req, _res, next) { next(); },
+    requireAuth(_req, _res, next) { next(); },
+    requirePlanAccess(_req, _res, next) { next(); },
+    enforcePlanLimits() { return true; },
+    decryptToken() { return 'existing-page-token'; },
+    graph(path) { return 'https://graph.test/v26.0/' + path; },
+    now() { return new Date().toISOString(); }
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    if (String(url).endsWith('/page-2/photos')) {
+      return { ok: false, status: 500, async json() { return { error: { message: 'Temporary upload rejection', code: 1 } }; } };
+    }
+    if (String(url).endsWith('/photos')) {
+      return { ok: true, status: 200, async json() { return { id: 'photo-' + String(url).split('/').at(-2) }; } };
+    }
+    if (String(url).endsWith('/feed')) {
+      return { ok: true, status: 200, async json() { return { id: 'scheduled-' + String(url).split('/').at(-2) }; } };
+    }
+    throw new Error('Unexpected Meta request: ' + url);
+  };
+  try {
+    const posts = ['page-1','page-2','page-3'].map((pageId, index) => ({
+      clientPostId: 'continue-post-' + index,
+      message: 'Post ' + index,
+      images: [{ imageData: 'data:image/jpeg;base64,aGVsbG8=', imageMimeType: 'image/jpeg' }],
+      pageSchedules: [{ pageId, scheduledAt: new Date(Date.now() + 25 * 60 * 1000 + index * 60_000).toISOString() }]
+    }));
+    const req = {
+      body: { requestId: 'batch-continue-0001', posts },
+      session: { customerAccount: { id: 'customer-continue' }, fbUser: { id: 'facebook-user-continue' } },
+      planAccess: { unlimited: true, role: 'developer' }
+    };
+    const res = makeResponse();
+    await routes.get('/api/meta-schedule').at(-1)(req, res);
+    assert.equal(res.statusCode, 207);
+    assert.equal(res.body.requestedCount, 3);
+    assert.equal(res.body.scheduledCount, 2);
+    assert.equal(res.body.failedCount, 1);
+    assert.equal(res.body.results.length, 3);
+    assert.equal(res.body.results.find(result => result.pageId === 'page-2').status, 'failed');
+    assert.equal(inserted.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Direct Facebook scheduling marks lost feed confirmation unknown and blocks duplicate retry', async () => {
+  const routes = new Map();
+  const db = new Database(':memory:');
+  db.exec('CREATE TABLE customer_pages (customer_id TEXT, facebook_user_id TEXT, page_id TEXT, name TEXT, access_token TEXT)');
+  db.prepare('INSERT INTO customer_pages VALUES(?,?,?,?,?)').run('customer-unknown','facebook-user-unknown','page-unknown','Unknown Test Page','encrypted-page-token');
+  const app = { post(path, ...handlers) { routes.set(path, handlers); } };
+  registerMetaDirectScheduleRoute(app, {
+    db,
+    requireTrustedOrigin(_req, _res, next) { next(); },
+    requireAuth(_req, _res, next) { next(); },
+    requirePlanAccess(_req, _res, next) { next(); },
+    enforcePlanLimits() { return true; },
+    decryptToken() { return 'existing-page-token'; },
+    graph(path) { return 'https://graph.test/v26.0/' + path; },
+    now() { return new Date().toISOString(); }
+  });
+  const originalFetch = globalThis.fetch;
+  let feedCalls = 0;
+  globalThis.fetch = async url => {
+    if (String(url).endsWith('/photos')) return { ok: true, status: 200, async json() { return { id: 'temporary-photo-unknown' }; } };
+    if (String(url).endsWith('/feed')) {
+      feedCalls++;
+      const error = new Error('fetch failed');
+      error.code = 'ETIMEDOUT';
+      throw error;
+    }
+    throw new Error('Unexpected Meta request: ' + url);
+  };
+  try {
+    const scheduledAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const makeReq = requestId => ({
+      body: {
+        requestId,
+        posts: [{
+          clientPostId: 'unknown-client-post',
+          message: 'Do not duplicate this post',
+          images: [{ imageData: 'data:image/jpeg;base64,aGVsbG8=', imageMimeType: 'image/jpeg' }],
+          pageSchedules: [{ pageId: 'page-unknown', scheduledAt }]
+        }]
+      },
+      session: { customerAccount: { id: 'customer-unknown' }, fbUser: { id: 'facebook-user-unknown' } },
+      planAccess: { unlimited: true, role: 'developer' }
+    });
+    const first = makeResponse();
+    await routes.get('/api/meta-schedule').at(-1)(makeReq('batch-unknown-0001'), first);
+    assert.equal(first.statusCode, 207);
+    assert.equal(first.body.unknownCount, 1);
+    assert.equal(first.body.results[0].status, 'unknown');
+    assert.equal(db.prepare('SELECT status FROM meta_scheduled_posts WHERE customer_id=?').get('customer-unknown').status, 'unknown');
+    const callsAfterFirstAttempt = feedCalls;
+
+    const second = makeResponse();
+    await routes.get('/api/meta-schedule').at(-1)(makeReq('batch-unknown-0002'), second);
+    assert.equal(second.statusCode, 207);
+    assert.equal(second.body.results[0].status, 'unknown');
+    assert.equal(feedCalls, callsAfterFirstAttempt);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM meta_scheduled_posts WHERE customer_id=?').get('customer-unknown').count, 1);
   } finally {
     globalThis.fetch = originalFetch;
     db.close();
