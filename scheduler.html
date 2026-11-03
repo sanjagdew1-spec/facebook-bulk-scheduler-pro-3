@@ -645,7 +645,7 @@ $('bulkScheduleDirectFacebook').addEventListener('click',submitBulkDirectFaceboo
 async function submitBulkDirectFacebook(){
  const button=$('bulkScheduleDirectFacebook'),publishButton=$('bulkPublishNow'),oldScheduleButton=$('bulkScheduleAll');
  if(button?.disabled)return;
- const startedAt=Date.now();let confirmedCount=0,totalTargetCount=0,activeChunk=0,totalChunks=0;
+ const startedAt=Date.now();let confirmedCount=0,totalTargetCount=0,batchId=null,commitStarted=false;
  try{
   if(button)button.disabled=true;if(publishButton)publishButton.disabled=true;if(oldScheduleButton)oldScheduleButton.disabled=true;
   const slotTasks=bulkImageSlots.map((slot,slotIndex)=>({slot,slotIndex}));
@@ -667,9 +667,8 @@ async function submitBulkDirectFacebook(){
   });
   totalTargetCount=prepared.reduce((n,p)=>n+p.pageSchedules.length,0);
   if(totalTargetCount>100)throw Error('A Direct Schedule Facebook batch can contain up to 100 Page posts. Your selection creates '+totalTargetCount+'.');
-  // Keep every HTTP request comfortably below Express's existing 50 MB JSON limit.
-  // A single post can be larger than the normal chunk target, but the existing
-  // per-post 30 MB binary image cap keeps its base64 JSON below this hard ceiling.
+  // Keep each upload request below Express's existing 50 MB JSON limit.
+  // All chunks are staged first; Facebook scheduling begins only after the full batch is uploaded.
   const targetChunkBytes=36*1024*1024,hardRequestBytes=44*1024*1024;
   const postSizes=prepared.map(post=>new Blob([JSON.stringify(post)]).size);
   const chunks=[];let current=[],currentBytes=0;
@@ -680,29 +679,30 @@ async function submitBulkDirectFacebook(){
    current.push(prepared[i]);currentBytes+=size;
   }
   if(current.length)chunks.push(current);
-  totalChunks=chunks.length;
-  const batchId=crypto.randomUUID(),prepareMs=Date.now()-prepareStartedAt;
-  const requestStartedAt=Date.now();
+  const totalChunks=chunks.length;
+  batchId=crypto.randomUUID();
   for(let i=0;i<chunks.length;i++){
-    const chunkRequestId=batchId+'_c'+(i+1);
-   const body=JSON.stringify({requestId:chunkRequestId,posts:chunks[i]});
-   const bodyBytes=new Blob([body]).size;
-   if(bodyBytes>hardRequestBytes)throw Error('Upload chunk '+(i+1)+' exceeds the safe request size. No further chunks were sent.');
-   toast('Uploading and scheduling Facebook batch '+(i+1)+' of '+chunks.length+'…');
-   const data=await api('/api/meta-schedule',{method:'POST',body});
-   confirmedCount+=Number(data.scheduledCount||0);
-   if(!data.ok||data.scheduledCount!==chunks[i].reduce((n,p)=>n+p.pageSchedules.length,0)){
-    throw Error((data.error||'Facebook did not confirm every post in this chunk.')+' Confirmed so far: '+confirmedCount+' of '+totalTargetCount+'.');
-   }
+   const body=JSON.stringify({requestId:batchId,chunkIndex:i,totalChunks,totalPosts:prepared.length,posts:chunks[i]});
+   if(new Blob([body]).size>hardRequestBytes)throw Error('Upload chunk '+(i+1)+' exceeds the safe request size. No Facebook posts were scheduled.');
+   toast('Uploading photos '+(i+1)+' of '+totalChunks+'. Facebook scheduling has not started yet…');
+   await api('/api/meta-schedule/chunk',{method:'POST',body});
   }
-  const requestMs=Date.now()-requestStartedAt;
-  console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,chunkTargetBytes,prepareMs,requestMs,totalMs:Date.now()-startedAt}));
-  if(confirmedCount!==totalTargetCount)throw Error('Facebook confirmed '+confirmedCount+' of '+totalTargetCount+' Page posts. The composer has been kept for a safe retry.');
+  const prepareMs=Date.now()-prepareStartedAt,commitStartedAt=Date.now();
+  commitStarted=true;
+  toast('All photos uploaded. Starting Facebook scheduling…');
+  const data=await api('/api/meta-schedule/commit',{method:'POST',body:JSON.stringify({requestId:batchId})});
+  confirmedCount=Number(data.scheduledCount||0);
+  await api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(()=>{});
+  console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,chunkTargetBytes,prepareMs,uploadAndCommitMs:Date.now()-commitStartedAt,totalMs:Date.now()-startedAt}));
+  if(!data.ok||confirmedCount!==totalTargetCount){
+   const detail=confirmedCount>0?' Facebook confirmed '+confirmedCount+' of '+totalTargetCount+' Page posts.':'';
+   throw Error((data.error||'Facebook did not confirm every post in this batch.')+detail+' The composer has been kept for review/retry.');
+  }
   clearBulkPagesComposer();const history=await api('/api/jobs');jobs=history.jobs||[];renderStats();renderHistory();await refreshPostUsage();
   toast('Facebook confirmed '+confirmedCount+' scheduled Page post(s). Meta will publish them at their selected times.');
  }catch(error){
-  const prefix=confirmedCount>0?' '+confirmedCount+' of '+totalTargetCount+' Page posts were already confirmed in earlier chunks. The form is kept; retrying uses the same post IDs for saved schedules.':'';
-  toast(error.message+prefix);
+  if(batchId&&!commitStarted)await api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(()=>{});
+  toast(error.message);
  }
  finally{if(button)button.disabled=false;if(publishButton)publishButton.disabled=false;if(oldScheduleButton)oldScheduleButton.disabled=false}
 }
