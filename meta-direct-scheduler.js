@@ -28,6 +28,7 @@ export function registerMetaDirectScheduleRoute(app, {
     CREATE TABLE IF NOT EXISTS meta_scheduled_posts (
       id TEXT PRIMARY KEY,
       request_id TEXT NOT NULL,
+      client_post_id TEXT NOT NULL,
       customer_id TEXT NOT NULL,
       facebook_user_id TEXT NOT NULL,
       page_id TEXT NOT NULL,
@@ -38,7 +39,7 @@ export function registerMetaDirectScheduleRoute(app, {
       status TEXT NOT NULL DEFAULT 'scheduled',
       is_ai_content INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
-      UNIQUE(customer_id, request_id, page_id)
+      UNIQUE(customer_id, client_post_id, page_id)
     );
     CREATE INDEX IF NOT EXISTS meta_scheduled_customer_time_idx
       ON meta_scheduled_posts(customer_id, scheduled_at, status);
@@ -60,6 +61,7 @@ export function registerMetaDirectScheduleRoute(app, {
     try {
       for (let index = 0; index < posts.length; index++) {
         const item = posts[index] || {};
+        if (typeof item.clientPostId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(item.clientPostId)) throw new Error('Post ' + (index + 1) + ' is missing its unique post ID.');
         const images = Array.isArray(item.images) ? item.images : [];
         if (!images.length || images.length > 10) throw new Error('Post ' + (index + 1) + ' must contain 1 to 10 photos.');
         const photos = images.map(photo => parsePhoto(photo, index));
@@ -83,10 +85,9 @@ export function registerMetaDirectScheduleRoute(app, {
           scheduledDates.push(date);
           targetCount++;
         }
-        prepared.push({ message: String(item.message || ''), photos, targets: normalizedTargets, isAiContent: Boolean(item.isAiContent) });
+        prepared.push({ clientPostId: item.clientPostId, message: String(item.message || ''), photos, targets: normalizedTargets, isAiContent: Boolean(item.isAiContent) });
       }
 
-      const planBatchCount = req.planAccess?.limits?.slotsPerBatch ?? req.planAccess?.limits?.slots_per_batch ?? req.planAccess?.limits?.batchLimit ?? req.planAccess?.limits?.postsPerBatch;
       const declaredBatchCount = posts.length;
       if (!enforcePlanLimits(req, res, {
         batchCount: declaredBatchCount,
@@ -100,7 +101,7 @@ export function registerMetaDirectScheduleRoute(app, {
       const access = req.planAccess || {};
       if (!access.unlimited && access.role !== 'developer') {
         const limits = access.limits || {};
-        const customerId = req.customerAccount.id;
+        const customerId = req.session.customerAccount.id;
         const planStart = access.startsAt ? new Date(access.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
         const totalLimit = Number(limits.totalPosts);
         if (Number.isFinite(totalLimit)) {
@@ -127,6 +128,11 @@ export function registerMetaDirectScheduleRoute(app, {
       const results = [];
       for (const item of prepared) {
         for (const target of item.targets) {
+          const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
+          if (existing) {
+            results.push({ pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
+            continue;
+          }
           const page = db.prepare('SELECT name,access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?')
             .get(customerId, facebookUserId, target.pageId);
           if (!page?.access_token) throw new Error('A selected Page is not connected. Refresh Pages and reconnect Facebook.');
@@ -166,9 +172,9 @@ export function registerMetaDirectScheduleRoute(app, {
 
           const rowId = crypto.randomUUID();
           db.prepare(`INSERT INTO meta_scheduled_posts
-            (id,request_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,status,is_ai_content,created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?)`)
-            .run(rowId, requestId, customerId, facebookUserId, target.pageId, page.name || 'Facebook Page',
+            (id,request_id,client_post_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,status,is_ai_content,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,'scheduled',?,?)`)
+            .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, page.name || 'Facebook Page',
               item.message, target.scheduledAt, String(created.id), item.isAiContent ? 1 : 0, now());
           results.push({
             pageId: target.pageId, pageName: page.name || 'Facebook Page',
@@ -180,6 +186,8 @@ export function registerMetaDirectScheduleRoute(app, {
       return res.status(201).json({ ok: true, mode: 'meta-direct', requestedCount: targetCount, scheduledCount: results.length, results });
     } catch (error) {
       console.error('[meta-direct-schedule]', String(error?.message || error));
+      res.setHeader('Cache-Control', 'no-store');
+      if (results.length) return res.status(207).json({ ok: false, partial: true, error: String(error?.message || error), requestedCount: targetCount, scheduledCount: results.length, results });
       return res.status(400).json({ error: String(error?.message || error) });
     }
   });
