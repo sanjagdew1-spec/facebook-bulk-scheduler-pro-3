@@ -128,7 +128,7 @@ test('Phase 7 rejects a schedule less than ten minutes in the future before cont
 });
 
 
-test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum of five concurrent workers', async () => {
+test('Direct Facebook scheduling distributes the 20-task test batch across a maximum of five concurrent workers', async () => {
   const routes = new Map();
   const inserted = [];
   const db = {
@@ -176,11 +176,11 @@ test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum
   };
 
   try {
-    const posts = Array.from({ length: 10 }, (_, slot) => ({
+    const posts = Array.from({ length: 4 }, (_, slot) => ({
       clientPostId: 'page-post-slot-' + String(slot).padStart(4, '0'),
       message: 'Post ' + slot,
       images: [{ imageData: 'data:image/jpeg;base64,aGVsbG8=', imageMimeType: 'image/jpeg' }],
-      pageSchedules: Array.from({ length: 7 }, (_, page) => ({
+      pageSchedules: Array.from({ length: 5 }, (_, page) => ({
         pageId: 'page-' + (page + 1),
         scheduledAt: new Date(Date.now() + 20 * 60 * 1000 + slot * 60_000).toISOString()
       }))
@@ -194,12 +194,12 @@ test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum
     await routes.get('/api/meta-schedule').at(-1)(req, res);
 
     assert.equal(res.statusCode, 201);
-    assert.equal(res.body.requestedCount, 70);
-    assert.equal(res.body.scheduledCount, 70);
-    assert.equal(inserted.length, 70);
+    assert.equal(res.body.requestedCount, 20);
+    assert.equal(res.body.scheduledCount, 20);
+    assert.equal(inserted.length, 20);
     assert.equal(maxActiveRequests, 5);
     assert.ok(res.body.results.every(result => result.status === 'scheduled'));
-    assert.equal(new Set(res.body.results.map(result => result.pageId + ':' + result.scheduledAt)).size, 70);
+    assert.equal(new Set(res.body.results.map(result => result.pageId + ':' + result.scheduledAt)).size, 20);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -385,4 +385,41 @@ test('Direct Facebook scheduling marks lost feed confirmation unknown and blocks
     globalThis.fetch = originalFetch;
     db.close();
   }
+});
+
+
+test('Direct Facebook scheduling rejects more than 20 Page-post tasks during the first verification phase', async () => {
+  const routes = new Map();
+  const db = { exec() {}, prepare() { throw new Error('Database and Meta must not be reached for an oversized test batch'); } };
+  const app = { post(path, ...handlers) { routes.set(path, handlers); } };
+  registerMetaDirectScheduleRoute(app, {
+    db,
+    requireTrustedOrigin(_req, _res, next) { next(); },
+    requireAuth(_req, _res, next) { next(); },
+    requirePlanAccess(_req, _res, next) { next(); },
+    enforcePlanLimits() { return true; },
+    decryptToken() { throw new Error('Token must not be read'); },
+    graph(path) { return 'https://graph.test/' + path; },
+    now() { return new Date().toISOString(); }
+  });
+  const handler = routes.get('/api/meta-schedule').at(-1);
+  const req = {
+    body: {
+      requestId: 'batch-cap-000001',
+      posts: [{
+        clientPostId: 'post-slot-cap-001',
+        images: [{ imageData: 'data:image/jpeg;base64,aGVsbG8=', imageMimeType: 'image/jpeg' }],
+        pageSchedules: Array.from({ length: 21 }, (_, index) => ({
+          pageId: 'page-cap-' + index,
+          scheduledAt: new Date(Date.now() + 20 * 60 * 1000).toISOString()
+        }))
+      }]
+    },
+    session: { customerAccount: { id: 'customer-cap' }, fbUser: { id: 'facebook-user-cap' } },
+    planAccess: { unlimited: true, role: 'developer' }
+  };
+  const res = makeResponse();
+  await handler(req, res);
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.error, /temporarily limited to 20/);
 });
