@@ -58,6 +58,7 @@ export function registerMetaDirectScheduleRoute(app, {
     const allPageIds = [];
     const scheduledDates = [];
     let targetCount = 0;
+    const results = [];
     try {
       for (let index = 0; index < posts.length; index++) {
         const item = posts[index] || {};
@@ -123,9 +124,8 @@ export function registerMetaDirectScheduleRoute(app, {
         }
       }
 
-      const customerId = req.customerAccount.id;
+      const customerId = req.session.customerAccount.id;
       const facebookUserId = req.session.fbUser.id;
-      const results = [];
       for (const item of prepared) {
         for (const target of item.targets) {
           const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
