@@ -73,7 +73,7 @@ test('Phase 6 claim reads the existing Phase 3 SQLite records and completes the 
   db.prepare('INSERT INTO customer_pages(customer_id,facebook_user_id,page_id,access_token) VALUES(?,?,?,?)')
     .run('customer-1','facebook-user-1','page-1','encrypted-page-token');
   db.prepare("INSERT INTO jobs(id,user_id,page_id,page_name,message,image_url,image_data,image_mime_type,scheduled_at,status,created_at,updated_at,customer_id,retry_count,is_ai_content) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?,?,0,1)")
-    .run('job-1','facebook-user-1','page-1','Page One','Hello','','photo-bytes','image/jpeg',new Date(Date.now()-60000).toISOString(),timestamp,timestamp,'customer-1');
+    .run('job-1','facebook-user-1','page-1','Page One','Hello','','photo-bytes','image/jpeg',new Date(Date.now()+10000).toISOString(),timestamp,timestamp,'customer-1');
 
   const app = makeApp();
   registerPhase6WorkerBridge(app, {
@@ -93,6 +93,7 @@ test('Phase 6 claim reads the existing Phase 3 SQLite records and completes the 
   assert.equal(claimResponse.body.claimedCount, 1);
   const claimedJob = claimResponse.body.jobs[0];
   assert.equal(claimedJob.id, 'job-1');
+  assert.ok(Date.parse(claimedJob.scheduled_at) > Date.now(), 'the worker should receive this post before its target time');
   assert.equal(claimedJob.pageAccessToken, 'plain-page-token');
   assert.equal(claimedJob.photos[0].dataBase64, Buffer.from('photo-bytes').toString('base64'));
   assert.equal(db.prepare('SELECT status FROM jobs WHERE id=?').get('job-1').status, 'publishing');
