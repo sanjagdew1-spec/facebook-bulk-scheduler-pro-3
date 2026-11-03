@@ -60,10 +60,15 @@ test('Bulk Pages Only Selected Pages copies Post One selection across active slo
   assert.match(scheduler, /onlySelectedPages'\)\.addEventListener\('click',applyOnlySelectedPagesToAllSlots\)/, 'the new button must be connected to its action');
 });
 
-test('Bulk Pages scheduling converts selected images with bounded concurrency and preserves slot order', async () => {
+test('Bulk Pages scheduling assigns five workers to complete photo slots without mixing post data', async () => {
   const scheduler = await readFile(new URL('../scheduler.html', import.meta.url), 'utf8');
-  assert.match(scheduler, /async function mapWithConcurrency\(items,limit,mapper\)/, 'image preparation must use a bounded worker pool');
-  assert.match(scheduler, /mapWithConcurrency\(fileTasks,4,task=>fileToData\(task\.file\)\)/, 'image conversion must run with four concurrent tasks');
-  assert.match(scheduler, /imageGroups\[String\(task\.slotIndex\)\]\[task\.fileIndex\]=convertedFiles\[index\]/, 'converted images must retain their original slot and order');
-  assert.match(scheduler, /api\('\/api\/bulk-photos',[\s\S]{0,150}mode:'schedule'/, 'scheduling must continue through the existing Phase 3 bulk endpoint');
+  assert.match(scheduler, /async function mapWithConcurrency\(items,limit,mapper\)/, 'scheduling must use a bounded worker pool');
+  assert.match(scheduler, /mapWithConcurrency\(slotTasks,5,async\(\{slot,slotIndex\}\)=>\{/, 'five workers must each receive one complete photo slot');
+  assert.match(scheduler, /for\(const file of slot\.files\)images\.push\(await fileToData\(file\)\)/, 'each worker must finish the images belonging to its own slot');
+  assert.match(scheduler, /imageGroupKey:String\(slotIndex\)/, 'each Page job must retain its original photo-slot identity');
+  assert.match(scheduler, /return \{slotIndex,images,pagePosts\}/, 'each worker must return its complete slot bundle');
+  assert.match(scheduler, /for\(const result of slotResults\)\{imageGroups\[String\(result\.slotIndex\)\]=result\.images;prepared\.push\(\.\.\.result\.pagePosts\)\}/, 'slot bundles must be merged by their original slot identity');
+  assert.match(scheduler, /api\('\/api\/bulk-photos',[\s\S]{0,150}mode:'schedule'/, 'all completed slot bundles must use the existing single Phase 3 batch request');
+  assert.match(scheduler, /schedulingWorkers:5,workerUnit:'complete-photo-slot'/, 'timing diagnostics must identify the five complete-slot workers');
 });
+
