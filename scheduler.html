@@ -671,8 +671,7 @@ async function submitBulkDirectFacebook(){
   // A single post can be larger than the normal chunk target, but the existing
   // per-post 30 MB binary image cap keeps its base64 JSON below this hard ceiling.
   const targetChunkBytes=36*1024*1024,hardRequestBytes=44*1024*1024;
-  const postJson=prepared.map(post=>JSON.stringify(post));
-  const postSizes=postJson.map(value=>new Blob([value]).size);
+  const postSizes=prepared.map(post=>new Blob([JSON.stringify(post)]).size);
   const chunks=[];let current=[],currentBytes=0;
   for(let i=0;i<prepared.length;i++){
    const size=postSizes[i]+1;
@@ -683,17 +682,15 @@ async function submitBulkDirectFacebook(){
   if(current.length)chunks.push(current);
   totalChunks=chunks.length;
   const batchId=crypto.randomUUID(),prepareMs=Date.now()-prepareStartedAt;
-  const requestStartedAt=Date.now(),allResults=[];
+  const requestStartedAt=Date.now();
   for(let i=0;i<chunks.length;i++){
-   activeChunk=i+1;
-   const chunkRequestId=batchId+'_c'+(i+1);
+    const chunkRequestId=batchId+'_c'+(i+1);
    const body=JSON.stringify({requestId:chunkRequestId,posts:chunks[i]});
    const bodyBytes=new Blob([body]).size;
    if(bodyBytes>hardRequestBytes)throw Error('Upload chunk '+(i+1)+' exceeds the safe request size. No further chunks were sent.');
    toast('Uploading and scheduling Facebook batch '+(i+1)+' of '+chunks.length+'…');
    const data=await api('/api/meta-schedule',{method:'POST',body});
    confirmedCount+=Number(data.scheduledCount||0);
-   if(Array.isArray(data.results))allResults.push(...data.results);
    if(!data.ok||data.scheduledCount!==chunks[i].reduce((n,p)=>n+p.pageSchedules.length,0)){
     throw Error((data.error||'Facebook did not confirm every post in this chunk.')+' Confirmed so far: '+confirmedCount+' of '+totalTargetCount+'.');
    }
