@@ -8,6 +8,7 @@ import path from 'node:path';
 import { registerCustomerAuthRoutes } from './customer-auth-routes.js';
 import { encryptToken, decryptToken, isTokenEncryptionConfigured } from './token-crypto.js';
 import { registerPhase6WorkerBridge, isPhase6WorkerHealthy } from './phase6-worker-bridge.js';
+import { registerMetaDirectScheduleRoute } from './meta-direct-scheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -312,6 +313,8 @@ async function getPhase5Access(email) {
   return data.access;
 }
 registerPhase6WorkerBridge(app, { db, getPhase5Access, decryptToken, now });
+// Phase 7 adds Meta-owned photo scheduling as a separate route. The Phase 6 bridge and publisher remain unchanged.
+registerMetaDirectScheduleRoute(app, { db, requireTrustedOrigin, requireAuth, requirePlanAccess, enforcePlanLimits, decryptToken, graph, now });
 async function requirePlanAccess(req, res, next) {
   try {
     const email = req.customerAccount?.email_normalized || db.prepare('SELECT email_normalized FROM customer_accounts WHERE id=?').get(req.session.customerAccount.id)?.email_normalized;
