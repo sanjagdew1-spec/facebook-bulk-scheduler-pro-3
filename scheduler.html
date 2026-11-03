@@ -670,7 +670,7 @@ async function submitBulkDirectFacebook(){
   console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:prepared.reduce((n,p)=>n+p.pageSchedules.length,0),prepareMs,requestMs,totalMs:Date.now()-startedAt}));
   if(!data.ok||data.scheduledCount!==prepared.reduce((n,p)=>n+p.pageSchedules.length,0))
    throw Error('Some posts were not confirmed by Facebook. '+(data.error||'Check the results and retry only the missing posts.'));
-  clearBulkPagesComposer();await refreshPostUsage();
+  clearBulkPagesComposer();const history=await api('/api/jobs');jobs=history.jobs||[];renderStats();renderHistory();await refreshPostUsage();
   toast('Facebook confirmed '+data.scheduledCount+' scheduled Page post(s). Meta will publish them at their selected times.');
  }catch(error){toast(error.message)}
  finally{if(button)button.disabled=false;if(publishButton)publishButton.disabled=false;if(oldScheduleButton)oldScheduleButton.disabled=false}
