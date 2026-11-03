@@ -13,7 +13,7 @@ test('Phase 2 frontend inline JavaScript parses without syntax errors', async ()
 
 test('Phase 4 scheduler inline JavaScript parses without syntax errors', async () => {
   const html = await readFile(path.join(process.cwd(), 'scheduler.html'), 'utf8');
-  const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/gi)];
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
   assert.ok(scripts.length > 0, 'scheduler.html should contain the scheduler application script');
   for (const script of scripts) assert.doesNotThrow(() => new Function(script[1]));
 });
