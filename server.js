@@ -347,7 +347,9 @@ function enforcePlanLimits(req, res, { batchCount = 1, targetCount = 0, pageIds 
   const activeStatuses = "('scheduled','publishing','published')";
   const totalLimit = Number(limits.totalPosts);
   if (Number.isFinite(totalLimit)) {
-    const reservedTotal = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN " + activeStatuses).get(customerId, startsAt).count;
+    const reservedJobs = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN " + activeStatuses).get(customerId, startsAt).count;
+    const reservedMeta = db.prepare("SELECT COUNT(*) AS count FROM meta_scheduled_posts WHERE customer_id=? AND created_at>=? AND status='scheduled'").get(customerId, startsAt).count;
+    const reservedTotal = reservedJobs + reservedMeta;
     if (reservedTotal + targetCount > totalLimit) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows ' + totalLimit + ' total posts. ' + reservedTotal + ' posts are already scheduled or published in this plan period.' }); return false; }
   }
   const windowDays = Number(limits.scheduleWindowDays || 0), expiry = access.endsAt ? Date.parse(access.endsAt) : Infinity;
@@ -366,7 +368,9 @@ function enforcePlanLimits(req, res, { batchCount = 1, targetCount = 0, pageIds 
   const dailyLimit = Number(limits.postsPerDay);
   if (Number.isFinite(dailyLimit)) for (const [dayStart, requestedForDay] of dayCounts) {
     const dayEnd = new Date(Date.parse(dayStart) + 86400000).toISOString();
-    const used = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN " + activeStatuses).get(customerId, dayStart, dayEnd).count;
+    const usedJobs = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN " + activeStatuses).get(customerId, dayStart, dayEnd).count;
+    const usedMeta = db.prepare("SELECT COUNT(*) AS count FROM meta_scheduled_posts WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status='scheduled'").get(customerId, dayStart, dayEnd).count;
+    const used = usedJobs + usedMeta;
     if (used + requestedForDay > dailyLimit) { res.status(403).json({ error: 'Your ' + access.planName + ' plan allows ' + dailyLimit + ' posts per day. ' + used + ' posts are already scheduled or published for ' + dayStart.slice(0,10) + '.' }); return false; }
   }
   return true;
@@ -378,9 +382,13 @@ app.get('/api/usage', requireCustomerSession, async (req, res) => {
     if (access.unlimited || access.role === 'developer') return res.setHeader('Cache-Control','no-store').json({ unlimited: true, used: 0, limit: null, remaining: null });
     const start = new Date(); start.setUTCHours(0,0,0,0);
     const end = new Date(start.getTime()+86400000).toISOString();
-    const used = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN ('scheduled','publishing','published')").get(req.customerAccount.id, start.toISOString(), end).count;
+    const usedJobs = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status IN ('scheduled','publishing','published')").get(req.customerAccount.id, start.toISOString(), end).count;
+    const usedMeta = db.prepare("SELECT COUNT(*) AS count FROM meta_scheduled_posts WHERE customer_id=? AND scheduled_at>=? AND scheduled_at<? AND status='scheduled'").get(req.customerAccount.id, start.toISOString(), end).count;
+    const used = usedJobs + usedMeta;
     const totalStart = access.startsAt ? new Date(access.startsAt).toISOString() : '1970-01-01T00:00:00.000Z';
-    const totalUsed = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN ('scheduled','publishing','published')").get(req.customerAccount.id, totalStart).count;
+    const totalJobs = db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE customer_id=? AND created_at>=? AND status IN ('scheduled','publishing','published')").get(req.customerAccount.id, totalStart).count;
+    const totalMeta = db.prepare("SELECT COUNT(*) AS count FROM meta_scheduled_posts WHERE customer_id=? AND created_at>=? AND status='scheduled'").get(req.customerAccount.id, totalStart).count;
+    const totalUsed = totalJobs + totalMeta;
     const limit = Number(access.limits?.postsPerDay), totalLimit = Number(access.limits?.totalPosts);
     return res.setHeader('Cache-Control','no-store').json({ unlimited: false, used, limit, remaining: Math.max(0, limit - used), totalUsed, totalLimit, totalRemaining: Math.max(0,totalLimit-totalUsed), date: start.toISOString().slice(0,10) });
   } catch (error) {
@@ -636,7 +644,15 @@ app.post('/internal/security/remove-customer', (req, res) => {
 });
 
 app.get('/api/jobs', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at FROM jobs WHERE customer_id=? AND user_id=? ORDER BY scheduled_at DESC LIMIT 500').all(req.session.customerAccount.id, req.session.fbUser.id);
+  const rows = db.prepare(`
+    SELECT id,page_id,page_name,message,image_url,scheduled_at,status,post_id,error,is_ai_content,created_at,updated_at
+      FROM jobs WHERE customer_id=? AND user_id=?
+    UNION ALL
+    SELECT id,page_id,page_name,message,'' AS image_url,scheduled_at,status,meta_post_id AS post_id,'' AS error,is_ai_content,created_at,created_at AS updated_at
+      FROM meta_scheduled_posts WHERE customer_id=? AND facebook_user_id=?
+    ORDER BY scheduled_at DESC LIMIT 500
+  `).all(req.session.customerAccount.id, req.session.fbUser.id, req.session.customerAccount.id, req.session.fbUser.id);
+  res.setHeader('Cache-Control', 'no-store');
   res.json({ jobs: rows });
 });
 
