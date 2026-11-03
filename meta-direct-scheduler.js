@@ -205,7 +205,7 @@ export function registerMetaDirectScheduleRoute(app, {
         const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status,content_fingerprint FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
         if (existing) {
           if (existing.content_fingerprint !== fingerprint) throw new Error('A post in this batch was already scheduled with different content. Do not retry the changed post; create a new slot instead.');
-          results.push({ pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
+          results.push({ clientPostId: item.clientPostId, pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
           logMetaDiagnostic('info', 'page_post_reused', { ...taskContext, metaPostId: existing.meta_post_id, durationMs: Date.now() - taskStartedAt });
           return;
         }
@@ -283,7 +283,7 @@ export function registerMetaDirectScheduleRoute(app, {
           .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, page.name || 'Facebook Page',
             item.message, target.scheduledAt, String(created.id), fingerprint, item.isAiContent ? 1 : 0, now());
         results.push({
-          pageId: target.pageId, pageName: page.name || 'Facebook Page',
+          clientPostId: item.clientPostId, pageId: target.pageId, pageName: page.name || 'Facebook Page',
           scheduledAt: target.scheduledAt, metaPostId: String(created.id), status: 'scheduled'
         });
         logMetaDiagnostic('info', 'page_post_scheduled', { ...taskContext, pageName: page.name || 'Facebook Page', metaPostId: String(created.id), durationMs: Date.now() - taskStartedAt });
