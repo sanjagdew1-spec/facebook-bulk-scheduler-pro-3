@@ -9,6 +9,27 @@ function metaError(data, status) {
   return parts.join(' | ');
 }
 
+const META_DIRECT_WORKER_COUNT = 10;
+
+async function mapWithConcurrency(items, limit, mapper) {
+  let nextIndex = 0;
+  let firstError = null;
+  const workerCount = Math.min(limit, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (!firstError) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      try {
+        await mapper(items[index], index);
+      } catch (error) {
+        if (!firstError) firstError = error;
+      }
+    }
+  });
+  await Promise.all(workers);
+  if (firstError) throw firstError;
+}
+
 function parsePhoto(photo, postIndex) {
   const match = typeof photo?.imageData === 'string'
     ? photo.imageData.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/)
@@ -128,64 +149,79 @@ export function registerMetaDirectScheduleRoute(app, {
 
       const customerId = req.session.customerAccount.id;
       const facebookUserId = req.session.fbUser.id;
-      for (const item of prepared) {
-        for (const target of item.targets) {
-          const fingerprint = crypto.createHash('sha256').update(item.message).update(target.pageId).update(target.scheduledAt).update(Buffer.concat(item.photos.map(photo => photo.buffer))).digest('hex');
-          const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status,content_fingerprint FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
-          if (existing) {
-            if (existing.content_fingerprint !== fingerprint) throw new Error('A post in this batch was already scheduled with different content. Do not retry the changed post; create a new slot instead.');
-            results.push({ pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
-            continue;
-          }
-          const page = db.prepare('SELECT name,access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?')
-            .get(customerId, facebookUserId, target.pageId);
-          if (!page?.access_token) throw new Error('A selected Page is not connected. Refresh Pages and reconnect Facebook.');
-          const pageToken = decryptToken(page.access_token);
-          if (!pageToken) throw new Error('A selected Page access token could not be read. Reconnect Facebook.');
-
-          // Upload each image as unpublished media, then create one Meta-owned scheduled
-          // Page feed post. No local Phase 3/6 publish job is created for this post.
-          const mediaIds = [];
-          for (const photo of item.photos) {
-            const form = new FormData();
-            form.set('source', new Blob([photo.buffer], { type: photo.mime }), photo.mime === 'image/png' ? 'upload.png' : 'upload.jpg');
-            form.set('published', 'false');
-            form.set('temporary', 'true');
-            form.set('access_token', pageToken);
-            const uploadResponse = await fetch(graph(target.pageId + '/photos'), { method: 'POST', body: form });
-            const uploadData = await uploadResponse.json().catch(() => ({}));
-            if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(metaError(uploadData, uploadResponse.status));
-            mediaIds.push(String(uploadData.id));
-          }
-
-          const feed = new URLSearchParams({
-            message: item.message,
-            published: 'false',
-            scheduled_publish_time: String(Math.floor(target.date.getTime() / 1000)),
-            unpublished_content_type: 'SCHEDULED',
-            access_token: pageToken
-          });
-          mediaIds.forEach((mediaId, index) => feed.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
-          const createResponse = await fetch(graph(target.pageId + '/feed'), {
-            method: 'POST',
-            headers: { 'content-type': 'application/x-www-form-urlencoded' },
-            body: feed
-          });
-          const created = await createResponse.json().catch(() => ({}));
-          if (!createResponse.ok || created.error || !created.id) throw new Error(metaError(created, createResponse.status));
-
-          const rowId = crypto.randomUUID();
-          db.prepare(`INSERT INTO meta_scheduled_posts
-            (id,request_id,client_post_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,content_fingerprint,status,is_ai_content,created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,'scheduled',?,?)`)
-            .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, page.name || 'Facebook Page',
-              item.message, target.scheduledAt, String(created.id), fingerprint, item.isAiContent ? 1 : 0, now());
-          results.push({
-            pageId: target.pageId, pageName: page.name || 'Facebook Page',
-            scheduledAt: target.scheduledAt, metaPostId: String(created.id), status: 'scheduled'
-          });
-        }
+      const tasks = prepared.flatMap(item => item.targets.map(target => ({ item, target })));
+      const uniqueTaskKeys = new Set();
+      for (const { item, target } of tasks) {
+        const key = item.clientPostId + ':' + target.pageId;
+        if (uniqueTaskKeys.has(key)) throw new Error('This batch contains the same post for the same Page more than once.');
+        uniqueTaskKeys.add(key);
       }
+
+      const processingStartedAt = Date.now();
+      await mapWithConcurrency(tasks, META_DIRECT_WORKER_COUNT, async ({ item, target }) => {
+        const fingerprint = crypto.createHash('sha256').update(item.message).update(target.pageId).update(target.scheduledAt).update(Buffer.concat(item.photos.map(photo => photo.buffer))).digest('hex');
+        const existing = db.prepare('SELECT page_id,page_name,scheduled_at,meta_post_id,status,content_fingerprint FROM meta_scheduled_posts WHERE customer_id=? AND client_post_id=? AND page_id=?').get(customerId, item.clientPostId, target.pageId);
+        if (existing) {
+          if (existing.content_fingerprint !== fingerprint) throw new Error('A post in this batch was already scheduled with different content. Do not retry the changed post; create a new slot instead.');
+          results.push({ pageId: existing.page_id, pageName: existing.page_name, scheduledAt: existing.scheduled_at, metaPostId: existing.meta_post_id, status: existing.status, reused: true });
+          return;
+        }
+        const page = db.prepare('SELECT name,access_token FROM customer_pages WHERE customer_id=? AND facebook_user_id=? AND page_id=?')
+          .get(customerId, facebookUserId, target.pageId);
+        if (!page?.access_token) throw new Error('A selected Page is not connected. Refresh Pages and reconnect Facebook.');
+        const pageToken = decryptToken(page.access_token);
+        if (!pageToken) throw new Error('A selected Page access token could not be read. Reconnect Facebook.');
+
+        // Each worker owns one complete Page-post task: its Page token, photos,
+        // caption and schedule time stay together. Photo uploads remain sequential
+        // inside that task; up to ten independent Page-post tasks run concurrently.
+        const mediaIds = [];
+        for (const photo of item.photos) {
+          const form = new FormData();
+          form.set('source', new Blob([photo.buffer], { type: photo.mime }), photo.mime === 'image/png' ? 'upload.png' : 'upload.jpg');
+          form.set('published', 'false');
+          form.set('temporary', 'true');
+          form.set('access_token', pageToken);
+          const uploadResponse = await fetch(graph(target.pageId + '/photos'), { method: 'POST', body: form });
+          const uploadData = await uploadResponse.json().catch(() => ({}));
+          if (!uploadResponse.ok || uploadData.error || !uploadData.id) throw new Error(metaError(uploadData, uploadResponse.status));
+          mediaIds.push(String(uploadData.id));
+        }
+
+        const feed = new URLSearchParams({
+          message: item.message,
+          published: 'false',
+          scheduled_publish_time: String(Math.floor(target.date.getTime() / 1000)),
+          unpublished_content_type: 'SCHEDULED',
+          access_token: pageToken
+        });
+        mediaIds.forEach((mediaId, index) => feed.set('attached_media[' + index + ']', JSON.stringify({ media_fbid: mediaId })));
+        const createResponse = await fetch(graph(target.pageId + '/feed'), {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: feed
+        });
+        const created = await createResponse.json().catch(() => ({}));
+        if (!createResponse.ok || created.error || !created.id) throw new Error(metaError(created, createResponse.status));
+
+        const rowId = crypto.randomUUID();
+        db.prepare(`INSERT INTO meta_scheduled_posts
+          (id,request_id,client_post_id,customer_id,facebook_user_id,page_id,page_name,message,scheduled_at,meta_post_id,content_fingerprint,status,is_ai_content,created_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,'scheduled',?,?)`)
+          .run(rowId, requestId, item.clientPostId, customerId, facebookUserId, target.pageId, page.name || 'Facebook Page',
+            item.message, target.scheduledAt, String(created.id), fingerprint, item.isAiContent ? 1 : 0, now());
+        results.push({
+          pageId: target.pageId, pageName: page.name || 'Facebook Page',
+          scheduledAt: target.scheduledAt, metaPostId: String(created.id), status: 'scheduled'
+        });
+      });
+      console.info('[meta-direct-schedule-speed]', JSON.stringify({
+        pagePostJobs: tasks.length,
+        workerCount: META_DIRECT_WORKER_COUNT,
+        activeWorkers: Math.min(META_DIRECT_WORKER_COUNT, tasks.length),
+        processingMs: Date.now() - processingStartedAt,
+        workerModel: 'shared-balanced-page-post-queue'
+      }));
       res.setHeader('Cache-Control', 'no-store');
       return res.status(201).json({ ok: true, mode: 'meta-direct', requestedCount: targetCount, scheduledCount: results.length, results });
     } catch (error) {
