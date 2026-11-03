@@ -77,7 +77,7 @@ test('Phase 7 Direct Schedule Facebook is a separate button below the unchanged 
   const scheduler = await readFile(new URL('../scheduler.html', import.meta.url), 'utf8');
   assert.match(scheduler, /<div class="actions"><button class="btn" id="bulkPublishNow" type="button">Publish Now<\/button><button class="btn secondary" id="bulkScheduleAll" type="button">Schedule all selected photos<\/button><\/div>\s*<div class="actions"><button class="btn" id="bulkScheduleDirectFacebook" type="button">Direct Schedule Facebook<\/button><\/div>/, 'the new Direct Schedule Facebook button must sit below the unchanged existing buttons');
   assert.match(scheduler, /async function submitBulkSchedule\(\)[\s\S]*?api\('\/api\/bulk-photos'/, 'the existing Schedule button must continue using the original Phase 3 scheduler');
-  assert.match(scheduler, /async function submitBulkDirectFacebook\(\)[\s\S]*?api\('\/api\/meta-schedule'/, 'the new button must use the separate Meta-owned direct scheduling route');
+  assert.match(scheduler, /async function submitBulkDirectFacebook\(\)[\s\S]*?api\('\/api\/meta-schedule\/(?:chunk|commit)'/, 'the new button must upload chunks and commit through the separate Meta-owned direct scheduling routes');
   assert.match(scheduler, /bulkScheduleAll'\)\.addEventListener\('click',submitBulkSchedule\)/, 'the existing Schedule button handler must remain connected');
   assert.match(scheduler, /bulkScheduleDirectFacebook'\)\.addEventListener\('click',submitBulkDirectFacebook\)/, 'the new direct scheduling button must have its own handler');
 });
