@@ -59,3 +59,11 @@ test('Bulk Pages Only Selected Pages copies Post One selection across active slo
   assert.match(scheduler, /for\(let i=1;i<active;i\+\+\)/, 'the selection must be copied to every other active Post Slot');
   assert.match(scheduler, /onlySelectedPages'\)\.addEventListener\('click',applyOnlySelectedPagesToAllSlots\)/, 'the new button must be connected to its action');
 });
+
+test('Bulk Pages scheduling converts selected images with bounded concurrency and preserves slot order', async () => {
+  const scheduler = await readFile(new URL('../scheduler.html', import.meta.url), 'utf8');
+  assert.match(scheduler, /async function mapWithConcurrency\(items,limit,mapper\)/, 'image preparation must use a bounded worker pool');
+  assert.match(scheduler, /mapWithConcurrency\(fileTasks,4,task=>fileToData\(task\.file\)\)/, 'image conversion must run with four concurrent tasks');
+  assert.match(scheduler, /imageGroups\[String\(task\.slotIndex\)\]\[task\.fileIndex\]=convertedFiles\[index\]/, 'converted images must retain their original slot and order');
+  assert.match(scheduler, /api\('\/api\/bulk-photos',[\s\S]{0,150}mode:'schedule'/, 'scheduling must continue through the existing Phase 3 bulk endpoint');
+});
