@@ -30,3 +30,18 @@ export async function runPageWorkers(groups, worker, maxWorkers = 10) {
   if (failed) throw failed.reason;
   return { pageGroups: queue.length, activeWorkerLimit: concurrency };
 }
+
+
+// Wait against an absolute scheduled timestamp so processing time from earlier
+// posts does not accumulate into later posts' target times.
+export async function waitUntilScheduled(scheduledAt, options = {}) {
+  const target = Date.parse(scheduledAt);
+  if (!Number.isFinite(target)) return;
+  const now = options.now || Date.now;
+  const sleep = options.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  while (true) {
+    const remaining = target - now();
+    if (remaining <= 0) return;
+    await sleep(Math.min(remaining, 1000));
+  }
+}

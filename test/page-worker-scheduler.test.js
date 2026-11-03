@@ -71,3 +71,25 @@ test('each customer gets an independent pool of up to ten Page workers', async (
   }));
   for (const customerId of customers) assert.equal(peaks.get(customerId), 10);
 });
+
+
+test('waits for each post absolute scheduled time instead of carrying earlier processing delay forward', async () => {
+  const target = Date.parse('2030-01-01T11:11:00.000Z');
+  let clock = target - 2500;
+  const waits = [];
+  await (await import('../page-worker-scheduler.js')).waitUntilScheduled('2030-01-01T11:11:00.000Z', {
+    now: () => clock,
+    sleep: async ms => { waits.push(ms); clock += ms; }
+  });
+  assert.equal(clock, target);
+  assert.deepEqual(waits, [1000, 1000, 500]);
+});
+
+test('does not wait when a scheduled post time has already arrived', async () => {
+  let slept = false;
+  await (await import('../page-worker-scheduler.js')).waitUntilScheduled('2020-01-01T00:00:00.000Z', {
+    now: () => Date.parse('2030-01-01T00:00:00.000Z'),
+    sleep: async () => { slept = true; }
+  });
+  assert.equal(slept, false);
+});
