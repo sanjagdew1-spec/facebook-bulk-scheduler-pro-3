@@ -1,4 +1,5 @@
 import test from 'node:test';
+import Database from 'better-sqlite3';
 import assert from 'node:assert/strict';
 import { registerMetaDirectScheduleRoute } from '../meta-direct-scheduler.js';
 
@@ -201,5 +202,57 @@ test('Direct Facebook scheduling distributes 70 Page-post tasks across a maximum
     assert.equal(new Set(res.body.results.map(result => result.pageId + ':' + result.scheduledAt)).size, 70);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('chunked direct scheduling stages uploads first and refuses commit until every chunk arrives', async () => {
+  const routes = new Map();
+  const db = new Database(':memory:');
+  const app = { post(path, ...handlers) { routes.set(path, handlers); } };
+  registerMetaDirectScheduleRoute(app, {
+    db,
+    requireTrustedOrigin(_req, _res, next) { next(); },
+    requireAuth(_req, _res, next) { next(); },
+    requirePlanAccess(_req, _res, next) { next(); },
+    enforcePlanLimits() { return true; },
+    decryptToken() { return 'existing-page-token'; },
+    graph(path) { return 'https://graph.test/v26.0/' + path; },
+    now() { return new Date().toISOString(); }
+  });
+  const baseReq = {
+    session: { customerAccount: { id: 'customer-stage' }, fbUser: { id: 'facebook-user-stage' } },
+    planAccess: { unlimited: true, role: 'developer' }
+  };
+  const post = {
+    clientPostId: 'stage-post-0001',
+    message: 'Staged post',
+    images: [{ imageData: 'data:image/jpeg;base64,aGVsbG8=', imageMimeType: 'image/jpeg' }],
+    pageSchedules: [{ pageId: 'page-stage', scheduledAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() }]
+  };
+  const originalFetch = globalThis.fetch;
+  let metaCalls = 0;
+  globalThis.fetch = async () => { metaCalls++; throw new Error('Meta must not be called before all chunks arrive'); };
+  try {
+    const stageHandler = routes.get('/api/meta-schedule/chunk').at(-1);
+    const stageRes = makeResponse();
+    await stageHandler({ ...baseReq, body: { requestId: 'stage-batch-0001', chunkIndex: 0, totalChunks: 2, totalPosts: 2, posts: [post] } }, stageRes);
+    assert.equal(stageRes.statusCode, 200);
+    assert.equal(stageRes.body.received, true);
+    assert.equal(db.prepare('SELECT received_chunks FROM meta_schedule_upload_batches WHERE request_id=?').get('stage-batch-0001').received_chunks, 1);
+
+    const commitRes = makeResponse();
+    await routes.get('/api/meta-schedule/commit').at(-1)({ ...baseReq, body: { requestId: 'stage-batch-0001' } }, commitRes);
+    assert.equal(commitRes.statusCode, 409);
+    assert.match(commitRes.body.error, /finish uploading before scheduling starts/);
+    assert.equal(metaCalls, 0);
+
+    const abortRes = makeResponse();
+    await routes.get('/api/meta-schedule/abort').at(-1)({ ...baseReq, body: { requestId: 'stage-batch-0001' } }, abortRes);
+    assert.equal(abortRes.statusCode, 200);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM meta_schedule_upload_batches').get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    db.close();
   }
 });
