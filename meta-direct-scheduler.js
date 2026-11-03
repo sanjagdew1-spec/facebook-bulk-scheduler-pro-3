@@ -42,7 +42,7 @@ async function mapWithConcurrency(items, limit, mapper) {
   let firstError = null;
   const workerCount = Math.min(limit, items.length);
   const workers = Array.from({ length: workerCount }, async (_, workerIndex) => {
-    while (!firstError) {
+    while (true) {
       const index = nextIndex++;
       if (index >= items.length) return;
       try {
@@ -367,10 +367,15 @@ export function registerMetaDirectScheduleRoute(app, {
       });
       return res.status(201).json({ ok: true, mode: 'meta-direct', requestedCount: targetCount, scheduledCount, results });
     } catch (error) {
-      logMetaDiagnostic('error', 'batch_failed', { requestId, requestedPagePostJobs: targetCount, confirmedPagePostJobs: results.length, error: diagnosticError(error) });
+      const scheduledCount = results.filter(result => result.status === 'scheduled').length;
+      logMetaDiagnostic('error', 'batch_failed', { requestId, requestedPagePostJobs: targetCount, confirmedPagePostJobs: scheduledCount, resultCount: results.length, error: diagnosticError(error) });
       console.error('[meta-direct-schedule]', String(error?.message || error));
       res.setHeader('Cache-Control', 'no-store');
-      if (results.length) return res.status(207).json({ ok: false, partial: true, error: String(error?.message || error), requestedCount: targetCount, scheduledCount: results.length, results });
+      if (results.length) return res.status(207).json({
+        ok: false, partial: true, error: String(error?.message || error), requestedCount: targetCount,
+        scheduledCount, failedCount: results.filter(result => result.status === 'failed').length,
+        unknownCount: results.filter(result => result.status === 'unknown').length, results
+      });
       return res.status(400).json({ error: String(error?.message || error) });
     }
   };
