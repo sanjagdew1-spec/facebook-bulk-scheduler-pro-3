@@ -248,7 +248,7 @@ export function registerMetaDirectScheduleRoute(app, {
 
         // Each worker owns one complete Page-post task: its Page token, photos,
         // caption and schedule time stay together. Photo uploads remain sequential
-        // inside that task; up to ten independent Page-post tasks run concurrently.
+        // inside that task; up to five independent Page-post tasks run concurrently.
         const mediaIds = [];
         for (let photoIndex = 0; photoIndex < item.photos.length; photoIndex++) {
           const photo = item.photos[photoIndex];
@@ -549,11 +549,16 @@ export function registerMetaDirectScheduleRoute(app, {
       await clearStage(customerId, requestId);
       if (failure) {
         res.setHeader('Cache-Control','no-store');
-        if (results.length) return res.status(207).json({ ok:false, partial:true, error:failure, requestedCount:totalTargets, scheduledCount:results.length, results });
+        const scheduledCount = results.filter(result => result.status === 'scheduled').length;
+        if (results.length) return res.status(207).json({
+          ok:false, partial:true, error:failure, requestedCount:totalTargets, scheduledCount,
+          failedCount:results.filter(result => result.status === 'failed').length,
+          unknownCount:results.filter(result => result.status === 'unknown').length, results
+        });
         return res.status(400).json({ error:failure, requestedCount:totalTargets, scheduledCount:0, results:[] });
       }
       res.setHeader('Cache-Control','no-store');
-      return res.status(201).json({ ok:true, mode:'meta-direct', requestedCount:totalTargets, scheduledCount:results.length, results });
+      return res.status(201).json({ ok:true, mode:'meta-direct', requestedCount:totalTargets, scheduledCount:results.filter(result => result.status === 'scheduled').length, results });
     } catch (error) {
       logMetaDiagnostic('error','staged_batch_commit_failed',{requestId,error:diagnosticError(error)});
       return res.status(500).json({ error:'The staged batch could not be completed: '+String(error?.message||error) });
