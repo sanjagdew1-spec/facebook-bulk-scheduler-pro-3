@@ -388,7 +388,7 @@ test('Direct Facebook scheduling marks lost feed confirmation unknown and blocks
 });
 
 
-test('Direct Facebook scheduling rejects more than 20 Page-post tasks during the first verification phase', async () => {
+test('Direct Facebook scheduling rejects more than 100 Page-post tasks per batch', async () => {
   const routes = new Map();
   const db = { exec() {}, prepare() { throw new Error('Database and Meta must not be reached for an oversized test batch'); } };
   const app = { post(path, ...handlers) { routes.set(path, handlers); } };
@@ -409,7 +409,7 @@ test('Direct Facebook scheduling rejects more than 20 Page-post tasks during the
       posts: [{
         clientPostId: 'post-slot-cap-001',
         images: [{ imageData: 'data:image/jpeg;base64,aGVsbG8=', imageMimeType: 'image/jpeg' }],
-        pageSchedules: Array.from({ length: 21 }, (_, index) => ({
+        pageSchedules: Array.from({ length: 101 }, (_, index) => ({
           pageId: 'page-cap-' + index,
           scheduledAt: new Date(Date.now() + 20 * 60 * 1000).toISOString()
         }))
@@ -421,5 +421,5 @@ test('Direct Facebook scheduling rejects more than 20 Page-post tasks during the
   const res = makeResponse();
   await handler(req, res);
   assert.equal(res.statusCode, 400);
-  assert.match(res.body.error, /temporarily limited to 20/);
+  assert.match(res.body.error, /up to 100 total Page-post tasks/);
 });
