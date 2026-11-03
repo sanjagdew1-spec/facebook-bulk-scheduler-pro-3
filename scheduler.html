@@ -662,7 +662,7 @@ async function submitBulkDirectFacebook(){
   const prepared=await mapWithConcurrency(slotTasks,5,async({slot,slotIndex})=>{
    const images=[];for(const file of slot.files)images.push(await fileToData(file));
    const pageSchedules=slot.pageIds.map(id=>({pageId:String(id),scheduledAt:new Date(slot.pageTimes[id]||slot.time).toISOString()}));
-   return {clientPostId:crypto.randomUUID(),message:withBulkAiDisclosure(slot.caption,slot.isAiContent),images,pageSchedules,isAiContent:Boolean(slot.isAiContent)};
+   slot.phase7ClientPostId=slot.phase7ClientPostId||crypto.randomUUID();return {clientPostId:slot.phase7ClientPostId,message:withBulkAiDisclosure(slot.caption,slot.isAiContent),images,pageSchedules,isAiContent:Boolean(slot.isAiContent)};
   });
   const prepareMs=Date.now()-prepareStartedAt,requestStartedAt=Date.now();
   const data=await api('/api/meta-schedule',{method:'POST',body:JSON.stringify({requestId:crypto.randomUUID(),posts:prepared})});
