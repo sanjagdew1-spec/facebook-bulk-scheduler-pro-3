@@ -728,7 +728,8 @@ async function submitBulkDirectFacebook(){
   }
   renderBulkImageSlots();
   if(confirmedCount>0)await refreshPostUsage();
-  if(!data.ok||confirmedCount!==totalTargetCount){
+  const everyTargetConfirmed=allResults.length===totalTargetCount&&allResults.every(item=>item&&item.status==='scheduled'&&item.clientPostId&&item.pageId);
+  if(!everyTargetConfirmed){
    const pending=totalTargetCount-confirmedCount;
    const failed=allResults.filter(item=>item.status==='failed').length;
    const unknown=allResults.filter(item=>item.status==='unknown').length;
