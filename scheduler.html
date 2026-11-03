@@ -365,7 +365,7 @@ const titles={dashboard:'Dashboard',notes:'Notes','bulk-pages':'Bulk Pages','bul
 function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),4200)}
 function safe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function apiUrl(path){return apiBase.replace(/\/$/,'')+path}
-async function api(path,opts={}){if(!apiBase)throw Error('Phase 3 API URL is not configured yet. Save it in Settings after the dedicated backend is deployed.');const r=await fetch(apiUrl(path),{credentials:'include',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});let data={};try{data=await r.json()}catch{}if(!r.ok)throw Error(data.error||data.message||('Request failed ('+r.status+')'));return data}
+async function api(path,opts={}){if(!apiBase)throw Error('Phase 3 API URL is not configured yet. Save it in Settings after the dedicated backend is deployed.');const r=await fetch(apiUrl(path),{credentials:'include',...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});let data={};try{data=await r.json()}catch{}if(!r.ok){const error=new Error(data.error||data.message||('Request failed ('+r.status+')'));error.status=r.status;error.data=data;throw error}return data}
 function showView(name){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));$('pageTitle').textContent=titles[name]||name;window.scrollTo({top:0,behavior:'smooth'});if(name==='history')renderHistory();if(name==='bulk-photos')buildSlots()}
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.go)));
@@ -692,16 +692,32 @@ async function submitBulkDirectFacebook(){
   const prepareMs=Date.now()-prepareStartedAt,commitStartedAt=Date.now();
   commitStarted=true;
   toast('All photos uploaded. Starting Facebook scheduling…');
-  const data=await api('/api/meta-schedule/commit',{method:'POST',body:JSON.stringify({requestId:batchId})});
+  let data;
+  try{data=await api('/api/meta-schedule/commit',{method:'POST',body:JSON.stringify({requestId:batchId})});}
+  catch(commitError){if(commitError.status===207&&commitError.data)data=commitError.data;else throw commitError;}
   confirmedCount=Number(data.scheduledCount||0);
   await api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(()=>{});
   console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,chunkTargetBytes,prepareMs,uploadAndCommitMs:Date.now()-commitStartedAt,totalMs:Date.now()-startedAt}));
-  if(!data.ok||confirmedCount!==totalTargetCount){
-   const detail=confirmedCount>0?' Facebook confirmed '+confirmedCount+' of '+totalTargetCount+' Page posts.':'';
-   throw Error((data.error||'Facebook did not confirm every post in this batch.')+detail+' The composer has been kept for review/retry.');
+  const confirmedTargets=Array.isArray(data.results)?data.results.filter(item=>item&&item.status==='scheduled'&&item.clientPostId&&item.pageId):[];
+  const confirmedByPost=new Map();
+  for(const item of confirmedTargets){const key=String(item.clientPostId);if(!confirmedByPost.has(key))confirmedByPost.set(key,new Set());confirmedByPost.get(key).add(String(item.pageId));}
+  let clearedTargets=0,completedSlots=0;
+  for(const slot of bulkImageSlots){
+   const done=confirmedByPost.get(String(slot.phase7ClientPostId||''));if(!done?.size)continue;
+   const before=slot.pageIds.length;
+   slot.pageIds=slot.pageIds.filter(id=>!done.has(String(id)));
+   clearedTargets+=before-slot.pageIds.length;
+   for(const id of done){if(slot.pageTimes)delete slot.pageTimes[id];if(slot.manualPageTimes)delete slot.manualPageTimes[id];if(slot.pageCaptions)delete slot.pageCaptions[id];}
+   if(slot.pageIds.length===0){slot.files=[];slot.caption='';slot.pageCaptions={};slot.pageTimes={};slot.manualPageTimes={};slot.time='';slot.isAiContent=false;slot.phase7ClientPostId=null;completedSlots++;}
   }
-  clearBulkPagesComposer();const history=await api('/api/jobs');jobs=history.jobs||[];renderStats();renderHistory();await refreshPostUsage();
-  toast('Facebook confirmed '+confirmedCount+' scheduled Page post(s). Meta will publish them at their selected times.');
+  renderBulkImageSlots();
+  if(confirmedCount>0){const history=await api('/api/jobs');jobs=history.jobs||[];renderStats();renderHistory();await refreshPostUsage();}
+  if(!data.ok||confirmedCount!==totalTargetCount){
+   const pending=totalTargetCount-confirmedCount;
+   toast('Facebook ने '+confirmedCount+'/'+totalTargetCount+' Page posts confirm किए। '+clearedTargets+' सफल Page selections हटाए; '+pending+' pending हैं। बाकी composer data सुरक्षित रखा है।');
+   return;
+  }
+  clearBulkPagesComposer();toast('Facebook confirmed '+confirmedCount+' scheduled Page post(s). Successful post data cleared automatically.');
  }catch(error){
   if(batchId&&!commitStarted)await api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(()=>{});
   toast(error.message);
