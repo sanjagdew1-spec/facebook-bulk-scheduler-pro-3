@@ -7,7 +7,8 @@ RUN npm install --omit=dev
 # Copy the root JavaScript modules so the container starts with every required module.
 COPY *.js ./
 COPY test/phase6-worker-bridge.test.js ./test/
-RUN node --check server.js && node --check phase6-worker-bridge.js && node --test ./test/phase6-worker-bridge.test.js
+COPY test/meta-direct-scheduler.test.js ./test/
+RUN node --check server.js && node --check phase6-worker-bridge.js && node --check meta-direct-scheduler.js && node --test ./test/phase6-worker-bridge.test.js ./test/meta-direct-scheduler.test.js
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["npm","start"]
