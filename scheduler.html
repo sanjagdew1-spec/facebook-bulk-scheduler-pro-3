@@ -699,11 +699,16 @@ async function submitBulkDirectFacebook(){
   let data;
   try{data=await api('/api/meta-schedule/commit',{method:'POST',body:JSON.stringify({requestId:batchId})});}
   catch(commitError){if(commitError.status===207&&commitError.data)data=commitError.data;else throw commitError;}
-  confirmedCount=Number(data.scheduledCount||0);
+  // Use the complete per-Page result list as the success authority for composer cleanup.
+  // The result panel already displays this same list; a stale/mismatched aggregate count
+  // must not keep a fully Facebook-confirmed batch in the composer.
+  const allResults=Array.isArray(data.results)?data.results:[];
+  const confirmedResults=allResults.filter(item=>item&&item.status==='scheduled');
+  confirmedCount=confirmedResults.length;
+  const reportedScheduledCount=Number(data.scheduledCount);
   // Staged-upload cleanup is housekeeping only. Never wait for it before clearing a Facebook-confirmed composer.
   api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(error=>console.warn('[direct-schedule] staged upload cleanup failed',error));
-  console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,chunkTargetBytes,prepareMs,uploadAndCommitMs:Date.now()-commitStartedAt,totalMs:Date.now()-startedAt}));
-  const allResults=Array.isArray(data.results)?data.results:[];
+  console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,chunkTargetBytes,prepareMs,uploadAndCommitMs:Date.now()-commitStartedAt,totalMs:Date.now()-startedAt,reportedScheduledCount,resultConfirmedCount:confirmedCount,resultCount:allResults.length}));
   const resultPanel=$('directScheduleResults');
   if(resultPanel){
    const rows=allResults.map(item=>{
@@ -715,7 +720,7 @@ async function submitBulkDirectFacebook(){
    resultPanel.hidden=false;
    resultPanel.innerHTML='<b>Direct Schedule Facebook · '+allResults.filter(item=>item.status==='scheduled').length+'/'+totalTargetCount+' confirmed</b><ul>'+rows+'</ul>';
   }
-  const confirmedTargets=allResults.filter(item=>item&&item.status==='scheduled'&&item.clientPostId&&item.pageId);
+  const confirmedTargets=confirmedResults.filter(item=>item.clientPostId&&item.pageId);
   const confirmedByPost=new Map();
   for(const item of confirmedTargets){const key=String(item.clientPostId);if(!confirmedByPost.has(key))confirmedByPost.set(key,new Set());confirmedByPost.get(key).add(String(item.pageId));}
   let clearedTargets=0,completedSlots=0;
@@ -730,7 +735,7 @@ async function submitBulkDirectFacebook(){
   renderBulkImageSlots();
   // The commit endpoint's scheduledCount is authoritative. Composer cleanup must happen
   // before any optional usage refresh, so a refresh/API error can never leave scheduled data behind.
-  const everyTargetConfirmed=totalTargetCount>0&&confirmedCount===totalTargetCount;
+  const everyTargetConfirmed=totalTargetCount>0&&allResults.length===totalTargetCount&&confirmedResults.length===totalTargetCount;
   if(!everyTargetConfirmed){
    if(confirmedCount>0)await refreshPostUsage().catch(error=>console.warn('[direct-schedule] usage refresh failed after confirmed posts',error));
    const pending=totalTargetCount-confirmedCount;
