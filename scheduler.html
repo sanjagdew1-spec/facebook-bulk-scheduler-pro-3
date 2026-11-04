@@ -708,7 +708,7 @@ async function submitBulkDirectFacebook(){
   const reportedScheduledCount=Number(data.scheduledCount);
   // Staged-upload cleanup is housekeeping only. Never wait for it before clearing a Facebook-confirmed composer.
   api('/api/meta-schedule/abort',{method:'POST',body:JSON.stringify({requestId:batchId})}).catch(error=>console.warn('[direct-schedule] staged upload cleanup failed',error));
-  console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,chunkTargetBytes,prepareMs,uploadAndCommitMs:Date.now()-commitStartedAt,totalMs:Date.now()-startedAt,reportedScheduledCount,resultConfirmedCount:confirmedCount,resultCount:allResults.length}));
+  console.info('[phase7-direct-schedule-speed]',JSON.stringify({photoSlots:prepared.length,pagePostJobs:totalTargetCount,chunkCount:totalChunks,targetChunkBytes,prepareMs,uploadAndCommitMs:Date.now()-commitStartedAt,totalMs:Date.now()-startedAt,reportedScheduledCount,resultConfirmedCount:confirmedCount,resultCount:allResults.length}));
   const resultPanel=$('directScheduleResults');
   if(resultPanel){
    const rows=allResults.map(item=>{
