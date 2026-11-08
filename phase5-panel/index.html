@@ -46,7 +46,7 @@ main{min-width:0}.topbar{height:74px;background:#fff;border-bottom:1px solid var
 </section>
 <div id="modalRoot"></div>
 <script>
-const API_BASE='https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com';const api=async(path,options={})=>{const r=await fetch(API_BASE+path,{credentials:'include',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options.headers||{})},signal:options.signal||AbortSignal.timeout(120000)});const data=await r.json().catch(()=>({}));if(!r.ok){const error=new Error(data.error||('Request failed ('+r.status+').'));error.status=r.status;throw error;}return data};const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const API_BASE='https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com';const api=async(path,options={})=>{const r=await fetch(API_BASE+path,{credentials:'include',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options.headers||{})},signal:options.signal||AbortSignal.timeout(15000)});const data=await r.json().catch(()=>({}));if(!r.ok){const error=new Error(data.error||('Request failed ('+r.status+').'));error.status=r.status;throw error;}return data};const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaultPlans=[
 {id:'free',name:'Free Demo',days:7,posts:10,pages:10,price:0,scheduleWindowDays:0,slotsPerBatch:10,advanced_mode:0,active:true},
 {id:'starter',name:'Starter / Standard',days:28,posts:50,pages:10,price:299,scheduleWindowDays:1,slotsPerBatch:10,active:true},
@@ -149,8 +149,8 @@ $('#ownerLogin').onclick=async()=>{
  }catch(e){
   const timedOut=e.name==='TimeoutError'||e.name==='AbortError'||/timed out|signal timed out/i.test(e.message);
   if(e.status===401||e.status===429){const serverMessage=e.message;chooseRandomPasswordSlot();$('#loginMessage').textContent=serverMessage+' A new random password number is now selected. Enter the password for the number currently shown.';}
-  else{$('#loginMessage').textContent=timedOut?'The Owner server is taking longer to respond. Your password number has not been changed. Please retry the connection.':e.message;}
-  if(timedOut)retry.hidden=false;
+  else if(timedOut||!Number.isInteger(e.status)){chooseRandomPasswordSlot();retry.hidden=true;$('#loginMessage').textContent='The Owner server did not confirm the sign-in within 15 seconds. A new random password number has been selected. Use the password for the number now shown.';}
+  else{$('#loginMessage').textContent=e.message;retry.hidden=false;}
  }finally{
   button.classList.remove('is-loading');button.removeAttribute('aria-busy');button.textContent='Sign in securely';
   ownerLoginInProgress=false;button.disabled=$('#login').classList.contains('hidden');
