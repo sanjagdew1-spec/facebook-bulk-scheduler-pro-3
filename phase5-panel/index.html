@@ -140,7 +140,7 @@ $('#ownerLogin').onclick=async()=>{
  const button=$('#ownerLogin'),retry=$('#retryOwnerConnection');
  if(button.disabled)return;
  const slot=$('#ownerSlot').value,password=$('#ownerPassword').value.trim();
- if(!/^\\d{10}$/.test(password)){$('#loginMessage').textContent='Password must be exactly 10 digits.';return}
+ if(!/^\d{10}$/.test(password)){$('#loginMessage').textContent='Password must be exactly 10 digits.';return}
  ownerLoginInProgress=true;button.disabled=true;button.classList.add('is-loading');button.setAttribute('aria-busy','true');button.textContent='Signing in…';$('#loginMessage').textContent='Your sign-in request has been sent. Please wait; do not click again.';
  try{
   await api('/api/auth/login',{method:'POST',body:JSON.stringify({slot,password})});
