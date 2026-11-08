@@ -47,7 +47,7 @@ main{min-width:0}.topbar{height:74px;background:#fff;border-bottom:1px solid var
 </section>
 <div id="modalRoot"></div>
 <script>
-const API_BASE='https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com';const api=async(path,options={})=>{const r=await fetch(API_BASE+path,{credentials:'include',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options.headers||{})},signal:options.signal||AbortSignal.timeout(15000)});const data=await r.json().catch(()=>({}));if(!r.ok){const error=new Error(data.error||('Request failed ('+r.status+').'));error.status=r.status;throw error;}return data};const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const API_BASE='https://facebook-bulk-scheduler-pro-3-p5-api.onrender.com';const api=async(path,options={})=>{const r=await fetch(API_BASE+path,{credentials:'include',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options.headers||{})},signal:options.signal||AbortSignal.timeout(60000)});const data=await r.json().catch(()=>({}));if(!r.ok){const error=new Error(data.error||('Request failed ('+r.status+').'));error.status=r.status;throw error;}return data};const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaultPlans=[
 {id:'free',name:'Free Demo',days:7,posts:10,pages:10,price:0,scheduleWindowDays:0,slotsPerBatch:10,advanced_mode:0,active:true},
 {id:'starter',name:'Starter / Standard',days:28,posts:50,pages:10,price:299,scheduleWindowDays:1,slotsPerBatch:10,active:true},
