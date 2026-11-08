@@ -137,23 +137,22 @@ async function toggleDeveloper(i){try{await api('/api/developers/'+encodeURIComp
 async function removeDeveloper(i){if(!confirm('Remove this ID from the Developer allowlist?'))return;try{await api('/api/developers/'+encodeURIComponent(developers[i].email),{method:'DELETE'});await loadData();log('Developer ID removed',developers[i].email);render()}catch(e){alert(e.message)}}
 function chooseRandomPasswordSlot(){const slots=['A','B','C','D'];let previous='';try{previous=localStorage.getItem('p5_last_password_slot')||'';}catch{}const choices=slots.filter(s=>s!==previous);const next=choices[Math.floor(Math.random()*choices.length)];$('#ownerSlot').value=next;try{localStorage.setItem('p5_last_password_slot',next);}catch{}$('#ownerPassword').value='';$('#loginMessage').textContent='';}
  async function checkOwnerLockStatus(slot){const status=$('#lockStatus');status.className='lock-status';status.textContent='Checking lock status for password number '+({A:'1',B:'2',C:'3',D:'4'}[slot]||slot)+'…';try{const data=await api('/api/auth/lock-status?slot='+encodeURIComponent(slot));if(data.locked){const mins=Math.max(1,Math.ceil(data.remainingSeconds/60));status.className='lock-status locked';status.textContent='Temporarily locked: this password number has reached the failed-attempt limit. Please wait about '+mins+' minute(s). Do not try this number yet.';return data;}status.className='lock-status safe';status.textContent='Lock check passed: this password number is not currently locked. You can try signing in.';return data;}catch(e){status.className='lock-status';status.textContent='Could not confirm lock status because the Owner server did not respond. No password has been sent. Try the lock check again.';throw e;}}
-$('#refreshPasswordSlot').addEventListener('click',()=>{if($('#login').classList.contains('hidden')||ownerLoginInProgress)return;chooseRandomPasswordSlot();$('#loginMessage').textContent='A new password number is selected. Use the 10-digit password assigned to this number.';checkOwnerLockStatus($('#ownerSlot').value).catch(()=>{});});
+$('#refreshPasswordSlot').addEventListener('click',()=>{if($('#login').classList.contains('hidden')||ownerLoginInProgress)return;chooseRandomPasswordSlot();$('#loginMessage').textContent='A new password number is selected. Use the 10-digit password assigned to this number.';});
 $('#ownerLogin').onclick=async()=>{
  const button=$('#ownerLogin'),retry=$('#retryOwnerConnection');
  if(button.disabled||ownerLoginInProgress)return;
  const slot=$('#ownerSlot').value,password=$('#ownerPassword').value.trim();
  if(!/^\d{10}$/.test(password)){$('#loginMessage').textContent='Password must be exactly 10 digits.';return}
- ownerLoginInProgress=true;button.disabled=true;button.classList.add('is-loading');button.setAttribute('aria-busy','true');button.textContent='Checking lock…';$('#loginMessage').textContent='Checking the selected password number before sending your password.';
+ ownerLoginInProgress=true;button.disabled=true;button.classList.add('is-loading');button.setAttribute('aria-busy','true');button.textContent='Signing in…';$('#loginMessage').textContent='Secure sign-in request is being sent. Please wait and do not click again.';
  try{
-  const lock=await checkOwnerLockStatus(slot);
-  if(lock.locked){$('#loginMessage').textContent='Sign-in was not attempted because this password number is temporarily locked. Wait until the displayed lock period ends.';return;}
-  button.textContent='Signing in…';$('#loginMessage').textContent='Lock check passed. Your sign-in request is being sent; please wait and do not click again.';
+  // The API enforces the same per-slot 5-attempt / 15-minute lockout atomically.
+  // Avoid a separate lock-status round trip before login: it delays sign-in and fails on a sleeping Free API.
   await api('/api/auth/login',{method:'POST',body:JSON.stringify({slot,password})});
   $('#ownerPassword').value='';$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#content').innerHTML='<div class="notice">Password verified. Loading your control panel…</div>';
   try{await loadData();nav('overview')}catch(dataError){$('#content').innerHTML='<div class="notice warning"><strong>Signed in, but panel data could not load.</strong><br>'+esc(dataError.message)+'<br><button class="btn secondary small" onclick="retryPanelLoad()">Retry loading</button></div>';}
  }catch(e){
   if(e.status===401||e.status===429){const serverMessage=e.message;chooseRandomPasswordSlot();$('#loginMessage').textContent=serverMessage+' A new random password number is now selected. Enter the password for the number currently shown.';checkOwnerLockStatus($('#ownerSlot').value).catch(()=>{});}
-  else if(e.name==='TimeoutError'||e.name==='AbortError'||/timed out|signal timed out/i.test(e.message)){chooseRandomPasswordSlot();retry.hidden=true;$('#loginMessage').textContent='The Owner server did not confirm the sign-in within 15 seconds. A new random password number has been selected. Use the password for the number now shown.';checkOwnerLockStatus($('#ownerSlot').value).catch(()=>{});}
+  else if(e.name==='TimeoutError'||e.name==='AbortError'||/timed out|signal timed out/i.test(e.message)){chooseRandomPasswordSlot();retry.hidden=true;$('#loginMessage').textContent='The Owner server did not confirm the sign-in within 60 seconds. A new random password number has been selected. Use the password for the number now shown.';checkOwnerLockStatus($('#ownerSlot').value).catch(()=>{});}
   else{$('#loginMessage').textContent=e.message;retry.hidden=false;}
  }finally{
   button.classList.remove('is-loading');button.removeAttribute('aria-busy');button.textContent='Sign in securely';
